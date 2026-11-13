@@ -369,10 +369,10 @@ pub enum Outcome {
 }
 
 /// The answer to one command, carrying the id it was submitted with.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Event {
     pub id: u64,
-    pub result: Result<Outcome, String>,
+    pub result: Result<Outcome, StoreError>,
 }
 
 /// What can go wrong opening or writing the store.
@@ -409,12 +409,20 @@ impl std::fmt::Display for StoreError {
             ),
             StoreError::NoPrompt { card, key } => write!(f, "card {card} has no prompt {key}"),
             StoreError::Cycle { deck } => write!(f, "deck {deck} cannot be moved inside itself"),
-            StoreError::Io(e) => write!(f, "could not create the library folder: {e}"),
+            StoreError::Io(e) => write!(f, "a file operation on the library failed: {e}"),
         }
     }
 }
 
-impl std::error::Error for StoreError {}
+impl std::error::Error for StoreError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            StoreError::Sqlite(error) => Some(error),
+            StoreError::Io(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl From<rusqlite::Error> for StoreError {
     fn from(error: rusqlite::Error) -> Self {
@@ -461,6 +469,9 @@ pub fn open_in(dirs: &AppDirs) -> Result<Db, StoreError> {
 }
 
 /// The only way the UI reaches the store.
+///
+/// Every command answers exactly one [`Event`] carrying the id the method returned. An id that
+/// never answers means the worker has already closed, which only happens while quitting.
 pub trait Store: Send + Sync {
     /// The last published snapshot: decks, cards and settings, never card text.
     fn snapshot(&self) -> Snapshot;

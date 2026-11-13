@@ -243,9 +243,7 @@ fn work(
 ) {
     while let Ok(message) = rx.recv() {
         let id = message.id;
-        let mut result = db
-            .apply(&message.command, clock.now_ms())
-            .map_err(|e| e.to_string());
+        let mut result = db.apply(&message.command, clock.now_ms());
         if result.is_ok() {
             match db.snapshot() {
                 Ok(mut snapshot) => {
@@ -253,7 +251,7 @@ fn work(
                     snapshot.revision = published.revision + 1;
                     *published = snapshot;
                 }
-                Err(error) => result = Err(error.to_string()),
+                Err(error) => result = Err(error),
             }
         }
         shared
