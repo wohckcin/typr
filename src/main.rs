@@ -32,6 +32,8 @@ struct State {
     history_wanted: Option<Id>,
     /// A scene brought its own library, so opening the real one must not replace it.
     seeded: bool,
+    /// A new card waiting for the deck that has to be created for it.
+    pending_new_card: Option<String>,
 }
 
 impl Default for State {
@@ -46,7 +48,26 @@ impl Default for State {
             wanted: None,
             history_wanted: None,
             seeded: false,
+            pending_new_card: None,
         }
+    }
+}
+
+impl editor::Host for State {
+    fn editor(&self) -> &Editor {
+        &self.editor
+    }
+
+    fn editor_mut(&mut self) -> &mut Editor {
+        &mut self.editor
+    }
+
+    fn persist(&mut self) -> bool {
+        State::persist(self)
+    }
+
+    fn close_editor(&mut self) {
+        self.screen = Screen::Library;
     }
 }
 
@@ -67,16 +88,6 @@ impl history::Host for State {
 
     fn history_mut(&mut self) -> &mut History {
         self.editor.history_mut()
-    }
-}
-
-impl editor::Host for State {
-    fn editor(&self) -> &Editor {
-        &self.editor
-    }
-
-    fn editor_mut(&mut self) -> &mut Editor {
-        &mut self.editor
     }
 }
 
@@ -126,6 +137,44 @@ impl State {
             }
             Err(error) => eprintln!("typr: the library could not be opened: {error}"),
         }
+    }
+
+    /// Write the editor's buffer to the library, and mark it saved once the command is sent.
+    fn persist(&mut self) -> bool {
+        if !self.editor.saveable() {
+            self.editor.refused = true;
+            return false;
+        }
+        let text = self.editor.buffer.text.clone();
+        match (self.editor.card, self.store.as_ref()) {
+            (Some(card), Some(store)) => {
+                store.save_card(card, &text);
+            }
+            (None, Some(store)) => match self.deck_for_new_card() {
+                Some(deck) => {
+                    store.create_card(deck, &text);
+                }
+                None => {
+                    // A library with no deck yet: the first card brings one with it.
+                    self.pending_new_card = Some(text.clone());
+                    store.create_deck(None, "Library");
+                }
+            },
+            (_, None) => {}
+        }
+        self.editor.save()
+    }
+
+    /// Where a card that has never been saved goes.
+    fn deck_for_new_card(&self) -> Option<Id> {
+        self.library.selected_deck.or_else(|| {
+            self.library
+                .snapshot
+                .decks
+                .iter()
+                .find(|deck| !deck.archived && deck.parent.is_none())
+                .map(|deck| deck.id)
+        })
     }
 
     /// Ask the store for the queue the user chose. The session opens when the answer arrives.
@@ -201,6 +250,16 @@ impl State {
                         self.open_session(Queue::New, prompts);
                     }
                 }
+                Ok(Outcome::Card(id)) => {
+                    self.editor.card = Some(id);
+                }
+                Ok(Outcome::Deck(id)) => {
+                    if let Some(text) = self.pending_new_card.take()
+                        && let Some(store) = &self.store
+                    {
+                        store.create_card(id, &text);
+                    }
+                }
                 Ok(_) => {}
                 Err(_) => self.session.refuse(event.id),
             }
@@ -257,6 +316,10 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
                     s.history_wanted = Some(card);
                     store.history(card);
                 }
+                true
+            }
+            _ if event.is_command('s') => {
+                s.persist();
                 true
             }
             _ => false,
@@ -413,6 +476,44 @@ mod tests {
             session,
             ..State::default()
         }
+    }
+
+    #[test]
+    fn saving_a_new_card_stores_it_and_adopts_its_id() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("library.sqlite3");
+        let waker: Waker = std::sync::Arc::new(|| {});
+        let handle = Handle::spawn(
+            typr::store::Db::open(&path).expect("open"),
+            Box::new(typr::clock::SystemClock),
+            waker,
+        )
+        .expect("spawn");
+
+        let mut state = State {
+            store: Some(handle),
+            ..State::default()
+        };
+        state.editor = Editor::new(None, "front\n---\nback".to_string());
+        assert!(state.persist(), "the card is stored");
+
+        // The store answers on its own thread; drain until the card's id arrives.
+        for _ in 0..200 {
+            state.drain();
+            if state.editor.card.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let card = state.editor.card.expect("the new card adopted its id");
+        assert!(!state.editor.dirty(), "the buffer counts as saved");
+
+        drop(state.store.take());
+        let db = typr::store::Db::open(&path).expect("reopen");
+        let cards = db.snapshot().expect("snapshot").cards;
+        assert_eq!(cards.len(), 1, "one card on disk");
+        assert_eq!(cards[0].id, card);
+        assert_eq!(cards[0].markdown, "front\n---\nback");
     }
 
     #[test]

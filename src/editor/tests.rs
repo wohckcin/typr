@@ -217,3 +217,49 @@ fn attaching_an_image_copies_it_and_writes_its_reference() {
         "and the file is beside the library"
     );
 }
+
+#[test]
+fn the_confirmation_saves_the_buffer_it_offers_to_save() {
+    let mut editor = Editor::new(None, "card".to_string());
+    editor.buffer.insert(" edited");
+    editor.request_leave();
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+
+    let (x, y) = runtime.find("leave-save").unwrap();
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+    assert_eq!(runtime.state.saved, "card edited", "Save keeps the edit");
+    assert!(!runtime.state.dirty(), "and nothing is left unsaved");
+    assert!(!runtime.state.asking, "the question is answered");
+}
+
+#[test]
+fn the_save_button_stores_the_buffer_without_leaving() {
+    let mut editor = Editor::new(None, "card".to_string());
+    editor.buffer.insert(" edited");
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+
+    let (x, y) = runtime.find("save-card").unwrap();
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+    assert_eq!(runtime.state.saved, "card edited");
+    assert!(!runtime.state.dirty());
+}

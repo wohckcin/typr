@@ -17,6 +17,12 @@ use crate::store::Id;
 pub trait Host: 'static {
     fn editor(&self) -> &Editor;
     fn editor_mut(&mut self) -> &mut Editor;
+
+    /// Write the buffer to the library, answering whether it was stored.
+    fn persist(&mut self) -> bool;
+
+    /// Leave the editor, if the host has somewhere to go.
+    fn close_editor(&mut self);
 }
 
 impl Host for Editor {
@@ -27,6 +33,12 @@ impl Host for Editor {
     fn editor_mut(&mut self) -> &mut Editor {
         self
     }
+
+    fn persist(&mut self) -> bool {
+        self.save()
+    }
+
+    fn close_editor(&mut self) {}
 }
 
 /// One card being edited, and the text as it was last saved.
@@ -178,6 +190,7 @@ impl Editor {
     }
 
     /// Answer the confirmation. Discarding puts the buffer back as it was saved.
+    #[must_use]
     pub fn resolve(&mut self, choice: Choice) -> Option<Answer> {
         self.asking = false;
         match choice {
@@ -264,7 +277,15 @@ fn button<S: Host>(label: &'static str, variant: ButtonVariant, choice: Choice) 
     Button::new(label)
         .variant(variant)
         .on_press(move |s: &mut S| {
-            s.editor_mut().resolve(choice);
+            if let Some(answer) = s.editor_mut().resolve(choice) {
+                match answer {
+                    Answer::Save => {
+                        s.persist();
+                        s.close_editor();
+                    }
+                    Answer::Discard => s.close_editor(),
+                }
+            }
         })
         .build(&KIT)
         .key(match choice {
@@ -272,6 +293,16 @@ fn button<S: Host>(label: &'static str, variant: ButtonVariant, choice: Choice) 
             Choice::Discard => "leave-discard",
             Choice::Stay => "leave-stay",
         })
+}
+
+fn save_button<S: Host>() -> El {
+    Button::new("Save")
+        .variant(ButtonVariant::Submit)
+        .on_press(|s: &mut S| {
+            s.persist();
+        })
+        .build(&KIT)
+        .key("save-card")
 }
 
 fn attach_button<S: Host>() -> El {
@@ -315,7 +346,8 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
         .fit()
         .open(s.editor().asking)
         .on_close(|s: &mut S| {
-            s.editor_mut().resolve(Choice::Stay);
+            // Clicking outside the dialog is staying: the answer is deliberately unused.
+            let _ = s.editor_mut().resolve(Choice::Stay);
         })
         .child(buttons)
         .build(&KIT, layer);
@@ -349,7 +381,8 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                 }),
         )
         .child(rune::el().grow(1.0))
-        .child(attach_button::<S>());
+        .child(attach_button::<S>())
+        .child(save_button::<S>());
     let mut layer = Vec::new();
     confirmation::<S>(s, &mut layer);
     let body = row().w_full().h_full().fill(t.bg).child(
