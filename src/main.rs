@@ -73,6 +73,12 @@ fn main() {
             state.screen = Screen::Editor { card: None };
             state.editor = Editor::new(None, "What is **mitosis**?\n---\nCell division.".to_string());
         }),
+        ("editor-leave", |state: &mut State| {
+            state.screen = Screen::Editor { card: None };
+            state.editor = Editor::new(None, "What is **mitosis**?\n---\nCell division.".to_string());
+            state.editor.buffer.insert(" Edited.");
+            state.editor.request_leave();
+        }),
     ];
     rune::run(AppSpec { scenes, ..AppSpec::new("typr", (960.0, 640.0), State::default, view) });
 }

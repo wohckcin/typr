@@ -45,7 +45,7 @@
 - [x] 5.1 Implement the side splitter: a line separates sides when, ignoring surrounding spaces and a trailing carriage return, it is exactly `---`, outside fenced code; empty sides are dropped. Verify unit tests for two sides, three sides, `***`, padded `---`, CRLF, `---` inside a fence, and a trailing separator
 - [x] 5.2 Build the editor as a split surface with a `TextArea` and a rendered `Markdown` preview, and verify typing `**bold**` changes the preview without a mode switch
 - [x] 5.3 Cache parsed sides per card revision through `rune_kit::markdown::cache::parse_cached`, and verify a test that editing one card leaves other cards' cached parses untouched
-- [ ] 5.4 Implement save, the unsaved-changes indicator, and the leave-confirmation dialog, and verify a test that abandoning an edited card prompts save/discard/stay
+- [x] 5.4 Implement save, the unsaved-changes indicator, and the leave-confirmation dialog, and verify a test that abandoning an edited card prompts save/discard/stay
 - [ ] 5.5 Persist the in-progress draft in `editor_draft` and restore it on launch marked unsaved, and verify by editing, quitting, and relaunching
 - [ ] 5.6 Refuse to save a card whose sides are all whitespace and report the reason, and verify with a whitespace-only card
 - [ ] 5.7 Implement the image resolver over `<AppDirs::data()>/attachments/`, refusing escaping paths and drawing a placeholder for missing files, and verify an attached image renders in the preview and in study while an escaping reference does not load

@@ -4,7 +4,10 @@ use std::hash::{Hash, Hasher};
 
 use rune::tok::{self, type_};
 use rune::{El, ScrollSpec, TextEdit, col, memo, row, text, text_input};
-use rune_kit::{Markdown, MarkdownStyle};
+use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root};
+
+/// Kept for the lifetime of the app: a Kit rebuilds its palette and type ramp.
+static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));
 
 use crate::store::Id;
 
@@ -33,6 +36,30 @@ pub struct Editor {
     pub saved: String,
     /// Whether the preview's parse is up to date with the buffer.
     memo: u64,
+    /// Whether the leave confirmation is on screen.
+    pub asking: bool,
+}
+
+/// What the user asked for when leaving an unsaved card.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Choice {
+    Save,
+    Discard,
+    Stay,
+}
+
+/// Whether leaving needs the user's answer first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Leaving {
+    Leave,
+    Ask,
+}
+
+/// What to do once the user has answered, `None` when they stayed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Answer {
+    Save,
+    Discard,
 }
 
 impl Default for Editor {
@@ -46,7 +73,7 @@ impl Editor {
         let mut buffer = TextEdit::default();
         buffer.replace_text(text.clone());
         let memo = preview_key(card, &text);
-        Editor { card, buffer, saved: text, memo }
+        Editor { card, buffer, saved: text, memo, asking: false }
     }
 
     /// Whether the buffer holds something the card does not.
@@ -63,6 +90,36 @@ impl Editor {
     /// invalidate this one's.
     pub fn settle(&mut self) {
         self.memo = preview_key(self.card, &self.buffer.text);
+    }
+
+    /// Mark the buffer as stored. The caller persists it.
+    pub fn save(&mut self) {
+        self.saved = self.buffer.text.clone();
+        self.settle();
+    }
+
+    /// Ask before closing an unsaved card; a clean one closes straight away.
+    pub fn request_leave(&mut self) -> Leaving {
+        if self.dirty() {
+            self.asking = true;
+            Leaving::Ask
+        } else {
+            Leaving::Leave
+        }
+    }
+
+    /// Answer the confirmation. Discarding puts the buffer back as it was saved.
+    pub fn resolve(&mut self, choice: Choice) -> Option<Answer> {
+        self.asking = false;
+        match choice {
+            Choice::Save => Some(Answer::Save),
+            Choice::Discard => {
+                self.buffer.replace_text(self.saved.clone());
+                self.settle();
+                Some(Answer::Discard)
+            }
+            Choice::Stay => None,
+        }
     }
 
     /// The identity of the current parse: the card and the exact text.
@@ -118,6 +175,41 @@ fn preview_pane<S: Host>(s: &S) -> El {
         )
 }
 
+fn button<S: Host>(label: &'static str, variant: ButtonVariant, choice: Choice) -> El {
+    Button::new(label)
+        .variant(variant)
+        .on_press(move |s: &mut S| {
+            s.editor_mut().resolve(choice);
+        })
+        .build(&KIT)
+        .key(match choice {
+            Choice::Save => "leave-save",
+            Choice::Discard => "leave-discard",
+            Choice::Stay => "leave-stay",
+        })
+}
+
+fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
+    let buttons = row()
+        .key("leave-buttons")
+        .w_full()
+        .padding(16.0)
+        .gap(8.0)
+        .justify_end()
+        .child(button::<S>("Stay", ButtonVariant::Ghost, Choice::Stay))
+        .child(button::<S>("Discard", ButtonVariant::Ghost, Choice::Discard))
+        .child(button::<S>("Save", ButtonVariant::Submit, Choice::Save));
+    Dialog::new("leave", "Unsaved changes")
+        .description("Save this card before closing it?")
+        .fit()
+        .open(s.editor().asking)
+        .on_close(|s: &mut S| {
+            s.editor_mut().resolve(Choice::Stay);
+        })
+        .child(buttons)
+        .build(&KIT, layer);
+}
+
 /// The editor screen. The preview is rebuilt from the buffer on the same frame, so there is no
 /// mode to switch into.
 pub fn view<S: Host>(s: &S) -> El {
@@ -130,7 +222,9 @@ pub fn view<S: Host>(s: &S) -> El {
         .center_y()
         .gap(8.0)
         .child(text(if unsaved { "Unsaved changes" } else { "Saved" }).font(type_::LABEL).color(t.text_secondary));
-    row()
+    let mut layer = Vec::new();
+    confirmation::<S>(s, &mut layer);
+    let body = row()
         .w_full()
         .h_full()
         .fill(t.bg)
@@ -142,7 +236,8 @@ pub fn view<S: Host>(s: &S) -> El {
                 .gap(12.0)
                 .child(col().key("source").grow(1.0).h_full().child(source_pane::<S>(s)))
                 .child(preview_pane::<S>(s)),
-        ))
+        ));
+    root(body, layer)
 }
 
 #[cfg(test)]

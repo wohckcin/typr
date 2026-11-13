@@ -46,3 +46,62 @@ fn a_two_side_card_reports_its_sides_while_typing() {
     editor.buffer.insert("\n---\nback");
     assert_eq!(editor.sides(), vec!["front\n", "back"]);
 }
+
+#[test]
+fn leaving_an_unsaved_card_asks_first() {
+    let mut editor = Editor::new(None, "old".to_string());
+    editor.buffer.insert(" text");
+    assert_eq!(editor.request_leave(), super::Leaving::Ask);
+    assert!(editor.asking);
+
+    assert_eq!(editor.resolve(super::Choice::Discard), Some(super::Answer::Discard));
+    assert_eq!(editor.buffer.text, "old", "discarding puts the buffer back");
+    assert!(!editor.dirty());
+    assert!(!editor.asking);
+}
+
+#[test]
+fn saving_clears_the_unsaved_indicator_and_leaving_then_does_not_ask() {
+    let mut editor = Editor::new(None, String::new());
+    editor.buffer.insert("front");
+    assert!(editor.dirty());
+
+    editor.save();
+    assert!(!editor.dirty());
+    assert_eq!(editor.request_leave(), super::Leaving::Leave);
+    assert!(!editor.asking);
+}
+
+#[test]
+fn staying_keeps_the_edited_text() {
+    let mut editor = Editor::new(None, "old".to_string());
+    editor.buffer.insert("er");
+    editor.request_leave();
+
+    assert_eq!(editor.resolve(super::Choice::Stay), None);
+    assert_eq!(editor.buffer.text, "older");
+    assert!(editor.dirty());
+    assert!(!editor.asking);
+}
+
+#[test]
+fn the_confirmation_lists_save_discard_and_stay() {
+    let mut editor = Editor::new(None, "card".to_string());
+    editor.buffer.insert(" edited");
+    editor.request_leave();
+    let mut runtime = rune::Runtime::new(editor, |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 600.0), rune::Env::new(true, 1.0));
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+    for key in ["leave-save", "leave-discard", "leave-stay"] {
+        assert!(runtime.find(key).is_some(), "{key} is offered");
+    }
+
+    let (x, y) = runtime.find("leave-discard").unwrap();
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+    assert_eq!(runtime.state.buffer.text, "card");
+    assert!(!runtime.state.asking);
+}
