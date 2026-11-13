@@ -221,8 +221,18 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
     }
 }
 
-fn poll(s: &mut State, _dt: f64, _tx: &mut Tx) -> bool {
-    s.drain()
+/// Move the session's relearning steps on, and say how long until the next one lands.
+fn advance_session(s: &mut State, now_ms: i64) -> (usize, Option<i64>) {
+    let landed = s.session.advance_clock(now_ms);
+    (landed, s.session.next_wake(now_ms))
+}
+
+fn poll(s: &mut State, _dt: f64, tx: &mut Tx) -> bool {
+    let (landed, wake) = advance_session(s, typr::clock::SystemClock.now_ms());
+    if let Some(ms) = wake {
+        tx.wake_after(std::time::Duration::from_millis(ms as u64));
+    }
+    s.drain() || landed > 0
 }
 
 fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
@@ -377,4 +387,47 @@ fn main() {
         on_key: Some(on_key),
         ..AppSpec::new("typr", (960.0, 640.0), State::default, view)
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use typr::clock::LEARNING_STEP_MS;
+
+    /// One due card, revealed to its last side, forgotten, and acknowledged.
+    fn forgotten_due_card() -> State {
+        let mut session = Session::new(
+            Queue::Due,
+            vec![Entry {
+                card: 7,
+                sides: vec!["front".to_string(), "back".to_string()],
+            }],
+        );
+        while session.next_side().is_some() {
+            session.reveal();
+        }
+        assert!(session.grade(Grade::Forgot).is_some(), "graded");
+        session.sent(42);
+        assert!(session.acknowledge(42, 1_000), "acknowledged");
+        State {
+            session,
+            ..State::default()
+        }
+    }
+
+    #[test]
+    fn a_forgotten_due_card_returns_when_its_step_lands() {
+        let mut state = forgotten_due_card();
+        assert!(state.session.current().is_none(), "the card left the queue");
+
+        let (landed, wake) = advance_session(&mut state, 1_000);
+        assert_eq!(landed, 0, "not yet");
+        assert_eq!(wake, Some(LEARNING_STEP_MS), "the frame loop is told when");
+
+        let (landed, wake) = advance_session(&mut state, 1_000 + LEARNING_STEP_MS);
+        assert_eq!(landed, 1, "the card is back");
+        assert_eq!(wake, None, "nothing left to wait for");
+        assert_eq!(state.session.current().map(|entry| entry.card), Some(7));
+        assert!(!state.session.finished(), "the session is not over");
+    }
 }

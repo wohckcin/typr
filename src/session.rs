@@ -202,6 +202,14 @@ impl Session {
         landed
     }
 
+    /// How long until the next relearning step lands, in milliseconds.
+    pub fn next_wake(&self, now_ms: i64) -> Option<i64> {
+        self.waiting
+            .iter()
+            .map(|(due_at, _)| (due_at - now_ms).max(0))
+            .min()
+    }
+
     /// Cards left to answer, including those still in a relearning step.
     pub fn remaining(&self) -> usize {
         self.entries.len().saturating_sub(self.at) + self.waiting.len()
