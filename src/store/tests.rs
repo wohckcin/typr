@@ -571,3 +571,21 @@ fn deck_names_are_unique_under_one_parent_and_free_elsewhere() {
     db.apply(&Command::CreateDeck { parent: Some(first), name: "Verbs".to_string() }, 0).expect("nested");
     db.apply(&Command::CreateDeck { parent: Some(second), name: "Verbs".to_string() }, 0).expect("nested elsewhere");
 }
+
+#[test]
+fn a_moved_card_keeps_its_prompt_and_due_date() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let source = deck(&mut db, "Source");
+    let destination = deck(&mut db, "Destination");
+    let card = card(&mut db, source, "front\n---\nback");
+    schedule(&mut db, card, NOON - 3 * HOUR);
+
+    let before = db.prompt(card, "fwd").expect("prompt").expect("exists");
+    db.apply(&Command::MoveCard { id: card, deck: destination }, NOON).expect("move");
+
+    assert_eq!(db.prompt(card, "fwd").expect("prompt").expect("exists"), before);
+    let moved = db.snapshot().expect("snapshot").cards.into_iter().find(|row| row.id == card).expect("card");
+    assert_eq!(moved.deck, destination);
+    assert_eq!(db.due_prompts(NOON, 0, 1).expect("due").len(), 1, "still due, now under the new deck");
+}

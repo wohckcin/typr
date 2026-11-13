@@ -32,7 +32,7 @@
 ## 4. Card library
 
 - [x] 4.1 Implement deck creation, nesting and reparenting with cycle rejection and per-parent name uniqueness, and verify tests for a move into the deck's own child and for a duplicate name under the same parent
-- [ ] 4.2 Implement card creation, edit and reassignment between decks, and verify a test that a moved card keeps its `prompt` row and due date
+- [x] 4.2 Implement card creation, edit and reassignment between decks, and verify a test that a moved card keeps its `prompt` row and due date
 - [ ] 4.3 Implement tags stored on the card, case-insensitive matching with first-seen casing preserved, and verify a test that filters by `grammar` and matches `Grammar`, and that a `#` heading produces no tag
 - [ ] 4.4 Implement card search over `search_text` with case and diacritic folding, and verify `cancion` finds `Canción` and that results stay within the selected deck's subtree
 - [ ] 4.5 Implement archive for cards and decks with the archived view and restore, and verify an archived due card is absent from the due queue and its due date survives restore

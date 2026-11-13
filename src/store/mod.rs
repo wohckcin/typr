@@ -166,6 +166,7 @@ pub enum Command {
     MoveDeck { id: Id, parent: Option<Id> },
     CreateCard { deck: Id, markdown: String },
     SaveCard { id: Id, markdown: String },
+    MoveCard { id: Id, deck: Id },
     TrashCard { id: Id },
     RestoreCard { id: Id },
     SetDraft { card: Id, text: Option<String> },
@@ -276,6 +277,7 @@ pub trait Store: Send + Sync {
     fn move_deck(&self, id: Id, parent: Option<Id>) -> u64;
     fn create_card(&self, deck: Id, markdown: &str) -> u64;
     fn save_card(&self, id: Id, markdown: &str) -> u64;
+    fn move_card(&self, id: Id, deck: Id) -> u64;
     fn trash_card(&self, id: Id) -> u64;
     fn restore_card(&self, id: Id) -> u64;
     fn set_draft(&self, card: Id, text: Option<&str>) -> u64;

@@ -126,6 +126,10 @@ impl Store for Handle {
         self.submit(Command::SaveCard { id, markdown: markdown.to_string() })
     }
 
+    fn move_card(&self, id: Id, deck: Id) -> u64 {
+        self.submit(Command::MoveCard { id, deck })
+    }
+
     fn trash_card(&self, id: Id) -> u64 {
         self.submit(Command::TrashCard { id })
     }

@@ -93,6 +93,13 @@ impl Db {
                 self.sync_prompt(*id, sides)?;
                 Ok(Outcome::Changed(changed))
             }
+            Command::MoveCard { id, deck } => {
+                let changed = self.conn.execute(
+                    "UPDATE card SET deck_id = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![id, deck, now_ms],
+                )?;
+                Ok(Outcome::Changed(changed))
+            }
             Command::TrashCard { id } => {
                 let changed = self.conn.execute(
                     "UPDATE card SET trashed_at = ?2 WHERE id = ?1",
