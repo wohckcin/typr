@@ -115,3 +115,17 @@ The system SHALL show, at the end of a session, how many grades of each kind wer
 
 - **WHEN** the user grades the last card in a queue
 - **THEN** a summary reports the remembered and forgot grades recorded in the session, the number of prompts due at that moment, and a way back to the library
+
+### Requirement: A failed write is visible and leaves the card answerable
+
+The system SHALL show why a write or query did not happen, SHALL leave the current card answerable after a grade is refused, and SHALL NOT advance a session on an answer the store did not confirm.
+
+#### Scenario: A refused grade stays on screen
+
+- **WHEN** a grade is sent for a card that has no prompt and the store refuses it
+- **THEN** the card stays on screen, the reason is shown, and no grade is recorded
+
+#### Scenario: A grade that could not be sent is not waited on
+
+- **WHEN** the library worker has closed and a grade cannot be sent
+- **THEN** the failure is reported and the session does not wait for an answer
