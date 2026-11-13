@@ -5,7 +5,26 @@ use rusqlite::Connection;
 use super::StoreError;
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3];
+
+/// The one definition of "a prompt a session may offer": the card is not trashed or archived, it
+/// has at least two sides, and no deck above it is archived. Both queue queries read this view, so
+/// the rule cannot drift between them.
+const V3: &str = r#"
+CREATE VIEW studyable_prompt AS
+WITH RECURSIVE archived_deck(id) AS (
+    SELECT id FROM deck WHERE archived = 1
+    UNION
+    SELECT d.id FROM deck d JOIN archived_deck a ON d.parent_id = a.id
+)
+SELECT p.card_id, p.key, p.phase, p.due_at, p.interval_ms
+FROM prompt p
+JOIN card c ON c.id = p.card_id
+WHERE c.trashed_at IS NULL
+  AND c.archived = 0
+  AND c.sides >= 2
+  AND c.deck_id NOT IN (SELECT id FROM archived_deck);
+"#;
 
 /// Drafts belong to a card, or to the card that has not been saved yet, so the key needs no
 /// foreign key: `0` stands for the new card.

@@ -1435,6 +1435,52 @@ fn a_read_only_command_leaves_the_revision_alone() {
 }
 
 #[test]
+fn the_view_and_the_snapshot_agree_on_what_is_studyable() {
+    let dir = TempDir::new().expect("temp dir");
+    let store = spawn_temp(&dir);
+    store.create_deck(None, "Keep");
+    store.create_deck(None, "Gone");
+    store.create_deck(Some(2), "Under gone");
+    store.create_card(1, "front\n---\nback");
+    store.create_card(1, "a note with one side");
+    store.create_card(1, "front\n---\nback");
+    store.create_card(3, "front\n---\nback");
+    store.create_card(2, "front\n---\nback");
+    wait_for(&store, 8);
+    let trashed = store.snapshot().cards[2].id;
+    store.trash_card(trashed);
+    store.archive_deck(2, true);
+    wait_for(&store, 2);
+
+    let snapshot = store.snapshot();
+    let from_snapshot: Vec<Id> = snapshot
+        .cards_matching("", None, None, CardMode::Active)
+        .into_iter()
+        .filter(|card| card.sides >= 2)
+        .map(|card| card.id)
+        .collect();
+    let mut expected = from_snapshot.clone();
+    expected.sort_unstable();
+
+    store.new_prompts(0, 0, 7);
+    let events = wait_for(&store, 1);
+    let from_sql = match events.last().map(|event| &event.result) {
+        Some(Ok(Outcome::New(prompts))) => {
+            let mut ids: Vec<Id> = prompts.iter().map(|prompt| prompt.card).collect();
+            ids.sort_unstable();
+            ids
+        }
+        other => panic!("expected the new queue, got {other:?}"),
+    };
+
+    assert_eq!(
+        from_sql, expected,
+        "the view and the snapshot must name the same studyable cards"
+    );
+    assert_eq!(from_sql.len(), 1, "only the kept two-sided card is left");
+}
+
+#[test]
 fn reading_the_snapshot_twice_shares_one_allocation() {
     let dir = TempDir::new().expect("temp dir");
     let store = spawn_temp(&dir);

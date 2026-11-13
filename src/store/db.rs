@@ -548,20 +548,10 @@ impl Db {
         seed: u64,
     ) -> Result<Vec<DuePrompt>, StoreError> {
         let mut stmt = self.conn.prepare(
-            "WITH RECURSIVE archived_deck(id) AS (
-                 SELECT id FROM deck WHERE archived = 1
-                 UNION
-                 SELECT d.id FROM deck d JOIN archived_deck a ON d.parent_id = a.id
-             )
-             SELECT p.card_id, p.key, p.due_at
-             FROM prompt p JOIN card c ON c.id = p.card_id
-             WHERE p.due_at IS NOT NULL
-               AND p.due_at <= ?1
-               AND c.trashed_at IS NULL
-               AND c.archived = 0
-               AND c.sides >= 2
-               AND c.deck_id NOT IN (SELECT id FROM archived_deck)
-             ORDER BY p.due_at, p.card_id",
+            "SELECT card_id, key, due_at
+             FROM studyable_prompt
+             WHERE due_at IS NOT NULL AND due_at <= ?1
+             ORDER BY due_at, card_id",
         )?;
         let mut due = stmt
             .query_map(params![now_ms], |row| {
@@ -623,21 +613,12 @@ impl Db {
         seed: u64,
     ) -> Result<Vec<NewPrompt>, StoreError> {
         let mut stmt = self.conn.prepare(
-            "WITH RECURSIVE archived_deck(id) AS (
-                 SELECT id FROM deck WHERE archived = 1
-                 UNION
-                 SELECT d.id FROM deck d JOIN archived_deck a ON d.parent_id = a.id
+            "SELECT card_id, key
+             FROM studyable_prompt p
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM review_log r WHERE r.card_id = p.card_id AND r.key = p.key
              )
-             SELECT p.card_id, p.key
-             FROM prompt p JOIN card c ON c.id = p.card_id
-             WHERE c.trashed_at IS NULL
-               AND c.archived = 0
-               AND c.sides >= 2
-               AND c.deck_id NOT IN (SELECT id FROM archived_deck)
-               AND NOT EXISTS (
-                   SELECT 1 FROM review_log r WHERE r.card_id = p.card_id AND r.key = p.key
-               )
-             ORDER BY p.card_id, p.key",
+             ORDER BY card_id, key",
         )?;
         let waiting = stmt
             .query_map([], |row| {
