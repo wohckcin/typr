@@ -287,6 +287,70 @@ impl Db {
         Ok(())
     }
 
+    /// Append a record for a key this build does not schedule yet, standing in for the rows a
+    /// later version writes for reverse, cloze and mask prompts.
+    #[cfg(test)]
+    pub(crate) fn append_record_for_test(
+        &mut self,
+        card: Id,
+        key: &str,
+        phase: Phase,
+        grade: Grade,
+        at: i64,
+        interval_ms: i64,
+        due_at: Option<i64>,
+    ) -> Result<(), StoreError> {
+        self.conn.execute(
+            "INSERT INTO review_log (card_id, key, phase, at, grade, interval_ms, due_at, duration_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
+            params![card, key, phase.as_str(), at, grade.as_str(), interval_ms, due_at],
+        )?;
+        Ok(())
+    }
+
+    /// One prompt row as stored.
+    pub fn prompt(&self, card: Id, key: &str) -> Result<Option<Folded>, StoreError> {
+        self.conn
+            .query_row(
+                "SELECT phase, interval_ms, due_at, reps, lapses
+                 FROM prompt WHERE card_id = ?1 AND key = ?2",
+                params![card, key],
+                |row| {
+                    Ok(Folded {
+                        phase: Phase::parse(&row.get::<_, String>(0)?),
+                        interval_ms: row.get(1)?,
+                        due_at: row.get(2)?,
+                        reps: row.get(3)?,
+                        lapses: row.get(4)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    /// Rewrite every prompt from its records, which is what makes the prompt a cache rather than a
+    /// second source of truth. Returns how many prompts were rewritten.
+    pub fn rebuild_prompts(&mut self) -> Result<usize, StoreError> {
+        let pairs = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT DISTINCT card_id, key FROM review_log ORDER BY card_id, key")?;
+            let rows = stmt.query_map([], |row| Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?)))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        for (card, key) in &pairs {
+            self.conn.execute(
+                "INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+                 VALUES (?1, ?2, 'learn', NULL, 0, 0, 0)
+                 ON CONFLICT (card_id, key) DO NOTHING",
+                params![card, key],
+            )?;
+            self.refresh_prompt(*card, key)?;
+        }
+        Ok(pairs.len())
+    }
+
     /// What a prompt's records say about it: the last record's decision and the counts above it.
     ///
     /// This is the fold every future algorithm agrees with — recomputing a prompt from history

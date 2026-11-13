@@ -272,3 +272,74 @@ fn grading_a_note_is_refused() {
         .expect_err("no prompt");
     assert!(matches!(error, StoreError::NoPrompt { .. }), "{error}");
 }
+
+#[test]
+fn a_prompt_always_equals_the_fold_of_its_records() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Fold");
+
+    // Five prompts, each pushed into a different phase by a different grade sequence.
+    let sequences: [&[Grade]; 5] = [
+        &[Grade::Remembered],
+        &[Grade::Forgot],
+        &[Grade::Remembered, Grade::Remembered],
+        &[Grade::Remembered, Grade::Remembered, Grade::Remembered],
+        &[Grade::Remembered, Grade::Remembered, Grade::Forgot],
+    ];
+    let mut cards = Vec::new();
+    for (index, sequence) in sequences.iter().enumerate() {
+        let card = card(&mut db, deck, &format!("front {index}\n---\nback {index}"));
+        let mut at = 1_700_000_000_000;
+        for grade in sequence.iter() {
+            db.apply(&Command::Grade { card, key: "fwd".to_string(), grade: *grade, duration_ms: None }, at)
+                .expect("grade");
+            at += 11 * 60_000;
+        }
+        cards.push(card);
+    }
+
+    let phases: Vec<Phase> = cards
+        .iter()
+        .map(|card| db.prompt(*card, "fwd").expect("prompt").expect("exists").phase)
+        .collect();
+    assert!(phases.contains(&Phase::Learn) && phases.contains(&Phase::Relearn) && phases.contains(&Phase::Review));
+
+    for card in &cards {
+        let stored = db.prompt(*card, "fwd").expect("prompt");
+        let folded = db.fold_records(*card, "fwd").expect("fold");
+        assert_eq!(stored, folded, "card {card} disagrees with its history");
+    }
+
+    // Rebuilding from history changes nothing, which is the invariant in action.
+    assert_eq!(db.rebuild_prompts().expect("rebuild"), cards.len());
+    for card in &cards {
+        assert_eq!(db.prompt(*card, "fwd").expect("prompt"), db.fold_records(*card, "fwd").expect("fold"));
+    }
+}
+
+#[test]
+fn prompt_keys_beyond_fwd_fold_into_their_own_prompts() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Keys");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    // Records a later version will write: a reverse direction, a cloze group and a mask group.
+    let mut at = 1_700_000_000_000;
+    for key in ["clair", "cloze:1", "mask:a1"] {
+        db.append_record_for_test(card, key, Phase::Review, Grade::Remembered, at, 86_400_000, Some(at + 86_400_000))
+            .expect("record");
+        at += 1_000;
+    }
+
+    // Only the three keys that have records are rewritten; `fwd` has none and keeps its row.
+    assert_eq!(db.rebuild_prompts().expect("rebuild"), 3);
+    assert_eq!(
+        db.prompt_keys(card).expect("keys"),
+        vec!["clair".to_string(), "cloze:1".to_string(), "fwd".to_string(), "mask:a1".to_string()]
+    );
+    for key in ["clair", "cloze:1", "mask:a1"] {
+        assert_eq!(db.prompt(card, key).expect("prompt"), db.fold_records(card, key).expect("fold"));
+    }
+}
