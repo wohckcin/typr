@@ -208,7 +208,6 @@ impl Db {
                 offset_ms,
                 seed,
             } => Ok(Outcome::New(self.new_prompts(*now_ms, *offset_ms, *seed)?)),
-            Command::Search { query, deck } => Ok(Outcome::Search(self.search(query, *deck)?)),
             Command::History { card } => Ok(Outcome::History {
                 rows: self.history(*card)?,
                 reviews: self.review_count(*card)?,
@@ -799,33 +798,21 @@ impl Db {
         })
         .collect()
     }
-    /// Cards whose folded text contains the folded query, restricted to `deck`'s subtree when given.
-    /// Trashed cards never match.
-    pub fn search(&self, query: &str, deck: Option<Id>) -> Result<Vec<Id>, StoreError> {
-        let needle = escape_like(&folded(query));
-        if needle.is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut stmt = self.conn.prepare(
-            "WITH RECURSIVE subtree(id) AS (
-                 SELECT ?2
-                 UNION
-                 SELECT d.id FROM deck d JOIN subtree s ON d.parent_id = s.id
-             )
-             SELECT c.id FROM card c
-             WHERE c.trashed_at IS NULL
-               AND c.search_text LIKE '%' || ?1 || '%' ESCAPE '\\'
-               AND (?2 IS NULL OR c.deck_id IN (SELECT id FROM subtree))
-             ORDER BY c.id",
-        )?;
-        let ids = stmt
-            .query_map(params![needle, deck], |row| row.get(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(ids)
-    }
 }
 
-/// The first line that has words in it, cut to fit a row.
+fn sides_of(markdown: &str) -> usize {
+    crate::sides::split(markdown).len()
+}
+
+/// The form search and tag matching compare in: no case, no accents.
+pub fn folded(text: &str) -> String {
+    text.nfd()
+        .filter(|character| !is_combining_mark(*character))
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// The first line of a card, cut to what a list row can show.
 fn preview(markdown: &str) -> String {
     let line = markdown
         .lines()
@@ -839,32 +826,6 @@ fn preview(markdown: &str) -> String {
     cut
 }
 
-fn sides_of(markdown: &str) -> usize {
-    crate::sides::split(markdown).len()
-}
-
-/// A LIKE pattern's metacharacters, escaped so a typed `%` or `_` matches itself.
-fn escape_like(needle: &str) -> String {
-    let mut escaped = String::with_capacity(needle.len());
-    for character in needle.chars() {
-        if matches!(character, '\\' | '%' | '_') {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    escaped
-}
-
-/// What search compares against: the text in the case a `LIKE` can fold.
-pub fn folded(text: &str) -> String {
-    text.nfd()
-        .filter(|character| !is_combining_mark(*character))
-        .flat_map(char::to_lowercase)
-        .collect()
-}
-
-/// Diacritics live in these blocks after decomposition; dropping them is what makes `cancion`
-/// find `Canción`.
 fn is_combining_mark(character: char) -> bool {
     matches!(
         character as u32,

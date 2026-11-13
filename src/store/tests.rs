@@ -27,6 +27,16 @@ fn spawn_temp(dir: &TempDir) -> Handle {
     .expect("spawn")
 }
 
+/// Ids the snapshot's own filter keeps, which is what the library screen shows.
+fn matching(db: &Db, query: &str, deck: Option<Id>, mode: CardMode) -> Vec<Id> {
+    let snapshot = db.snapshot().expect("snapshot");
+    snapshot
+        .cards_matching(query, None, deck, mode)
+        .into_iter()
+        .map(|card| card.id)
+        .collect()
+}
+
 fn schema_version_at(path: &Path) -> i64 {
     Connection::open(path)
         .expect("open for version")
@@ -1066,17 +1076,20 @@ fn search_folds_case_and_diacritics_within_the_deck_subtree() {
     let unrelated = card(&mut db, other, "Grammar\n---\nthe rules");
 
     assert_eq!(
-        db.search("cancion", None).expect("search"),
+        matching(&db, "cancion", None, CardMode::Active),
         vec![accented, elsewhere]
     );
     assert_eq!(
-        db.search("CANCION", Some(spanish)).expect("search"),
+        matching(&db, "CANCION", Some(spanish), CardMode::Active),
         vec![accented],
         "subtree only"
     );
-    assert_eq!(db.search("grammar", None).expect("search"), vec![unrelated]);
+    assert_eq!(
+        matching(&db, "grammar", None, CardMode::Active),
+        vec![unrelated]
+    );
     assert!(
-        db.search("   ", None).expect("search").is_empty(),
+        matching(&db, "   ", None, CardMode::Active).is_empty(),
         "blank matches nothing"
     );
 }
@@ -1208,7 +1221,7 @@ fn a_restored_card_keeps_its_history_and_an_emptied_one_loses_everything() {
     db.apply(&Command::TrashCard { id: doomed }, NOON)
         .expect("trash");
     assert!(
-        db.search("doomed", None).expect("search").is_empty(),
+        matching(&db, "doomed", None, CardMode::Active).is_empty(),
         "trash is not searchable"
     );
     db.apply(&Command::RestoreCard { id: doomed }, NOON)
@@ -1233,7 +1246,7 @@ fn a_restored_card_keeps_its_history_and_an_emptied_one_loses_everything() {
         cards.iter().map(|row| row.id).collect::<Vec<_>>(),
         vec![kept]
     );
-    assert!(db.search("doomed", None).expect("search").is_empty());
+    assert!(matching(&db, "doomed", None, CardMode::Trash).is_empty());
     assert!(db.prompt(doomed, "fwd").expect("prompt").is_none());
 }
 
@@ -1325,12 +1338,12 @@ fn a_percent_or_underscore_in_the_query_matches_itself() {
     card(&mut db, deck, "Off by 100 percent\n---\nback");
 
     assert_eq!(
-        db.search("100%", None).expect("search").len(),
+        matching(&db, "100%", None, CardMode::Active).len(),
         1,
         "only the literal percent matches"
     );
     assert!(
-        db.search("_", None).expect("search").is_empty(),
+        matching(&db, "_", None, CardMode::Active).is_empty(),
         "an underscore is not a single-character wildcard"
     );
 }

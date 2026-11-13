@@ -333,10 +333,6 @@ pub enum Command {
         offset_ms: i64,
         seed: u64,
     },
-    Search {
-        query: String,
-        deck: Option<Id>,
-    },
     SetSetting {
         key: String,
         value: String,
@@ -370,7 +366,6 @@ pub enum Outcome {
     Due(Vec<DuePrompt>),
     New(Vec<NewPrompt>),
     Draft(Option<String>),
-    Search(Vec<Id>),
     Stats(Stats),
     Ok,
 }
@@ -389,7 +384,6 @@ impl Outcome {
             | Outcome::Due(_)
             | Outcome::New(_)
             | Outcome::Draft(_)
-            | Outcome::Search(_)
             | Outcome::Stats(_) => false,
         }
     }
@@ -551,7 +545,7 @@ pub trait Store: Send + Sync {
     fn draft(&self, card: Id) -> u64;
     fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64;
     fn reset_history(&self, card: Id, key: &str) -> u64;
-    fn search(&self, query: &str, deck: Option<Id>) -> u64;
+
     /// The due queue as the scheduler would serve it: most overdue first, ties shuffled.
     fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64;
     /// The new-card queue, capped by what this study day still allows.

@@ -216,13 +216,6 @@ impl Store for Handle {
         })
     }
 
-    fn search(&self, query: &str, deck: Option<Id>) -> u64 {
-        self.submit(Command::Search {
-            query: query.to_string(),
-            deck,
-        })
-    }
-
     fn empty_trash(&self) -> u64 {
         self.submit(Command::EmptyTrash)
     }
