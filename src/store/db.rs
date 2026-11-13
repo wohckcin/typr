@@ -100,6 +100,7 @@ impl Db {
                 )?;
                 Ok(Outcome::Changed(changed))
             }
+            Command::SetTags { card, tags } => self.set_tags(*card, tags),
             Command::TrashCard { id } => {
                 let changed = self.conn.execute(
                     "UPDATE card SET trashed_at = ?2 WHERE id = ?1",
@@ -170,12 +171,26 @@ impl Db {
                     id: row.get(0)?,
                     deck: row.get(1)?,
                     sides: row.get::<_, i64>(2)?.max(0) as u32,
+                    tags: Vec::new(),
                     archived: row.get::<_, i64>(3)? != 0,
                     trashed_at: row.get(4)?,
                     updated_at: row.get(5)?,
                 })
             })?;
-            rows.collect::<Result<Vec<_>, _>>()?
+            let mut cards = rows.collect::<Result<Vec<_>, _>>()?;
+
+            let mut stmt = self.conn.prepare(
+                "SELECT ct.card_id, t.name FROM card_tag ct JOIN tag t ON t.id = ct.tag_id
+                 ORDER BY t.name COLLATE NOCASE",
+            )?;
+            let pairs = stmt.query_map([], |row| Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?)))?;
+            for pair in pairs {
+                let (card, name) = pair?;
+                if let Some(summary) = cards.iter_mut().find(|summary| summary.id == card) {
+                    summary.tags.push(name);
+                }
+            }
+            cards
         };
         Ok(Snapshot { decks, cards, settings: self.settings()?, revision: 0 })
     }
@@ -213,6 +228,43 @@ impl Db {
             )?;
         }
         Ok(())
+    }
+
+    /// Replace a card's tags. Matching is case-insensitive and the first casing ever written wins,
+    /// so `Grammar` stays `Grammar` even when a later card types `grammar`.
+    pub fn set_tags(&mut self, card: Id, tags: &[String]) -> Result<Outcome, StoreError> {
+        self.conn.execute("DELETE FROM card_tag WHERE card_id = ?1", params![card])?;
+        for tag in tags {
+            let name = tag.trim();
+            if name.is_empty() {
+                continue;
+            }
+            self.conn
+                .execute("INSERT INTO tag (name) VALUES (?1) ON CONFLICT DO NOTHING", params![name])?;
+            let id: Id = self.conn.query_row("SELECT id FROM tag WHERE name = ?1", params![name], |row| row.get(0))?;
+            self.conn.execute(
+                "INSERT OR IGNORE INTO card_tag (card_id, tag_id) VALUES (?1, ?2)",
+                params![card, id],
+            )?;
+        }
+        Ok(Outcome::Ok)
+    }
+
+    /// The tags currently in use, each in its first-written casing.
+    pub fn tag_names(&self) -> Result<Vec<String>, StoreError> {
+        let mut stmt = self.conn.prepare("SELECT name FROM tag ORDER BY name COLLATE NOCASE")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Cards carrying a tag, matched without regard to case.
+    pub fn cards_with_tag(&self, tag: &str) -> Result<Vec<Id>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ct.card_id FROM card_tag ct JOIN tag t ON t.id = ct.tag_id
+             WHERE t.name = ?1 ORDER BY ct.card_id",
+        )?;
+        let rows = stmt.query_map(params![tag.trim()], |row| row.get::<_, Id>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
     /// Move a deck under another, refusing a move that would put it inside its own subtree.

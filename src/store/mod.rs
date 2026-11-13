@@ -91,6 +91,8 @@ pub struct CardSummary {
     pub deck: Id,
     /// How many sides the text splits into; one side is a note and never queues.
     pub sides: u32,
+    /// The card's tags, in the casing each was first written across the whole library.
+    pub tags: Vec<String>,
     pub archived: bool,
     pub trashed_at: Option<i64>,
     pub updated_at: i64,
@@ -167,6 +169,7 @@ pub enum Command {
     CreateCard { deck: Id, markdown: String },
     SaveCard { id: Id, markdown: String },
     MoveCard { id: Id, deck: Id },
+    SetTags { card: Id, tags: Vec<String> },
     TrashCard { id: Id },
     RestoreCard { id: Id },
     SetDraft { card: Id, text: Option<String> },
@@ -278,6 +281,7 @@ pub trait Store: Send + Sync {
     fn create_card(&self, deck: Id, markdown: &str) -> u64;
     fn save_card(&self, id: Id, markdown: &str) -> u64;
     fn move_card(&self, id: Id, deck: Id) -> u64;
+    fn set_tags(&self, card: Id, tags: &[String]) -> u64;
     fn trash_card(&self, id: Id) -> u64;
     fn restore_card(&self, id: Id) -> u64;
     fn set_draft(&self, card: Id, text: Option<&str>) -> u64;

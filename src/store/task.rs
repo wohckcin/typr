@@ -130,6 +130,10 @@ impl Store for Handle {
         self.submit(Command::MoveCard { id, deck })
     }
 
+    fn set_tags(&self, card: Id, tags: &[String]) -> u64 {
+        self.submit(Command::SetTags { card, tags: tags.to_vec() })
+    }
+
     fn trash_card(&self, id: Id) -> u64 {
         self.submit(Command::TrashCard { id })
     }

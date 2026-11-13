@@ -589,3 +589,24 @@ fn a_moved_card_keeps_its_prompt_and_due_date() {
     assert_eq!(moved.deck, destination);
     assert_eq!(db.due_prompts(NOON, 0, 1).expect("due").len(), 1, "still due, now under the new deck");
 }
+
+#[test]
+fn tags_match_without_case_and_keep_the_first_casing() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Tags");
+    let first = card(&mut db, deck, "front\n---\nback");
+    let second = card(&mut db, deck, "front\n---\nback");
+    let heading = card(&mut db, deck, "# Heading\n\ntext");
+
+    db.apply(&Command::SetTags { card: first, tags: vec!["Grammar".into(), "grammar".into(), "verbs".into()] }, 0)
+        .expect("tags");
+    db.apply(&Command::SetTags { card: second, tags: vec!["GRAMMAR".into()] }, 0).expect("tags");
+
+    let summary = |id| db.snapshot().expect("snapshot").cards.into_iter().find(|card| card.id == id).expect("card");
+    assert_eq!(summary(first).tags, vec!["Grammar".to_string(), "verbs".to_string()]);
+    assert_eq!(summary(second).tags, vec!["Grammar".to_string()], "the first casing is library-wide");
+    assert_eq!(db.cards_with_tag("grammar").expect("filter"), vec![first, second]);
+    assert_eq!(db.tag_names().expect("names"), vec!["Grammar".to_string(), "verbs".to_string()]);
+    assert!(summary(heading).tags.is_empty(), "a heading is not a tag");
+}
