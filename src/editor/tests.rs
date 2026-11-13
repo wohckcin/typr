@@ -105,3 +105,25 @@ fn the_confirmation_lists_save_discard_and_stay() {
     assert_eq!(runtime.state.buffer.text, "card");
     assert!(!runtime.state.asking);
 }
+
+#[test]
+fn an_empty_card_is_refused_and_explained_instead_of_rendered() {
+    let mut editor = Editor::new(None, String::new());
+    editor.buffer.replace_text("  \n\n---\n \t".to_string());
+    assert!(!editor.saveable());
+
+    assert!(!editor.save(), "nothing is stored");
+    assert_eq!(editor.refusal(), Some("This card is empty"));
+    assert!(editor.dirty());
+
+    let runtime_view = |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s);
+    let mut runtime = rune::Runtime::new(editor, runtime_view, (900.0, 600.0), rune::Env::new(true, 1.0));
+    runtime.frame(0.0);
+    assert!(runtime.find("preview-empty").is_some(), "the preview explains itself");
+    assert!(runtime.find("refusal").is_some());
+
+    runtime.state.buffer.insert("front");
+    assert_eq!(runtime.state.refusal(), None, "and the refusal clears once there is content");
+    assert!(runtime.state.save());
+    assert!(!runtime.state.dirty());
+}

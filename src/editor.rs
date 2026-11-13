@@ -38,6 +38,8 @@ pub struct Editor {
     memo: u64,
     /// Whether the leave confirmation is on screen.
     pub asking: bool,
+    /// Whether the last save was refused because the card is empty.
+    pub refused: bool,
 }
 
 /// What the user asked for when leaving an unsaved card.
@@ -73,7 +75,7 @@ impl Editor {
         let mut buffer = TextEdit::default();
         buffer.replace_text(text.clone());
         let memo = preview_key(card, &text);
-        Editor { card, buffer, saved: text, memo, asking: false }
+        Editor { card, buffer, saved: text, memo, asking: false, refused: false }
     }
 
     /// Whether the buffer holds something the card does not.
@@ -92,15 +94,31 @@ impl Editor {
         self.memo = preview_key(self.card, &self.buffer.text);
     }
 
+    /// Whether there is anything to store: a card of nothing but whitespace is refused.
+    pub fn saveable(&self) -> bool {
+        self.sides().iter().any(|side| !side.trim().is_empty())
+    }
+
+    /// Whether a save has been refused, so the editor can say why.
+    pub fn refusal(&self) -> Option<&'static str> {
+        if self.refused && !self.saveable() { Some("This card is empty") } else { None }
+    }
+
     /// The draft belongs to the card, or to the unsaved new card.
     pub fn draft_key(&self) -> Id {
         self.card.unwrap_or(0)
     }
 
-    /// Mark the buffer as stored. The caller persists it.
-    pub fn save(&mut self) {
+    /// Mark the buffer as stored. The caller persists it; nothing is stored for an empty card.
+    pub fn save(&mut self) -> bool {
+        if !self.saveable() {
+            self.refused = true;
+            return false;
+        }
+        self.refused = false;
         self.saved = self.buffer.text.clone();
         self.settle();
+        true
     }
 
     /// Ask before closing an unsaved card; a clean one closes straight away.
@@ -168,7 +186,11 @@ fn preview_pane<S: Host>(s: &S) -> El {
         .gap(8.0)
         .padding(16.0)
         .fill(t.card)
-        .child(markdown(&editor.buffer.text, editor.memo()))
+        .child(if editor.saveable() {
+            markdown(&editor.buffer.text, editor.memo())
+        } else {
+            text("Nothing to save yet. Write the front of the card.").key("preview-empty").color(t.text_secondary)
+        })
         .child(
             text(match sides {
                 0 => "Empty card".to_string(),
@@ -220,13 +242,20 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
 pub fn view<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let unsaved = s.editor().dirty();
+    let refusal = s.editor().refusal();
     let header = row()
         .key("editor-header")
         .h(44.0)
         .px(16.0)
         .center_y()
         .gap(8.0)
-        .child(text(if unsaved { "Unsaved changes" } else { "Saved" }).font(type_::LABEL).color(t.text_secondary));
+        .child(text(if unsaved { "Unsaved changes" } else { "Saved" }).font(type_::LABEL).color(t.text_secondary))
+        .child(
+            text(refusal.unwrap_or_default())
+                .key("refusal")
+                .font(type_::LABEL)
+                .color(if refusal.is_some() { KIT.c.danger.fg } else { t.text_secondary }),
+        );
     let mut layer = Vec::new();
     confirmation::<S>(s, &mut layer);
     let body = row()
