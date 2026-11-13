@@ -570,11 +570,14 @@ fn the_view_and_the_snapshot_agree_on_what_is_studyable() {
     store.create_card(1, "front\n---\nback");
     store.create_card(3, "front\n---\nback");
     store.create_card(2, "front\n---\nback");
-    wait_for(&store, 8);
+    store.create_card(1, "front\n---\nback");
+    wait_for(&store, 9);
     let trashed = store.snapshot().cards[2].id;
+    let archived = store.snapshot().cards[5].id;
     store.trash_card(trashed);
+    store.archive_card(archived, true);
     store.archive_deck(2, true);
-    wait_for(&store, 2);
+    wait_for(&store, 3);
 
     let snapshot = store.snapshot();
     let from_snapshot: Vec<Id> = snapshot
