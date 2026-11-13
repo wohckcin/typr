@@ -20,6 +20,7 @@ CREATE TABLE card (
     id          INTEGER PRIMARY KEY,
     deck_id     INTEGER NOT NULL REFERENCES deck(id) ON DELETE CASCADE,
     markdown    TEXT    NOT NULL,
+    sides       INTEGER NOT NULL DEFAULT 1,
     archived    INTEGER NOT NULL DEFAULT 0,
     trashed_at  INTEGER,
     search_text TEXT    NOT NULL,

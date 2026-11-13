@@ -89,6 +89,8 @@ pub struct Deck {
 pub struct CardSummary {
     pub id: Id,
     pub deck: Id,
+    /// How many sides the text splits into; one side is a note and never queues.
+    pub sides: u32,
     pub archived: bool,
     pub trashed_at: Option<i64>,
     pub updated_at: i64,

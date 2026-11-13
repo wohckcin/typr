@@ -61,18 +61,23 @@ impl Db {
                 Ok(Outcome::Changed(changed))
             }
             Command::CreateCard { deck, markdown } => {
+                let sides = sides_of(markdown);
                 self.conn.execute(
-                    "INSERT INTO card (deck_id, markdown, search_text, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?4)",
-                    params![deck, markdown, fold(markdown), now_ms],
+                    "INSERT INTO card (deck_id, markdown, sides, search_text, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                    params![deck, markdown, sides as i64, fold(markdown), now_ms],
                 )?;
-                Ok(Outcome::Card(self.conn.last_insert_rowid()))
+                let id = self.conn.last_insert_rowid();
+                self.sync_prompt(id, sides)?;
+                Ok(Outcome::Card(id))
             }
             Command::SaveCard { id, markdown } => {
+                let sides = sides_of(markdown);
                 let changed = self.conn.execute(
-                    "UPDATE card SET markdown = ?2, search_text = ?3, updated_at = ?4 WHERE id = ?1",
-                    params![id, markdown, fold(markdown), now_ms],
+                    "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
+                    params![id, markdown, sides as i64, fold(markdown), now_ms],
                 )?;
+                self.sync_prompt(*id, sides)?;
                 Ok(Outcome::Changed(changed))
             }
             Command::TrashCard { id } => {
@@ -134,15 +139,16 @@ impl Db {
         };
         let cards = {
             let mut stmt = self.conn.prepare(
-                "SELECT id, deck_id, archived, trashed_at, updated_at FROM card ORDER BY updated_at DESC, id",
+                "SELECT id, deck_id, sides, archived, trashed_at, updated_at FROM card ORDER BY updated_at DESC, id",
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(CardSummary {
                     id: row.get(0)?,
                     deck: row.get(1)?,
-                    archived: row.get::<_, i64>(2)? != 0,
-                    trashed_at: row.get(3)?,
-                    updated_at: row.get(4)?,
+                    sides: row.get::<_, i64>(2)?.max(0) as u32,
+                    archived: row.get::<_, i64>(3)? != 0,
+                    trashed_at: row.get(4)?,
+                    updated_at: row.get(5)?,
                 })
             })?;
             rows.collect::<Result<Vec<_>, _>>()?
@@ -158,6 +164,31 @@ impl Db {
         Ok(Settings {
             new_per_day: limit.and_then(|v| v.parse().ok()).unwrap_or(Settings::DEFAULT_NEW_PER_DAY),
         })
+    }
+
+    /// The prompt keys a card holds. A card that became a note keeps them: its schedule, due date
+    /// and history stay intact and come back when it has two sides again.
+    pub fn prompt_keys(&self, card: Id) -> Result<Vec<String>, StoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT key FROM prompt WHERE card_id = ?1 ORDER BY key")?;
+        let rows = stmt.query_map(params![card], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Give a two-sided card its `fwd` prompt. A prompt that exists is left exactly as it was, so
+    /// editing text never resets a schedule; a one-sided card keeps the prompt it has and simply
+    /// stops queueing (a note is not studyable).
+    fn sync_prompt(&self, card: Id, sides: usize) -> Result<(), StoreError> {
+        if sides >= 2 {
+            self.conn.execute(
+                "INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+                 VALUES (?1, 'fwd', 'learn', NULL, 0, 0, 0)
+                 ON CONFLICT (card_id, key) DO NOTHING",
+                params![card],
+            )?;
+        }
+        Ok(())
     }
 
     /// Grades recorded between two instants, counting real reviews only.
@@ -195,6 +226,10 @@ impl Db {
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
+}
+
+fn sides_of(markdown: &str) -> usize {
+    crate::sides::split(markdown).len()
 }
 
 /// What search compares against: the text in the case a `LIKE` can fold.

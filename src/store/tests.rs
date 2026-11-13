@@ -183,3 +183,40 @@ fn a_database_from_a_newer_build_is_refused_byte_for_byte() {
     );
     assert_eq!(std::fs::read(&path).expect("read after"), before);
 }
+
+fn deck(db: &mut Db, name: &str) -> Id {
+    match db.apply(&Command::CreateDeck { parent: None, name: name.to_string() }, 0) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("creating a deck: {other:?}"),
+    }
+}
+
+fn card(db: &mut Db, deck: Id, markdown: &str) -> Id {
+    match db.apply(&Command::CreateCard { deck, markdown: markdown.to_string() }, 0) {
+        Ok(Outcome::Card(id)) => id,
+        other => panic!("creating a card: {other:?}"),
+    }
+}
+
+#[test]
+fn a_prompt_appears_with_the_second_side_and_survives_edits() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Mixed");
+
+    let note = card(&mut db, deck, "just a note");
+    assert!(db.prompt_keys(note).expect("keys").is_empty(), "a note has no prompt");
+
+    let two_sided = card(&mut db, deck, "front\n---\nback");
+    assert_eq!(db.prompt_keys(two_sided).expect("keys"), vec!["fwd".to_string()]);
+
+    // Turned into a note: the prompt and its schedule are kept, the card just stops queueing.
+    db.apply(&Command::SaveCard { id: two_sided, markdown: "front".to_string() }, 0).expect("save");
+    let sides = db.snapshot().expect("snapshot").cards.iter().find(|c| c.id == two_sided).expect("card").sides;
+    assert_eq!(sides, 1);
+    assert_eq!(db.prompt_keys(two_sided).expect("keys"), vec!["fwd".to_string()]);
+
+    // And back again: still exactly one prompt, not two.
+    db.apply(&Command::SaveCard { id: two_sided, markdown: "front\n---\nback".to_string() }, 0).expect("save");
+    assert_eq!(db.prompt_keys(two_sided).expect("keys").len(), 1);
+}
