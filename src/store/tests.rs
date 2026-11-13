@@ -142,8 +142,9 @@ fn a_command_sent_and_then_quit_is_on_disk() {
         let store = Handle::spawn(Db::open(&path).expect("open"), Box::new(TestClock::new(0)), noop_waker())
             .expect("spawn");
         store.create_deck(None, "Biology");
-        // Sent, not acknowledged: quitting must still write it.
+        // Sent, not acknowledged: quitting must still write all of it.
         store.create_card(1, "mitochondria\n---\nthe powerhouse");
+        store.grade(1, "fwd", Grade::Remembered, Some(4_000));
         store.close();
     }
 
@@ -151,6 +152,10 @@ fn a_command_sent_and_then_quit_is_on_disk() {
     let snapshot = db.snapshot().expect("snapshot");
     assert_eq!(snapshot.decks.len(), 1);
     assert_eq!(snapshot.cards.len(), 1);
+    let history = db.history(1).expect("history");
+    assert_eq!(history.len(), 1, "the grade sent just before the quit is on disk");
+    assert_eq!(history[0].grade, Grade::Remembered);
+    assert_eq!(history[0].duration_ms, Some(4_000));
 }
 
 #[test]

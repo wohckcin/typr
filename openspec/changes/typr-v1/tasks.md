@@ -14,7 +14,7 @@
 - [x] 2.1 Create the schema for `deck`, `card`, `prompt`, `tag`, `review_log`, `editor_draft` and `settings` inside a `PRAGMA user_version` migration runner, and verify opening a fresh database applies migration 1 exactly once
 - [x] 2.2 Implement the store task: a command queue carrying ids, a `Connection` it owns exclusively, one event per command, and a published snapshot, and verify a test asserts each command produces exactly one event and that `poll` returns false with no commands in flight
 - [x] 2.3 Expose the `Store` trait the UI talks to (typed mutations, snapshot queries, `stats`, `history`) and verify every method is reachable without a `Connection` leaking outside the module
-- [ ] 2.4 Implement the quit path: `on_quit` sends a flush and joins the store task, and verify a test that a grade sent and then quit is present when the database is reopened
+- [x] 2.4 Implement the quit path: `on_quit` sends a flush and joins the store task, and verify a test that a grade sent and then quit is present when the database is reopened
 - [x] 2.5 Open the database at `<AppDirs::data()>/typr.sqlite3`, treat `AppDirs::new` returning `None` as a reported startup failure, and verify a path that exists but is not a database produces an error rather than being overwritten
 - [x] 2.6 Verify migration behaviour both ways: a version 0 database is upgraded to the current version, and a database one version ahead is refused and left byte-identical
 - [x] 2.7 Honor `RUNE_DIRS_ROOT` everywhere a path is derived, and verify a test run pointed at a temporary directory creates no files under the real app data directory
