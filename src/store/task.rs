@@ -19,7 +19,7 @@ use super::{Command, Db, Event, Grade, Id, Outcome, Snapshot, Store, StoreError}
 
 /// Everything the worker publishes for the UI thread.
 struct Shared {
-    snapshot: Mutex<Snapshot>,
+    snapshot: Mutex<Arc<Snapshot>>,
     events: Mutex<Vec<Event>>,
     waker: Waker,
 }
@@ -46,7 +46,7 @@ impl Handle {
     ) -> Result<Self, StoreError> {
         let snapshot = db.snapshot()?;
         let shared = Arc::new(Shared {
-            snapshot: Mutex::new(snapshot),
+            snapshot: Mutex::new(Arc::new(snapshot)),
             events: Mutex::new(Vec::new()),
             waker,
         });
@@ -106,8 +106,9 @@ impl Drop for Handle {
 }
 
 impl Store for Handle {
-    fn snapshot(&self) -> Snapshot {
-        self.shared.snapshot.lock().expect("snapshot").clone()
+    fn snapshot(&self) -> Arc<Snapshot> {
+        // Cloning the Arc keeps a grade from copying the whole library on the frame thread.
+        Arc::clone(&self.shared.snapshot.lock().expect("snapshot"))
     }
 
     fn poll(&self) -> Vec<Event> {
@@ -237,28 +238,46 @@ impl Store for Handle {
 }
 
 fn work(db: Db, rx: Receiver<Message>, shared: Arc<Shared>, clock: Box<dyn Clock + Send + Sync>) {
+    let mut dirty = false;
     while let Ok(message) = rx.recv() {
-        let id = message.id;
-        let result = db.apply(&message.command, clock.now_ms());
-        // Only a write makes the published snapshot stale; a query answering with rows of its own
-        // must not cost a full re-read of the library.
-        if result.as_ref().is_ok_and(Outcome::writes) {
-            // A snapshot that cannot be read must not turn a committed command into a failure:
-            // the caller would retry work the database has already done.
-            match db.snapshot() {
-                Ok(mut snapshot) => {
-                    let mut published = shared.snapshot.lock().expect("snapshot");
-                    snapshot.revision = published.revision + 1;
-                    *published = snapshot;
-                }
-                Err(error) => eprintln!("typr: the library could not be read back: {error}"),
-            }
+        let mut batch = Vec::new();
+        dirty |= apply(&db, &*clock, message, &mut batch);
+        // Coalesce: apply everything already queued before paying for the snapshot re-read, so a
+        // bulk import costs one read rather than one per row. The batch's events are published
+        // after the snapshot, so an event always means the library it describes is visible.
+        while let Ok(next) = rx.try_recv() {
+            dirty |= apply(&db, &*clock, next, &mut batch);
         }
-        shared
-            .events
-            .lock()
-            .expect("events")
-            .push(Event { id, result });
+        if dirty {
+            publish(&db, &shared);
+            dirty = false;
+        }
+        shared.events.lock().expect("events").extend(batch);
         (shared.waker)();
+    }
+}
+
+/// Apply one command and record its answer. Returns whether the command wrote to the library.
+fn apply(db: &Db, clock: &dyn Clock, message: Message, batch: &mut Vec<Event>) -> bool {
+    let result = db.apply(&message.command, clock.now_ms());
+    let wrote = result.as_ref().is_ok_and(Outcome::writes);
+    batch.push(Event {
+        id: message.id,
+        result,
+    });
+    wrote
+}
+
+/// Re-read the library and publish it with the next revision.
+fn publish(db: &Db, shared: &Shared) {
+    // A snapshot that cannot be read must not turn a committed command into a failure: the caller
+    // would retry work the database has already done.
+    match db.snapshot() {
+        Ok(mut snapshot) => {
+            let mut published = shared.snapshot.lock().expect("snapshot");
+            snapshot.revision = published.revision + 1;
+            *published = Arc::new(snapshot);
+        }
+        Err(error) => eprintln!("typr: the library could not be read back: {error}"),
     }
 }

@@ -9,6 +9,7 @@ mod schema;
 mod task;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use rune::dirs::AppDirs;
 
@@ -524,7 +525,7 @@ pub trait Store: Send + Sync {
     /// The last published snapshot: decks, cards and settings. Cards carry their markdown, so a
     /// session can split sides without another round trip; the snapshot is cloned per call and is
     /// republished only when a command wrote.
-    fn snapshot(&self) -> Snapshot;
+    fn snapshot(&self) -> Arc<Snapshot>;
 
     /// Take the events that arrived since the last call.
     fn poll(&self) -> Vec<Event>;

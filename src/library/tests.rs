@@ -54,11 +54,12 @@ fn a_tag_filter_and_a_deck_filter_compose() {
         name: "Other".to_string(),
         archived: false,
     };
-    library.snapshot.decks.push(second);
-    library.snapshot.cards[0].tags = vec!["Grammar".to_string()];
-    library.snapshot.cards[1].tags = vec!["verbs".to_string()];
-    library.snapshot.cards[2].tags = vec!["Grammar".to_string()];
-    library.snapshot.cards[2].deck = 2;
+    let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+    snapshot.decks.push(second);
+    snapshot.cards[0].tags = vec!["Grammar".to_string()];
+    snapshot.cards[1].tags = vec!["verbs".to_string()];
+    snapshot.cards[2].tags = vec!["Grammar".to_string()];
+    snapshot.cards[2].deck = 2;
 
     library.refresh();
     assert_eq!(library.visible.len(), 10);

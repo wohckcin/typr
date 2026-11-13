@@ -1,6 +1,7 @@
 //! The library screen: decks and tags on the left, a virtualised card list on the right.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rune::tok::{self, type_};
@@ -30,7 +31,7 @@ impl Host for Library {
 
 /// What the library screen shows and what the user is filtering it by.
 pub struct Library {
-    pub snapshot: Snapshot,
+    pub snapshot: Arc<Snapshot>,
     pub mode: CardMode,
     pub selected_deck: Option<Id>,
     pub selected_card: Option<Id>,
@@ -46,7 +47,7 @@ pub struct Library {
 impl Default for Library {
     fn default() -> Self {
         Library {
-            snapshot: Snapshot::default(),
+            snapshot: Arc::default(),
             mode: CardMode::Active,
             selected_deck: None,
             selected_card: None,
@@ -60,7 +61,7 @@ impl Default for Library {
 
 impl Library {
     /// Replace the library the screen draws, and rebuild the rows the filters keep.
-    pub fn set_snapshot(&mut self, snapshot: Snapshot) {
+    pub fn set_snapshot(&mut self, snapshot: Arc<Snapshot>) {
         self.snapshot = snapshot;
         self.refresh();
     }
@@ -89,13 +90,13 @@ impl Library {
             archived: false,
         };
         let mut library = Library {
-            snapshot: Snapshot {
+            snapshot: Arc::new(Snapshot {
                 decks: vec![deck],
                 ..Snapshot::default()
-            },
+            }),
             ..Library::default()
         };
-        library.snapshot.cards = (1..=count as Id)
+        Arc::make_mut(&mut library.snapshot).cards = (1..=count as Id)
             .map(|id| CardSummary {
                 id,
                 deck: 1,

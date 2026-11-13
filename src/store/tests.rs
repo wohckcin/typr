@@ -1435,6 +1435,25 @@ fn a_read_only_command_leaves_the_revision_alone() {
 }
 
 #[test]
+fn reading_the_snapshot_twice_shares_one_allocation() {
+    let dir = TempDir::new().expect("temp dir");
+    let store = spawn_temp(&dir);
+    let first = store.snapshot();
+    let second = store.snapshot();
+    assert!(
+        std::sync::Arc::ptr_eq(&first, &second),
+        "a read hands out the published library instead of copying it"
+    );
+
+    store.create_deck(None, "Chemistry");
+    wait_for(&store, 1);
+    assert!(
+        !std::sync::Arc::ptr_eq(&first, &store.snapshot()),
+        "a write publishes a new one, so a held copy stays the library it was"
+    );
+}
+
+#[test]
 fn a_new_card_cap_that_is_not_a_number_is_refused() {
     let dir = TempDir::new().expect("temp dir");
     let db = open_temp(&dir);
