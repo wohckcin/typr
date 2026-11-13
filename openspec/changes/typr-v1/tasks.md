@@ -21,7 +21,7 @@
 
 ## 3. Scheduling
 
-- [ ] 3.1 Implement the `Scheduler` trait and the fixed-multiplier scheduler (learn `remembered` → 10 minutes, graduation `remembered` → 1 day, later `remembered` → ×2.5 capped at 365 days, `forgot` in review → `relearn` due in 10 minutes, the success after it → 1 day), and verify unit tests for each branch including the 200-day → 365-day cap
+- [x] 3.1 Implement the `Scheduler` trait and the fixed-multiplier scheduler (learn `remembered` → 10 minutes, graduation `remembered` → 1 day, later `remembered` → ×2.5 capped at 365 days, `forgot` in review → `relearn` due in 10 minutes, the success after it → 1 day), and verify unit tests for each branch including the 200-day → 365-day cap
 - [ ] 3.2 Create one `fwd` prompt for every card with two or more sides and none for one-sided cards, and verify a test that counts prompts per card for both cases, including a card edited from two sides to one and back
 - [ ] 3.3 Append a `review_log` row for every grade with its phase, recording the graduating grade as `review`, and verify a test where three `learn` grades and two `review` grades yield a review count of two and five history rows
 - [ ] 3.4 Implement the fold that recomputes a `prompt` row from `review_log`, and verify fold-equality for five graded prompts plus a log containing `rev`, `cloze:1` and `mask:a1` keys that folds to one prompt per key
