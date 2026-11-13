@@ -4,11 +4,13 @@ use std::hash::{Hash, Hasher};
 
 use rune::tok::{self, type_};
 use rune::{El, ScrollSpec, TextEdit, col, memo, row, text, text_input};
+use rune::{FileDialogOptions, Tx};
 use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root};
 
 /// Kept for the lifetime of the app: a Kit rebuilds its palette and type ramp.
 static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));
 
+use crate::attachments::{self, Attachments};
 use crate::store::Id;
 
 /// The app state an editor screen draws from.
@@ -40,6 +42,8 @@ pub struct Editor {
     pub asking: bool,
     /// Whether the last save was refused because the card is empty.
     pub refused: bool,
+    /// Where this card's pictures live.
+    pub attachments: Attachments,
 }
 
 /// What the user asked for when leaving an unsaved card.
@@ -75,7 +79,7 @@ impl Editor {
         let mut buffer = TextEdit::default();
         buffer.replace_text(text.clone());
         let memo = preview_key(card, &text);
-        Editor { card, buffer, saved: text, memo, asking: false, refused: false }
+        Editor { card, buffer, saved: text, memo, asking: false, refused: false, attachments: Attachments::default() }
     }
 
     /// Whether the buffer holds something the card does not.
@@ -102,6 +106,15 @@ impl Editor {
     /// Whether a save has been refused, so the editor can say why.
     pub fn refusal(&self) -> Option<&'static str> {
         if self.refused && !self.saveable() { Some("This card is empty") } else { None }
+    }
+
+    /// Copy a chosen file beside the library and write its reference where the cursor is.
+    pub fn attach_image(&mut self, source: &std::path::Path) -> std::io::Result<String> {
+        let name = attachments::attach(self.attachments.root(), source)?;
+        let alt = name.rsplit_once('.').map_or(name.as_str(), |(stem, _)| stem);
+        self.buffer.insert(&format!("![{alt}]({name})"));
+        self.settle();
+        Ok(name)
     }
 
     /// The draft belongs to the card, or to the unsaved new card.
@@ -160,8 +173,13 @@ pub fn preview_key(card: Option<Id>, text: &str) -> u64 {
     hasher.finish()
 }
 
-fn markdown(text: &str, key: u64) -> El {
-    memo("preview", key, || Markdown::new(text.to_string()).render(&MarkdownStyle::neutral(true)))
+fn markdown(attachments: &Attachments, text: &str, key: u64) -> El {
+    let images = attachments.clone();
+    memo("preview", key, move || {
+        Markdown::new(text.to_string())
+            .images(move |src| images.picture(src))
+            .render(&MarkdownStyle::neutral(true))
+    })
 }
 
 fn source_pane<S: Host>(s: &S) -> El {
@@ -187,7 +205,7 @@ fn preview_pane<S: Host>(s: &S) -> El {
         .padding(16.0)
         .fill(t.card)
         .child(if editor.saveable() {
-            markdown(&editor.buffer.text, editor.memo())
+            markdown(&editor.attachments, &editor.buffer.text, editor.memo())
         } else {
             text("Nothing to save yet. Write the front of the card.").key("preview-empty").color(t.text_secondary)
         })
@@ -214,6 +232,22 @@ fn button<S: Host>(label: &'static str, variant: ButtonVariant, choice: Choice) 
             Choice::Discard => "leave-discard",
             Choice::Stay => "leave-stay",
         })
+}
+
+fn attach_button<S: Host>() -> El {
+    Button::new("Attach image")
+        .variant(ButtonVariant::Ghost)
+        .on_press_tx(|s: &mut S, tx: &mut Tx| {
+            let options = FileDialogOptions { title: "Attach image".into(), ..FileDialogOptions::default() }
+                .filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]);
+            tx.open_file(options, |s: &mut S, result, _| {
+                if let Ok(Some(path)) = result {
+                    let _ = s.editor_mut().attach_image(&path);
+                }
+            });
+        })
+        .build(&KIT)
+        .key("attach-image")
 }
 
 fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
@@ -255,7 +289,9 @@ pub fn view<S: Host>(s: &S) -> El {
                 .key("refusal")
                 .font(type_::LABEL)
                 .color(if refusal.is_some() { KIT.c.danger.fg } else { t.text_secondary }),
-        );
+        )
+        .child(rune::el().grow(1.0))
+        .child(attach_button::<S>());
     let mut layer = Vec::new();
     confirmation::<S>(s, &mut layer);
     let body = row()

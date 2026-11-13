@@ -48,8 +48,8 @@
 - [x] 5.4 Implement save, the unsaved-changes indicator, and the leave-confirmation dialog, and verify a test that abandoning an edited card prompts save/discard/stay
 - [x] 5.5 Persist the in-progress draft in `editor_draft` and restore it on launch marked unsaved, and verify by editing, quitting, and relaunching
 - [x] 5.6 Refuse to save a card whose sides are all whitespace and report the reason, and verify with a whitespace-only card
-- [ ] 5.7 Implement the image resolver over `<AppDirs::data()>/attachments/`, refusing escaping paths and drawing a placeholder for missing files, and verify an attached image renders in the preview and in study while an escaping reference does not load
-- [ ] 5.8 Implement the attach action that copies a chosen file into the attachments directory and inserts its reference, and verify the copied file exists and the card text references it
+- [x] 5.7 Implement the image resolver over `<AppDirs::data()>/attachments/`, refusing escaping paths and drawing a placeholder for missing files, and verify an attached image renders in the preview and in study while an escaping reference does not load
+- [x] 5.8 Implement the attach action that copies a chosen file into the attachments directory and inserts its reference, and verify the copied file exists and the card text references it
 
 ## 6. Study session
 

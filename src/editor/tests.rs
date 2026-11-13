@@ -127,3 +127,34 @@ fn an_empty_card_is_refused_and_explained_instead_of_rendered() {
     assert!(runtime.state.save());
     assert!(!runtime.state.dirty());
 }
+
+#[test]
+fn a_missing_attachment_renders_a_placeholder_instead_of_breaking_the_preview() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut editor = Editor::new(None, "Look:\n\n![diagram](diagram.png)".to_string());
+    editor.attachments = crate::attachments::Attachments::detached(dir.path().to_path_buf());
+
+    let mut runtime = rune::Runtime::new(editor, |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 600.0), rune::Env::new(true, 1.0));
+    for _ in 0..5 {
+        runtime.frame(1.0 / 60.0);
+    }
+    assert!(runtime.find("preview-pane").is_some(), "the preview still draws");
+    assert_eq!(runtime.state.attachments.resolve("diagram.png"), None, "and nothing was loaded");
+}
+
+#[test]
+fn attaching_an_image_copies_it_and_writes_its_reference() {
+    let dir = tempfile::tempdir().unwrap();
+    let source_dir = tempfile::tempdir().unwrap();
+    let source = source_dir.path().join("kreb cycle.png");
+    std::fs::write(&source, b"png").unwrap();
+
+    let mut editor = Editor::new(None, "front".to_string());
+    editor.attachments = crate::attachments::Attachments::detached(dir.path().to_path_buf());
+
+    let name = editor.attach_image(&source).unwrap();
+    assert_eq!(name, "kreb cycle.png");
+    assert!(editor.buffer.text.contains("![kreb cycle](kreb cycle.png)"), "the reference is in the card");
+    assert!(editor.attachments.resolve(&name).is_some(), "and the file is beside the library");
+}
