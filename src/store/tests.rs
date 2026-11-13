@@ -1311,6 +1311,68 @@ fn a_percent_or_underscore_in_the_query_matches_itself() {
 }
 
 #[test]
+fn a_deck_moves_under_another_deck() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let a = deck(&mut db, "A");
+    let b = deck(&mut db, "B");
+    let child = match db.apply(
+        &Command::CreateDeck {
+            parent: Some(a),
+            name: "Child".to_string(),
+        },
+        0,
+    ) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("{other:?}"),
+    };
+
+    assert!(matches!(
+        db.apply(
+            &Command::MoveDeck {
+                id: b,
+                parent: Some(a)
+            },
+            0
+        ),
+        Ok(Outcome::Changed(1))
+    ));
+    assert!(matches!(
+        db.apply(
+            &Command::MoveDeck {
+                id: child,
+                parent: Some(b)
+            },
+            0
+        ),
+        Ok(Outcome::Changed(1))
+    ));
+    assert!(matches!(
+        db.apply(
+            &Command::MoveDeck {
+                id: b,
+                parent: None
+            },
+            0
+        ),
+        Ok(Outcome::Changed(1))
+    ));
+
+    let snapshot = db.snapshot().expect("a snapshot");
+    let parent_of = |id: Id| {
+        snapshot
+            .decks
+            .iter()
+            .find(|deck| deck.id == id)
+            .expect("the deck")
+            .parent
+    };
+    assert_eq!(parent_of(b), None, "B is back at the top");
+    assert_eq!(parent_of(child), Some(b), "the child followed its parent");
+    assert_eq!(parent_of(a), None);
+}
+
+#[test]
 fn a_failing_command_leaves_no_partial_write() {
     let dir = TempDir::new().expect("temp dir");
     let db = open_temp(&dir);

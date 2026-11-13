@@ -384,9 +384,10 @@ impl Db {
                     .query_row(
                         "SELECT parent_id FROM deck WHERE id = ?1",
                         params![deck],
-                        |row| row.get(0),
+                        |row| row.get::<_, Option<Id>>(0),
                     )
-                    .optional()?;
+                    .optional()?
+                    .flatten();
             }
         }
         let changed = self.conn.execute(
