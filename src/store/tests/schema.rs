@@ -159,3 +159,35 @@ fn an_unsaved_draft_survives_reopening_the_database() {
     );
     assert_eq!(db.draft(card).unwrap(), None);
 }
+
+#[test]
+fn a_library_from_before_the_view_gains_it_on_open() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    let db = Db::open(&path).expect("open");
+    db.apply(
+        &Command::CreateDeck {
+            parent: None,
+            name: "Keep".to_string(),
+        },
+        0,
+    )
+    .expect("deck");
+    drop(db);
+
+    // Put the file back to the state a v2 build wrote: no view, version two.
+    let conn = Connection::open(&path).expect("open raw");
+    conn.execute_batch("DROP VIEW studyable_prompt")
+        .expect("drop the view");
+    conn.pragma_update(None, "user_version", 2)
+        .expect("rewind the version");
+    drop(conn);
+
+    let db = Db::open(&path).expect("reopen");
+    assert_eq!(schema_version_at(&path), CURRENT_VERSION);
+    assert_eq!(
+        db.new_prompts(0, 0, 1).expect("the view answers").len(),
+        0,
+        "a deck with no cards has nothing studyable"
+    );
+}
