@@ -338,10 +338,20 @@ fn advance_session(s: &mut State, now_ms: i64) -> (usize, Option<i64>) {
 }
 
 fn poll(s: &mut State, _dt: f64, tx: &mut Tx) -> bool {
-    let (landed, wake) = advance_session(s, typr::clock::SystemClock.now_ms());
+    let mut wake = None;
+    let changed = frame_step(s, typr::clock::SystemClock.now_ms(), &mut wake);
     if let Some(ms) = wake {
         tx.wake_after(std::time::Duration::from_millis(ms as u64));
     }
+    changed
+}
+
+/// One frame's work: land any relearning step, take the store's answers, and report when the frame
+/// loop should look again. `wake` is how the delay reaches `Tx::wake_after`, and taking it as an
+/// out-parameter keeps the request observable in a test.
+fn frame_step(s: &mut State, now_ms: i64, wake: &mut Option<i64>) -> bool {
+    let (landed, delay) = advance_session(s, now_ms);
+    *wake = delay;
     s.drain() || landed > 0
 }
 
@@ -622,7 +632,7 @@ mod tests {
                 Outcome::Deck(id) => id,
                 other => panic!("expected a deck, got {other:?}"),
             };
-            let mut card = |markdown: &str| match db
+            let card = |markdown: &str| match db
                 .apply(
                     &typr::store::Command::CreateCard {
                         deck,
@@ -791,6 +801,23 @@ mod tests {
         assert_eq!(cards.len(), 1, "one card on disk");
         assert_eq!(cards[0].id, card);
         assert_eq!(cards[0].markdown, "front\n---\nback");
+    }
+
+    #[test]
+    fn a_frame_asks_to_be_woken_for_a_relearning_step() {
+        let mut state = forgotten_due_card();
+        let mut wake = None;
+        let changed = frame_step(&mut state, 1_000, &mut wake);
+        assert!(!changed, "nothing has landed yet");
+        assert_eq!(
+            wake,
+            Some(LEARNING_STEP_MS),
+            "the frame loop is told when to look again, instead of drawing forever"
+        );
+
+        let mut wake = None;
+        assert!(frame_step(&mut state, 1_000 + LEARNING_STEP_MS, &mut wake));
+        assert_eq!(wake, None, "nothing left to wait for");
     }
 
     #[test]
