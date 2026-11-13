@@ -28,7 +28,10 @@ pub struct PromptState {
 
 impl PromptState {
     /// A prompt that has never been graded.
-    pub const NEW: Self = Self { phase: Phase::Learn, interval_ms: 0 };
+    pub const NEW: Self = Self {
+        phase: Phase::Learn,
+        interval_ms: 0,
+    };
 }
 
 /// What a grade decided.
@@ -76,8 +79,12 @@ impl Scheduler for FixedMultiplier {
             },
             (Phase::Review, Grade::Remembered) => {
                 let stretched = state.interval_ms * MULTIPLIER_NUM / MULTIPLIER_DEN;
-                let interval = stretched.min(MAX_INTERVAL_MS).max(DAY_MS);
-                Outcome { phase: Phase::Review, interval_ms: interval, due_at: Some(at_ms + interval) }
+                let interval = stretched.clamp(DAY_MS, MAX_INTERVAL_MS);
+                Outcome {
+                    phase: Phase::Review,
+                    interval_ms: interval,
+                    due_at: Some(at_ms + interval),
+                }
             }
             // A failure in the review or relearning phase drops into a ten-minute step, keeping the
             // interval it had reached so the recovery starts short without forgetting how far it got.

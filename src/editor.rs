@@ -113,7 +113,10 @@ impl Editor {
 
     /// The sides the buffer splits into right now, so the preview and the save agree.
     pub fn sides(&self) -> Vec<String> {
-        crate::sides::split(&self.buffer.text).into_iter().map(str::to_string).collect()
+        crate::sides::split(&self.buffer.text)
+            .into_iter()
+            .map(str::to_string)
+            .collect()
     }
 
     /// Keep the preview's parse only as long as its source, so editing another card cannot
@@ -129,13 +132,19 @@ impl Editor {
 
     /// Whether a save has been refused, so the editor can say why.
     pub fn refusal(&self) -> Option<&'static str> {
-        if self.refused && !self.saveable() { Some("This card is empty") } else { None }
+        if self.refused && !self.saveable() {
+            Some("This card is empty")
+        } else {
+            None
+        }
     }
 
     /// Copy a chosen file beside the library and write its reference where the cursor is.
     pub fn attach_image(&mut self, source: &std::path::Path) -> std::io::Result<String> {
         let name = attachments::attach(self.attachments.root(), source)?;
-        let alt = name.rsplit_once('.').map_or(name.as_str(), |(stem, _)| stem);
+        let alt = name
+            .rsplit_once('.')
+            .map_or(name.as_str(), |(stem, _)| stem);
         self.buffer.insert(&format!("![{alt}]({name})"));
         self.settle();
         Ok(name)
@@ -211,7 +220,10 @@ fn source_pane<S: Host>(s: &S) -> El {
     text_input(&s.editor().buffer, type_::BODY.lh(22.0))
         .key("sides")
         .grow(1.0)
-        .placeholder("Write the card. A line of --- starts the next side.", t.text_secondary)
+        .placeholder(
+            "Write the card. A line of --- starts the next side.",
+            t.text_secondary,
+        )
         .on_edit(|s: &mut S| &mut s.editor_mut().buffer)
         .on_input_change(|s: &mut S, _| s.editor_mut().settle())
 }
@@ -224,14 +236,18 @@ fn preview_pane<S: Host>(s: &S) -> El {
         .key("preview-pane")
         .grow(1.0)
         .h_full()
-        .scroll(ScrollSpec { stick_bottom: false })
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
         .gap(8.0)
         .padding(16.0)
         .fill(t.card)
         .child(if editor.saveable() {
             markdown(&editor.attachments, &editor.buffer.text, editor.memo())
         } else {
-            text("Nothing to save yet. Write the front of the card.").key("preview-empty").color(t.text_secondary)
+            text("Nothing to save yet. Write the front of the card.")
+                .key("preview-empty")
+                .color(t.text_secondary)
         })
         .child(
             text(match sides {
@@ -261,9 +277,15 @@ fn button<S: Host>(label: &'static str, variant: ButtonVariant, choice: Choice) 
 fn attach_button<S: Host>() -> El {
     Button::new("Attach image")
         .variant(ButtonVariant::Ghost)
-        .on_press_tx(|s: &mut S, tx: &mut Tx| {
-            let options = FileDialogOptions { title: "Attach image".into(), ..FileDialogOptions::default() }
-                .filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]);
+        .on_press_tx(|_: &mut S, tx: &mut Tx| {
+            let options = FileDialogOptions {
+                title: "Attach image".into(),
+                ..FileDialogOptions::default()
+            }
+            .filter(
+                "Images",
+                &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"],
+            );
             tx.open_file(options, |s: &mut S, result, _| {
                 if let Ok(Some(path)) = result {
                     let _ = s.editor_mut().attach_image(&path);
@@ -282,7 +304,11 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
         .gap(8.0)
         .justify_end()
         .child(button::<S>("Stay", ButtonVariant::Ghost, Choice::Stay))
-        .child(button::<S>("Discard", ButtonVariant::Ghost, Choice::Discard))
+        .child(button::<S>(
+            "Discard",
+            ButtonVariant::Ghost,
+            Choice::Discard,
+        ))
         .child(button::<S>("Save", ButtonVariant::Submit, Choice::Save));
     Dialog::new("leave", "Unsaved changes")
         .description("Save this card before closing it?")
@@ -307,33 +333,50 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
         .px(16.0)
         .center_y()
         .gap(8.0)
-        .child(text(if unsaved { "Unsaved changes" } else { "Saved" }).font(type_::LABEL).color(t.text_secondary))
+        .child(
+            text(if unsaved { "Unsaved changes" } else { "Saved" })
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
         .child(
             text(refusal.unwrap_or_default())
                 .key("refusal")
                 .font(type_::LABEL)
-                .color(if refusal.is_some() { KIT.c.danger.fg } else { t.text_secondary }),
+                .color(if refusal.is_some() {
+                    KIT.c.danger.fg
+                } else {
+                    t.text_secondary
+                }),
         )
         .child(rune::el().grow(1.0))
         .child(attach_button::<S>());
     let mut layer = Vec::new();
     confirmation::<S>(s, &mut layer);
-    let body = row()
-        .w_full()
-        .h_full()
-        .fill(t.bg)
-        .child(col().w_full().h_full().child(header).child(
+    let body = row().w_full().h_full().fill(t.bg).child(
+        col().w_full().h_full().child(header).child(
             row()
                 .grow(1.0)
                 .h_full()
                 .padding(12.0)
                 .gap(12.0)
-                .child(col().key("source").grow(1.0).h_full().child(source_pane::<S>(s)))
+                .child(
+                    col()
+                        .key("source")
+                        .grow(1.0)
+                        .h_full()
+                        .child(source_pane::<S>(s)),
+                )
                 .child(preview_pane::<S>(s))
                 .children(s.editor().showing_history.then(|| {
-                    col().key("history-panel").w(320.0).h_full().padding(12.0).child(crate::history::view::<S>(s))
+                    col()
+                        .key("history-panel")
+                        .w(320.0)
+                        .h_full()
+                        .padding(12.0)
+                        .child(crate::history::view::<S>(s))
                 })),
-        ));
+        ),
+    );
     root(body, layer)
 }
 
