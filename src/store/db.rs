@@ -102,6 +102,13 @@ impl Db {
                 Ok(Outcome::Changed(changed))
             }
             Command::SetTags { card, tags } => self.set_tags(*card, tags),
+            Command::ArchiveCard { id, archived } => {
+                let changed = self.conn.execute(
+                    "UPDATE card SET archived = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![id, i64::from(*archived), now_ms],
+                )?;
+                Ok(Outcome::Changed(changed))
+            }
             Command::TrashCard { id } => {
                 let changed = self.conn.execute(
                     "UPDATE card SET trashed_at = ?2 WHERE id = ?1",

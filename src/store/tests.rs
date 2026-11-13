@@ -631,3 +631,48 @@ fn search_folds_case_and_diacritics_within_the_deck_subtree() {
     assert_eq!(db.search("grammar", None).expect("search"), vec![unrelated]);
     assert!(db.search("   ", None).expect("search").is_empty(), "blank matches nothing");
 }
+
+#[test]
+fn archiving_a_card_takes_it_out_of_the_queue_and_restoring_keeps_its_date() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Archive me");
+    let card = card(&mut db, deck, "front\n---\nback");
+    schedule(&mut db, card, NOON - HOUR);
+
+    db.apply(&Command::ArchiveCard { id: card, archived: true }, NOON).expect("archive");
+    assert!(db.due_prompts(NOON, 0, 1).expect("due").is_empty());
+    let prompt = db.prompt(card, "fwd").expect("prompt").expect("still stored");
+    assert_eq!(prompt.due_at, Some(NOON - HOUR), "archiving is not a schedule change");
+
+    db.apply(&Command::ArchiveCard { id: card, archived: false }, NOON).expect("restore");
+    assert_eq!(db.due_prompts(NOON, 0, 1).expect("due").len(), 1);
+    assert_eq!(db.prompt(card, "fwd").expect("prompt").expect("stored").due_at, Some(NOON - HOUR));
+}
+
+#[test]
+fn a_card_under_an_archived_deck_leaves_the_queues_while_a_sibling_deck_stays() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let parent = deck(&mut db, "Parent");
+    let hidden = match db.apply(&Command::CreateDeck { parent: Some(parent), name: "Hidden".to_string() }, 0) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("{other:?}"),
+    };
+    let visible = match db.apply(&Command::CreateDeck { parent: Some(parent), name: "Visible".to_string() }, 0) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("{other:?}"),
+    };
+    let hidden_card = card(&mut db, hidden, "hidden\n---\nside");
+    let visible_card = card(&mut db, visible, "visible\n---\nside");
+    db.apply(&Command::ArchiveDeck { id: hidden, archived: true }, NOON).expect("archive");
+
+    let new: Vec<Id> = db.new_prompts(NOON, 0, 1).expect("new").into_iter().map(|p| p.card).collect();
+    assert!(!new.contains(&hidden_card), "an archived ancestor hides the card");
+    assert!(new.contains(&visible_card));
+
+    schedule(&mut db, hidden_card, NOON - HOUR);
+    schedule(&mut db, visible_card, NOON - HOUR);
+    let due: Vec<Id> = db.due_prompts(NOON, 0, 1).expect("due").into_iter().map(|p| p.card).collect();
+    assert_eq!(due, vec![visible_card]);
+}

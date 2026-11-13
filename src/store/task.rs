@@ -134,6 +134,10 @@ impl Store for Handle {
         self.submit(Command::SetTags { card, tags: tags.to_vec() })
     }
 
+    fn archive_card(&self, id: Id, archived: bool) -> u64 {
+        self.submit(Command::ArchiveCard { id, archived })
+    }
+
     fn trash_card(&self, id: Id) -> u64 {
         self.submit(Command::TrashCard { id })
     }
