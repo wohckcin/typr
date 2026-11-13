@@ -2,22 +2,22 @@
 
 ## 1. Project and Rune baseline
 
-- [ ] 1.1 Add `rust-toolchain.toml` pinning channel `1.99.1` — the version Rune's own toolchain file specifies — and verify `rustc --version` reports it inside the repo
-- [ ] 1.2 Add `rune`, `rune-kit` and the four `[patch.crates-io]` entries pinned to one Rune `dev` revision in `Cargo.toml`, and verify `cargo build` succeeds on the pinned toolchain
-- [ ] 1.3 Replace the hello-world `main.rs` with an `AppSpec` that opens an empty window titled "typr", and verify it launches and closes cleanly
-- [ ] 1.4 Add a `Screen` enum with `Library`, `Editor`, `Session`, `Summary` and a `step` function returning effects, and verify a unit test drives it through each transition by event
-- [ ] 1.5 Add a `Clock` trait with a real implementation and a test double, and verify a unit test places a prompt ten minutes out and reads it back as due by advancing the double
-- [ ] 1.6 Write `README.md` with build prerequisites and the run command, and verify the documented command works on this machine. Linux prerequisites come from Rune's README: development packages `libxkbcommon-dev libwayland-dev` (build/link, `crates/rune/README.md:2455-2461`) and runtime `libxkbcommon-x11-0 mesa-vulkan-drivers` (windowed runs; without the first, window creation panics loading `libxkbcommon-x11.so`, `crates/rune/README.md:2467-2472`)
+- [x] 1.1 Add `rust-toolchain.toml` pinning channel `1.99.1` — the version Rune's own toolchain file specifies — and verify `rustc --version` reports it inside the repo
+- [x] 1.2 Add `rune`, `rune-kit` and the four `[patch.crates-io]` entries pinned to one Rune `dev` revision in `Cargo.toml`, and verify `cargo build` succeeds on the pinned toolchain
+- [x] 1.3 Replace the hello-world `main.rs` with an `AppSpec` that opens an empty window titled "typr", and verify it launches and closes cleanly
+- [x] 1.4 Add a `Screen` enum with `Library`, `Editor`, `Session`, `Summary` and a `step` function returning effects, and verify a unit test drives it through each transition by event
+- [x] 1.5 Add a `Clock` trait with a real implementation and a test double, and verify a unit test places a prompt ten minutes out and reads it back as due by advancing the double
+- [x] 1.6 Write `README.md` with build prerequisites and the run command, and verify the documented command works on this machine. Linux prerequisites come from Rune's README: development packages `libxkbcommon-dev libwayland-dev` (build/link, `crates/rune/README.md:2455-2461`) and runtime `libxkbcommon-x11-0 mesa-vulkan-drivers` (windowed runs; without the first, window creation panics loading `libxkbcommon-x11.so`, `crates/rune/README.md:2467-2472`)
 
 ## 2. Store foundation
 
-- [ ] 2.1 Create the schema for `deck`, `card`, `prompt`, `tag`, `review_log`, `editor_draft` and `settings` inside a `PRAGMA user_version` migration runner, and verify opening a fresh database applies migration 1 exactly once
-- [ ] 2.2 Implement the store task: a command queue carrying ids, a `Connection` it owns exclusively, one event per command, and a published snapshot, and verify a test asserts each command produces exactly one event and that `poll` returns false with no commands in flight
-- [ ] 2.3 Expose the `Store` trait the UI talks to (typed mutations, snapshot queries, `stats`, `history`) and verify every method is reachable without a `Connection` leaking outside the module
+- [x] 2.1 Create the schema for `deck`, `card`, `prompt`, `tag`, `review_log`, `editor_draft` and `settings` inside a `PRAGMA user_version` migration runner, and verify opening a fresh database applies migration 1 exactly once
+- [x] 2.2 Implement the store task: a command queue carrying ids, a `Connection` it owns exclusively, one event per command, and a published snapshot, and verify a test asserts each command produces exactly one event and that `poll` returns false with no commands in flight
+- [x] 2.3 Expose the `Store` trait the UI talks to (typed mutations, snapshot queries, `stats`, `history`) and verify every method is reachable without a `Connection` leaking outside the module
 - [ ] 2.4 Implement the quit path: `on_quit` sends a flush and joins the store task, and verify a test that a grade sent and then quit is present when the database is reopened
-- [ ] 2.5 Open the database at `<AppDirs::data()>/typr.sqlite3`, treat `AppDirs::new` returning `None` as a reported startup failure, and verify a path that exists but is not a database produces an error rather than being overwritten
-- [ ] 2.6 Verify migration behaviour both ways: a version 0 database is upgraded to the current version, and a database one version ahead is refused and left byte-identical
-- [ ] 2.7 Honor `RUNE_DIRS_ROOT` everywhere a path is derived, and verify a test run pointed at a temporary directory creates no files under the real app data directory
+- [x] 2.5 Open the database at `<AppDirs::data()>/typr.sqlite3`, treat `AppDirs::new` returning `None` as a reported startup failure, and verify a path that exists but is not a database produces an error rather than being overwritten
+- [x] 2.6 Verify migration behaviour both ways: a version 0 database is upgraded to the current version, and a database one version ahead is refused and left byte-identical
+- [x] 2.7 Honor `RUNE_DIRS_ROOT` everywhere a path is derived, and verify a test run pointed at a temporary directory creates no files under the real app data directory
 
 ## 3. Scheduling
 
