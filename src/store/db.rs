@@ -109,6 +109,10 @@ impl Db {
                 )?;
                 Ok(Outcome::Changed(changed))
             }
+            Command::EmptyTrash => {
+                let removed = self.conn.execute("DELETE FROM card WHERE trashed_at IS NOT NULL", [])?;
+                Ok(Outcome::Changed(removed))
+            }
             Command::TrashCard { id } => {
                 let changed = self.conn.execute(
                     "UPDATE card SET trashed_at = ?2 WHERE id = ?1",
@@ -342,6 +346,12 @@ impl Db {
             params![card, key],
         )?;
         Ok(Outcome::Changed(removed))
+    }
+
+    /// Every record in the log, for tests that prove an emptied card takes its history with it.
+    #[cfg(test)]
+    pub fn record_total(&self) -> Result<i64, StoreError> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM review_log", [], |row| row.get(0))?)
     }
 
     /// How many real reviews a card has had: learning cycles are not reviews.

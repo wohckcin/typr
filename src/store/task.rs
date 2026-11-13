@@ -162,6 +162,10 @@ impl Store for Handle {
         self.submit(Command::Search { query: query.to_string(), deck })
     }
 
+    fn empty_trash(&self) -> u64 {
+        self.submit(Command::EmptyTrash)
+    }
+
     fn set_setting(&self, key: &str, value: &str) -> u64 {
         self.submit(Command::SetSetting { key: key.to_string(), value: value.to_string() })
     }

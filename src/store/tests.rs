@@ -676,3 +676,30 @@ fn a_card_under_an_archived_deck_leaves_the_queues_while_a_sibling_deck_stays() 
     let due: Vec<Id> = db.due_prompts(NOON, 0, 1).expect("due").into_iter().map(|p| p.card).collect();
     assert_eq!(due, vec![visible_card]);
 }
+
+#[test]
+fn a_restored_card_keeps_its_history_and_an_emptied_one_loses_everything() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Trash");
+    let kept = card(&mut db, deck, "kept\n---\nside");
+    let doomed = card(&mut db, deck, "doomed\n---\nside");
+    schedule(&mut db, doomed, NOON - HOUR);
+    db.apply(&Command::Grade { card: doomed, key: "fwd".to_string(), grade: Grade::Remembered, duration_ms: None }, NOON)
+        .expect("grade");
+    assert_eq!(db.record_total().expect("total"), 2);
+
+    db.apply(&Command::TrashCard { id: doomed }, NOON).expect("trash");
+    assert!(db.search("doomed", None).expect("search").is_empty(), "trash is not searchable");
+    db.apply(&Command::RestoreCard { id: doomed }, NOON).expect("restore");
+    assert_eq!(db.review_count(doomed).expect("count"), 2, "restoring keeps history");
+
+    db.apply(&Command::TrashCard { id: doomed }, NOON).expect("trash again");
+    db.apply(&Command::EmptyTrash, NOON).expect("empty");
+
+    assert_eq!(db.record_total().expect("total"), 0, "the log went with the card");
+    let cards = db.snapshot().expect("snapshot").cards;
+    assert_eq!(cards.iter().map(|row| row.id).collect::<Vec<_>>(), vec![kept]);
+    assert!(db.search("doomed", None).expect("search").is_empty());
+    assert!(db.prompt(doomed, "fwd").expect("prompt").is_none());
+}

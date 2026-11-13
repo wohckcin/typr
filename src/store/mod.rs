@@ -170,6 +170,7 @@ pub enum Command {
     SaveCard { id: Id, markdown: String },
     MoveCard { id: Id, deck: Id },
     ArchiveCard { id: Id, archived: bool },
+    EmptyTrash,
     SetTags { card: Id, tags: Vec<String> },
     TrashCard { id: Id },
     RestoreCard { id: Id },
@@ -288,6 +289,7 @@ pub trait Store: Send + Sync {
     fn set_tags(&self, card: Id, tags: &[String]) -> u64;
     fn trash_card(&self, id: Id) -> u64;
     fn restore_card(&self, id: Id) -> u64;
+    fn empty_trash(&self) -> u64;
     fn set_draft(&self, card: Id, text: Option<&str>) -> u64;
     fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64;
     fn reset_history(&self, card: Id, key: &str) -> u64;
