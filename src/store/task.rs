@@ -154,6 +154,10 @@ impl Store for Handle {
         self.submit(Command::ResetHistory { card, key: key.to_string() })
     }
 
+    fn search(&self, query: &str, deck: Option<Id>) -> u64 {
+        self.submit(Command::Search { query: query.to_string(), deck })
+    }
+
     fn set_setting(&self, key: &str, value: &str) -> u64 {
         self.submit(Command::SetSetting { key: key.to_string(), value: value.to_string() })
     }

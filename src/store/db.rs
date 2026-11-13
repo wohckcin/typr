@@ -13,6 +13,7 @@ use super::{
     CardSummary, Command, Deck, DuePrompt, Grade, Id, NewPrompt, Outcome, Phase, ReviewRow,
     Settings, Snapshot, Stats, StoreError, schema,
 };
+use unicode_normalization::UnicodeNormalization;
 
 /// A prompt as its records describe it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,6 +142,7 @@ impl Db {
                 self.grade(*card, key, *grade, *duration_ms, now_ms)
             }
             Command::ResetHistory { card, key } => self.reset_history(*card, key),
+            Command::Search { query, deck } => Ok(Outcome::Search(self.search(query, *deck)?)),
             Command::History { card } => Ok(Outcome::History(self.history(*card)?)),
             Command::Stats { from_ms, to_ms } => Ok(Outcome::Stats(self.stats(*from_ms, *to_ms)?)),
         }
@@ -620,7 +622,30 @@ impl Db {
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
-}
+    /// Cards whose folded text contains the folded query, restricted to `deck`'s subtree when given.
+    /// Trashed cards never match.
+    pub fn search(&self, query: &str, deck: Option<Id>) -> Result<Vec<Id>, StoreError> {
+        let needle = searchable(query);
+        if needle.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut stmt = self.conn.prepare(
+            "WITH RECURSIVE subtree(id) AS (
+                 SELECT ?2
+                 UNION
+                 SELECT d.id FROM deck d JOIN subtree s ON d.parent_id = s.id
+             )
+             SELECT c.id FROM card c
+             WHERE c.trashed_at IS NULL
+               AND c.search_text LIKE '%' || ?1 || '%'
+               AND (?2 IS NULL OR c.deck_id IN (SELECT id FROM subtree))
+             ORDER BY c.id",
+        )?;
+        let ids = stmt
+            .query_map(params![needle, deck], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }}
 
 fn sides_of(markdown: &str) -> usize {
     crate::sides::split(markdown).len()
@@ -628,5 +653,17 @@ fn sides_of(markdown: &str) -> usize {
 
 /// What search compares against: the text in the case a `LIKE` can fold.
 fn searchable(text: &str) -> String {
-    text.to_lowercase()
+    text.nfd()
+        .filter(|character| !is_combining_mark(*character))
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// Diacritics live in these blocks after decomposition; dropping them is what makes `cancion`
+/// find `Canción`.
+fn is_combining_mark(character: char) -> bool {
+    matches!(
+        character as u32,
+        0x0300..=0x036F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F
+    )
 }

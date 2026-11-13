@@ -175,6 +175,7 @@ pub enum Command {
     SetDraft { card: Id, text: Option<String> },
     Grade { card: Id, key: String, grade: Grade, duration_ms: Option<i64> },
     ResetHistory { card: Id, key: String },
+    Search { query: String, deck: Option<Id> },
     SetSetting { key: String, value: String },
     History { card: Id },
     Stats { from_ms: i64, to_ms: i64 },
@@ -190,6 +191,7 @@ pub enum Outcome {
     /// Where the grade left the prompt.
     Graded { phase: Phase, due_at: Option<i64> },
     History(Vec<ReviewRow>),
+    Search(Vec<Id>),
     Stats(Stats),
     Ok,
 }
@@ -287,6 +289,7 @@ pub trait Store: Send + Sync {
     fn set_draft(&self, card: Id, text: Option<&str>) -> u64;
     fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64;
     fn reset_history(&self, card: Id, key: &str) -> u64;
+    fn search(&self, query: &str, deck: Option<Id>) -> u64;
     fn set_setting(&self, key: &str, value: &str) -> u64;
     fn history(&self, card: Id) -> u64;
     fn stats(&self, from_ms: i64, to_ms: i64) -> u64;

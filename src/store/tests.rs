@@ -610,3 +610,24 @@ fn tags_match_without_case_and_keep_the_first_casing() {
     assert_eq!(db.tag_names().expect("names"), vec!["Grammar".to_string(), "verbs".to_string()]);
     assert!(summary(heading).tags.is_empty(), "a heading is not a tag");
 }
+
+#[test]
+fn search_folds_case_and_diacritics_within_the_deck_subtree() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let spanish = deck(&mut db, "Spanish");
+    let songs = match db.apply(&Command::CreateDeck { parent: Some(spanish), name: "Songs".to_string() }, 0) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("{other:?}"),
+    };
+    let other = deck(&mut db, "Other");
+
+    let accented = card(&mut db, songs, "Canción\n---\nuna canción");
+    let elsewhere = card(&mut db, other, "canción de cuna\n---\notra");
+    let unrelated = card(&mut db, other, "Grammar\n---\nthe rules");
+
+    assert_eq!(db.search("cancion", None).expect("search"), vec![accented, elsewhere]);
+    assert_eq!(db.search("CANCION", Some(spanish)).expect("search"), vec![accented], "subtree only");
+    assert_eq!(db.search("grammar", None).expect("search"), vec![unrelated]);
+    assert!(db.search("   ", None).expect("search").is_empty(), "blank matches nothing");
+}
