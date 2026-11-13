@@ -458,6 +458,13 @@ impl Db {
         Ok(Outcome::Changed(removed))
     }
 
+    /// Break the library so a snapshot read fails, for the worker's error path.
+    #[cfg(test)]
+    pub(crate) fn drop_card_table_for_test(&self) -> Result<(), StoreError> {
+        self.conn.execute_batch("DROP TABLE card")?;
+        Ok(())
+    }
+
     /// Every record in the log, for tests that prove an emptied card takes its history with it.
     #[cfg(test)]
     pub fn record_total(&self) -> Result<i64, StoreError> {

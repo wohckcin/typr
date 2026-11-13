@@ -8,7 +8,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
 use rune::Waker;
@@ -16,6 +16,10 @@ use rune::Waker;
 use crate::clock::{Clock, SystemClock};
 
 use super::{Command, Db, Event, Grade, Id, Outcome, Snapshot, Store, StoreError};
+
+/// The id an [`Event`] carries when it answers no request: the worker says what went wrong without
+/// a caller having asked. The UI shows its error and matches it against nothing.
+pub const UNPROMPTED: u64 = 0;
 
 /// Everything the worker publishes for the UI thread.
 struct Shared {
@@ -78,8 +82,8 @@ impl Handle {
     /// Send the last flush and wait for it: the one place the frame thread blocks, because a
     /// grade acknowledged but not yet written is a lost grade.
     pub fn close(&self) {
-        drop(self.tx.lock().expect("store sender").take());
-        let worker = self.worker.lock().expect("store worker").take();
+        drop(lock(&self.tx).take());
+        let worker = lock(&self.worker).take();
         if let Some(worker) = worker {
             let _ = worker.join();
         }
@@ -87,7 +91,7 @@ impl Handle {
 
     fn submit(&self, command: Command) -> u64 {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
-        let sender = self.tx.lock().expect("store sender");
+        let sender = lock(&self.tx);
         if let Some(tx) = sender.as_ref() {
             // A closed worker means a quit in progress; the command is already lost either way,
             // so an error here is not worth reporting.
@@ -108,11 +112,11 @@ impl Drop for Handle {
 impl Store for Handle {
     fn snapshot(&self) -> Arc<Snapshot> {
         // Cloning the Arc keeps a grade from copying the whole library on the frame thread.
-        Arc::clone(&self.shared.snapshot.lock().expect("snapshot"))
+        Arc::clone(&lock(&self.shared.snapshot))
     }
 
     fn poll(&self) -> Vec<Event> {
-        std::mem::take(&mut *self.shared.events.lock().expect("events"))
+        std::mem::take(&mut *lock(&self.shared.events))
     }
 
     fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64 {
@@ -249,10 +253,15 @@ fn work(db: Db, rx: Receiver<Message>, shared: Arc<Shared>, clock: Box<dyn Clock
             dirty |= apply(&db, &*clock, next, &mut batch);
         }
         if dirty {
-            publish(&db, &shared);
+            if let Some(error) = publish(&db, &shared) {
+                batch.push(Event {
+                    id: UNPROMPTED,
+                    result: Err(error),
+                });
+            }
             dirty = false;
         }
-        shared.events.lock().expect("events").extend(batch);
+        lock(&shared.events).extend(batch);
         (shared.waker)();
     }
 }
@@ -269,15 +278,30 @@ fn apply(db: &Db, clock: &dyn Clock, message: Message, batch: &mut Vec<Event>) -
 }
 
 /// Re-read the library and publish it with the next revision.
-fn publish(db: &Db, shared: &Shared) {
-    // A snapshot that cannot be read must not turn a committed command into a failure: the caller
-    // would retry work the database has already done.
+///
+/// A snapshot that cannot be read must not turn a committed command into a failure — the caller
+/// would retry work the database has already done — so the error comes back to be reported as an
+/// [`UNPROMPTED`] event and the UI shows it.
+fn publish(db: &Db, shared: &Shared) -> Option<StoreError> {
     match db.snapshot() {
         Ok(mut snapshot) => {
-            let mut published = shared.snapshot.lock().expect("snapshot");
+            let mut published = lock(&shared.snapshot);
             snapshot.revision = published.revision + 1;
             *published = Arc::new(snapshot);
+            None
         }
-        Err(error) => eprintln!("typr: the library could not be read back: {error}"),
+        Err(error) => Some(error),
     }
 }
+
+/// Take a lock the worker may have left poisoned.
+///
+/// A panic while the lock was held would otherwise turn every later frame into a panic too. What
+/// sits behind these locks is a published snapshot and a queue of answers, and both are safe to
+/// read after a panic: the snapshot is either the last published library or the one being built.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+#[cfg(test)]
+mod tests;
