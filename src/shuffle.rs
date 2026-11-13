@@ -20,7 +20,11 @@ impl Shuffle {
 
     /// A number in `0..n`.
     pub fn below(&mut self, n: usize) -> usize {
-        if n == 0 { 0 } else { (self.next() % n as u64) as usize }
+        if n == 0 {
+            0
+        } else {
+            (self.next() % n as u64) as usize
+        }
     }
 
     /// Reorder the slice in place, every permutation equally likely as far as this generator is.

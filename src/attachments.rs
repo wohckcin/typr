@@ -14,7 +14,9 @@ pub struct Attachments {
 
 impl std::fmt::Debug for Attachments {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Attachments").field("root", &self.root).finish_non_exhaustive()
+        f.debug_struct("Attachments")
+            .field("root", &self.root)
+            .finish_non_exhaustive()
     }
 }
 
@@ -27,7 +29,10 @@ impl Default for Attachments {
 impl Attachments {
     /// Pictures stored under `root`, decoded on Rune's image threads.
     pub fn new(root: PathBuf, waker: Waker) -> Self {
-        Attachments { root, cache: Some(Arc::new(ImageCache::new(waker))) }
+        Attachments {
+            root,
+            cache: Some(Arc::new(ImageCache::new(waker))),
+        }
     }
 
     /// A directory that holds nothing: every reference is missing rather than resolved.

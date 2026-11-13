@@ -39,7 +39,11 @@ struct Message {
 
 impl Handle {
     /// Start the worker on an open database.
-    pub fn spawn(db: Db, clock: Box<dyn Clock + Send + Sync>, waker: Waker) -> Result<Self, StoreError> {
+    pub fn spawn(
+        db: Db,
+        clock: Box<dyn Clock + Send + Sync>,
+        waker: Waker,
+    ) -> Result<Self, StoreError> {
         let snapshot = db.snapshot()?;
         let shared = Arc::new(Shared {
             snapshot: Mutex::new(snapshot),
@@ -103,19 +107,33 @@ impl Store for Handle {
     }
 
     fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64 {
-        self.submit(Command::DuePrompts { now_ms, offset_ms, seed })
+        self.submit(Command::DuePrompts {
+            now_ms,
+            offset_ms,
+            seed,
+        })
     }
 
     fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64 {
-        self.submit(Command::NewPrompts { now_ms, offset_ms, seed })
+        self.submit(Command::NewPrompts {
+            now_ms,
+            offset_ms,
+            seed,
+        })
     }
 
     fn create_deck(&self, parent: Option<Id>, name: &str) -> u64 {
-        self.submit(Command::CreateDeck { parent, name: name.to_string() })
+        self.submit(Command::CreateDeck {
+            parent,
+            name: name.to_string(),
+        })
     }
 
     fn rename_deck(&self, id: Id, name: &str) -> u64 {
-        self.submit(Command::RenameDeck { id, name: name.to_string() })
+        self.submit(Command::RenameDeck {
+            id,
+            name: name.to_string(),
+        })
     }
 
     fn archive_deck(&self, id: Id, archived: bool) -> u64 {
@@ -127,11 +145,17 @@ impl Store for Handle {
     }
 
     fn create_card(&self, deck: Id, markdown: &str) -> u64 {
-        self.submit(Command::CreateCard { deck, markdown: markdown.to_string() })
+        self.submit(Command::CreateCard {
+            deck,
+            markdown: markdown.to_string(),
+        })
     }
 
     fn save_card(&self, id: Id, markdown: &str) -> u64 {
-        self.submit(Command::SaveCard { id, markdown: markdown.to_string() })
+        self.submit(Command::SaveCard {
+            id,
+            markdown: markdown.to_string(),
+        })
     }
 
     fn move_card(&self, id: Id, deck: Id) -> u64 {
@@ -139,7 +163,10 @@ impl Store for Handle {
     }
 
     fn set_tags(&self, card: Id, tags: &[String]) -> u64 {
-        self.submit(Command::SetTags { card, tags: tags.to_vec() })
+        self.submit(Command::SetTags {
+            card,
+            tags: tags.to_vec(),
+        })
     }
 
     fn archive_card(&self, id: Id, archived: bool) -> u64 {
@@ -155,7 +182,10 @@ impl Store for Handle {
     }
 
     fn set_draft(&self, card: Id, text: Option<&str>) -> u64 {
-        self.submit(Command::SetDraft { card, text: text.map(str::to_string) })
+        self.submit(Command::SetDraft {
+            card,
+            text: text.map(str::to_string),
+        })
     }
 
     fn draft(&self, card: Id) -> u64 {
@@ -163,15 +193,26 @@ impl Store for Handle {
     }
 
     fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64 {
-        self.submit(Command::Grade { card, key: key.to_string(), grade, duration_ms })
+        self.submit(Command::Grade {
+            card,
+            key: key.to_string(),
+            grade,
+            duration_ms,
+        })
     }
 
     fn reset_history(&self, card: Id, key: &str) -> u64 {
-        self.submit(Command::ResetHistory { card, key: key.to_string() })
+        self.submit(Command::ResetHistory {
+            card,
+            key: key.to_string(),
+        })
     }
 
     fn search(&self, query: &str, deck: Option<Id>) -> u64 {
-        self.submit(Command::Search { query: query.to_string(), deck })
+        self.submit(Command::Search {
+            query: query.to_string(),
+            deck,
+        })
     }
 
     fn empty_trash(&self) -> u64 {
@@ -179,7 +220,10 @@ impl Store for Handle {
     }
 
     fn set_setting(&self, key: &str, value: &str) -> u64 {
-        self.submit(Command::SetSetting { key: key.to_string(), value: value.to_string() })
+        self.submit(Command::SetSetting {
+            key: key.to_string(),
+            value: value.to_string(),
+        })
     }
 
     fn history(&self, card: Id) -> u64 {
@@ -191,10 +235,17 @@ impl Store for Handle {
     }
 }
 
-fn work(mut db: Db, rx: Receiver<Message>, shared: Arc<Shared>, clock: Box<dyn Clock + Send + Sync>) {
+fn work(
+    mut db: Db,
+    rx: Receiver<Message>,
+    shared: Arc<Shared>,
+    clock: Box<dyn Clock + Send + Sync>,
+) {
     while let Ok(message) = rx.recv() {
         let id = message.id;
-        let mut result = db.apply(&message.command, clock.now_ms()).map_err(|e| e.to_string());
+        let mut result = db
+            .apply(&message.command, clock.now_ms())
+            .map_err(|e| e.to_string());
         if result.is_ok() {
             match db.snapshot() {
                 Ok(mut snapshot) => {
@@ -205,7 +256,11 @@ fn work(mut db: Db, rx: Receiver<Message>, shared: Arc<Shared>, clock: Box<dyn C
                 Err(error) => result = Err(error.to_string()),
             }
         }
-        shared.events.lock().expect("events").push(Event { id, result });
+        shared
+            .events
+            .lock()
+            .expect("events")
+            .push(Event { id, result });
         (shared.waker)();
     }
 }

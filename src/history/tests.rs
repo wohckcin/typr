@@ -1,4 +1,4 @@
-use rune::{Cx, Env, El, Runtime};
+use rune::{Cx, El, Env, Runtime};
 
 use super::*;
 
@@ -40,7 +40,10 @@ fn the_review_count_leaves_learning_cycles_out() {
             record(Phase::Review, Grade::Forgot, 5_000),
         ],
     );
-    assert_eq!(history.count, 2, "the three learning cycles are not reviews");
+    assert_eq!(
+        history.count, 2,
+        "the three learning cycles are not reviews"
+    );
     assert_eq!(history.rows.len(), 5, "but every record is listed");
 }
 
@@ -60,5 +63,8 @@ fn every_record_is_drawn_with_its_phase_grade_and_due_date() {
     assert_eq!(shown(&rt, "history-count").as_deref(), Some("2 reviews"));
     assert_eq!(shown(&rt, "history-records").as_deref(), Some("2 records"));
     assert!(rt.find("history-0").is_some(), "the first record is drawn");
-    assert!(rt.find("history-60000").is_some(), "the relearning record is drawn");
+    assert!(
+        rt.find("history-60000").is_some(),
+        "the relearning record is drawn"
+    );
 }

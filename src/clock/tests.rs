@@ -21,5 +21,8 @@ fn a_prompt_due_exactly_now_is_due() {
 fn the_system_clock_reports_a_plausible_time() {
     // Later than 2020-01-01 and earlier than 2100-01-01, in milliseconds.
     let now = SystemClock.now_ms();
-    assert!(now > 1_577_836_800_000 && now < 4_102_444_800_000, "now_ms = {now}");
+    assert!(
+        now > 1_577_836_800_000 && now < 4_102_444_800_000,
+        "now_ms = {now}"
+    );
 }

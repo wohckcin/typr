@@ -12,7 +12,12 @@ fn drive(from: Screen, event: Event) -> (Screen, Vec<Effect>) {
 #[test]
 fn opening_a_card_loads_it() {
     let (screen, effects) = drive(Screen::Library, Event::OpenCard(CardId(7)));
-    assert_eq!(screen, Screen::Editor { card: Some(CardId(7)) });
+    assert_eq!(
+        screen,
+        Screen::Editor {
+            card: Some(CardId(7))
+        }
+    );
     assert_eq!(effects, vec![Effect::LoadCard(CardId(7))]);
 }
 
@@ -25,7 +30,12 @@ fn a_new_card_opens_an_empty_editor() {
 
 #[test]
 fn closing_the_editor_returns_to_the_library() {
-    let (screen, _) = drive(Screen::Editor { card: Some(CardId(1)) }, Event::CloseEditor);
+    let (screen, _) = drive(
+        Screen::Editor {
+            card: Some(CardId(1)),
+        },
+        Event::CloseEditor,
+    );
     assert_eq!(screen, Screen::Library);
 }
 

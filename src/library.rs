@@ -69,7 +69,12 @@ impl Library {
     pub fn refresh(&mut self) {
         self.visible = self
             .snapshot
-            .cards_matching(&self.query.text, self.tag.as_deref(), self.selected_deck, self.mode)
+            .cards_matching(
+                &self.query.text,
+                self.tag.as_deref(),
+                self.selected_deck,
+                self.mode,
+            )
             .into_iter()
             .cloned()
             .collect();
@@ -77,9 +82,17 @@ impl Library {
 
     /// A snapshot with `count` cards in one deck, for scenes and for the virtualised-list check.
     pub fn seeded(count: usize) -> Library {
-        let deck = Deck { id: 1, parent: None, name: "Seeded".to_string(), archived: false };
+        let deck = Deck {
+            id: 1,
+            parent: None,
+            name: "Seeded".to_string(),
+            archived: false,
+        };
         let mut library = Library {
-            snapshot: Snapshot { decks: vec![deck], ..Snapshot::default() },
+            snapshot: Snapshot {
+                decks: vec![deck],
+                ..Snapshot::default()
+            },
             ..Library::default()
         };
         library.snapshot.cards = (1..=count as Id)
@@ -110,8 +123,16 @@ fn deck_row<S: Host>(deck: &Deck, selected: bool) -> El {
         .px(10.0)
         .radius(6.0)
         .center_y()
-        .fill(if selected { tok::accent(0, true).alpha(0.85) } else { t.control_off.alpha(0.0) })
-        .child(text(deck.name.clone()).font(type_::BODY).color(if selected { rune::Color::WHITE } else { t.text }))
+        .fill(if selected {
+            tok::accent(0, true).alpha(0.85)
+        } else {
+            t.control_off.alpha(0.0)
+        })
+        .child(
+            text(deck.name.clone())
+                .font(type_::BODY)
+                .color(if selected { rune::Color::WHITE } else { t.text }),
+        )
         .on_press(move |s: &mut S| {
             let library = s.library_mut();
             library.selected_deck = Some(id);
@@ -122,14 +143,24 @@ fn deck_row<S: Host>(deck: &Deck, selected: bool) -> El {
 fn deck_sidebar<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
-    let mut sidebar = col().key("decks").w(200.0).h_full().padding(8.0).gap(2.0).fill(t.card);
+    let mut sidebar = col()
+        .key("decks")
+        .w(200.0)
+        .h_full()
+        .padding(8.0)
+        .gap(2.0)
+        .fill(t.card);
     let all = row()
         .key("deck-all")
         .h(30.0)
         .px(10.0)
         .radius(6.0)
         .center_y()
-        .fill(if library.selected_deck.is_none() { tok::accent(0, true) } else { t.control_off.alpha(0.0) })
+        .fill(if library.selected_deck.is_none() {
+            tok::accent(0, true)
+        } else {
+            t.control_off.alpha(0.0)
+        })
         .child(text("All cards").font(type_::BODY).color(t.text))
         .on_press(|s: &mut S| {
             let library = s.library_mut();
@@ -153,14 +184,23 @@ fn filter_bar<S: Host>(s: &S) -> El {
         .placeholder("Search cards", t.text_secondary)
         .on_edit(|s: &mut S| &mut s.library_mut().query)
         .on_input_change(|s: &mut S, _| s.library_mut().refresh());
-    row().key("filters").h(44.0).px(12.0).center_y().gap(8.0).child(search).child(text(
-        match (library.visible.len(), library.snapshot.cards.len()) {
-            (shown, total) if shown == total => format!("{total} cards"),
-            (shown, total) => format!("{shown} of {total}"),
-        },
-    )
-    .font(type_::LABEL)
-    .color(t.text_secondary))
+    row()
+        .key("filters")
+        .h(44.0)
+        .px(12.0)
+        .center_y()
+        .gap(8.0)
+        .child(search)
+        .child(
+            text(
+                match (library.visible.len(), library.snapshot.cards.len()) {
+                    (shown, total) if shown == total => format!("{total} cards"),
+                    (shown, total) => format!("{shown} of {total}"),
+                },
+            )
+            .font(type_::LABEL)
+            .color(t.text_secondary),
+        )
 }
 
 /// One row of the card list.
@@ -182,11 +222,21 @@ fn card_row<S: Host>(card: &CardSummary, selected: bool) -> El {
         .px(12.0)
         .center_y()
         .gap(8.0)
-        .fill(if selected { t.control_off } else { t.control_off.alpha(0.0) })
-        .child(text(if card.preview.is_empty() { "(empty)".to_string() } else { card.preview.clone() })
+        .fill(if selected {
+            t.control_off
+        } else {
+            t.control_off.alpha(0.0)
+        })
+        .child(
+            text(if card.preview.is_empty() {
+                "(empty)".to_string()
+            } else {
+                card.preview.clone()
+            })
             .font(type_::BODY)
             .grow(1.0)
-            .color(t.text))
+            .color(t.text),
+        )
         .child(text(tags).font(type_::LABEL).color(t.text_secondary))
         .child(text(note).font(type_::LABEL).color(t.text_secondary))
         .on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
@@ -199,28 +249,39 @@ pub fn view<S: Host>(s: &S) -> El {
         .key("cards")
         .grow(1.0)
         .h_full()
-        .scroll(ScrollSpec { stick_bottom: false })
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
         .child(
-            col().key("rows").growth(GrowthSpec::default()).virtual_rows(
-                library.visible.len(),
-                ROW_HEIGHT,
-                |s: &S, index| -> Cow<'_, str> {
-                    format!("card-{}", s.library().visible[index].id).into()
-                },
-                |s: &S, index| {
-                    let library = s.library();
-                    library.built_rows.fetch_add(1, Ordering::Relaxed);
-                    let card = &library.visible[index];
-                    card_row::<S>(card, library.selected_card == Some(card.id))
-                },
-            ),
+            col()
+                .key("rows")
+                .growth(GrowthSpec::default())
+                .virtual_rows(
+                    library.visible.len(),
+                    ROW_HEIGHT,
+                    |s: &S, index| -> Cow<'_, str> {
+                        format!("card-{}", s.library().visible[index].id).into()
+                    },
+                    |s: &S, index| {
+                        let library = s.library();
+                        library.built_rows.fetch_add(1, Ordering::Relaxed);
+                        let card = &library.visible[index];
+                        card_row::<S>(card, library.selected_card == Some(card.id))
+                    },
+                ),
         );
     row()
         .w_full()
         .h_full()
         .fill(tok::theme(true).bg)
         .child(deck_sidebar::<S>(s))
-        .child(col().grow(1.0).h_full().child(filter_bar::<S>(s)).child(list))
+        .child(
+            col()
+                .grow(1.0)
+                .h_full()
+                .child(filter_bar::<S>(s))
+                .child(list),
+        )
 }
 
 #[cfg(test)]

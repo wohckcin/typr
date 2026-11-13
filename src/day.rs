@@ -24,12 +24,11 @@ pub fn local_offset_ms() -> i64 {
 
 /// Resolved on first use, which the app arranges to happen on the main thread before it starts the
 /// store task.
-static LOCAL_OFFSET_MS: LazyLock<i64> = LazyLock::new(|| {
-    match time::UtcOffset::current_local_offset() {
+static LOCAL_OFFSET_MS: LazyLock<i64> =
+    LazyLock::new(|| match time::UtcOffset::current_local_offset() {
         Ok(offset) => i64::from(offset.whole_seconds()) * 1000,
         Err(_) => 0,
-    }
-});
+    });
 
 /// Which study day `at_ms` falls on, counting from the epoch.
 pub fn study_day(at_ms: i64, offset_ms: i64) -> i64 {

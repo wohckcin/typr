@@ -100,7 +100,10 @@ pub const CURRENT_VERSION: i64 = MIGRATIONS.len() as i64;
 pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     if version > CURRENT_VERSION {
-        return Err(StoreError::TooNew { found: version, supported: CURRENT_VERSION });
+        return Err(StoreError::TooNew {
+            found: version,
+            supported: CURRENT_VERSION,
+        });
     }
     for (index, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
         let tx = conn.transaction()?;
@@ -110,4 +113,3 @@ pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
     }
     Ok(())
 }
-

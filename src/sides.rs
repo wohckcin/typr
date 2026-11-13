@@ -17,7 +17,11 @@ pub fn split(markdown: &str) -> Vec<&str> {
         let content = line.trim_end_matches(['\n', '\r']);
         let trimmed = content.trim();
         if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            let marker = if trimmed.starts_with("```") { "```" } else { "~~~" };
+            let marker = if trimmed.starts_with("```") {
+                "```"
+            } else {
+                "~~~"
+            };
             match fence {
                 None => fence = Some(marker),
                 Some(open) if open == marker => fence = None,
@@ -31,7 +35,10 @@ pub fn split(markdown: &str) -> Vec<&str> {
     }
     sides.push(&markdown[start..]);
 
-    sides.into_iter().filter(|side| !side.trim().is_empty()).collect()
+    sides
+        .into_iter()
+        .filter(|side| !side.trim().is_empty())
+        .collect()
 }
 
 #[cfg(test)]

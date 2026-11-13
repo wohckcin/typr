@@ -12,7 +12,10 @@ fn padding_and_carriage_returns_do_not_stop_a_separator() {
 
 #[test]
 fn hyphens_with_other_content_are_not_a_separator() {
-    assert_eq!(split("above\n--- below\n***\n___"), vec!["above\n--- below\n***\n___"]);
+    assert_eq!(
+        split("above\n--- below\n***\n___"),
+        vec!["above\n--- below\n***\n___"]
+    );
 }
 
 #[test]
@@ -35,5 +38,8 @@ fn an_empty_side_is_dropped_and_a_note_has_one_side() {
 
 #[test]
 fn three_sides_keep_their_order() {
-    assert_eq!(split("one\n---\ntwo\n---\nthree"), vec!["one\n", "two\n", "three"]);
+    assert_eq!(
+        split("one\n---\ntwo\n---\nthree"),
+        vec!["one\n", "two\n", "three"]
+    );
 }

@@ -10,9 +10,21 @@ fn editing_one_card_leaves_another_cards_parse_alone() {
     second.buffer.insert(" more");
     second.settle();
 
-    assert_ne!(second.memo(), preview_key(Some(2), "three\n---\nfour"), "the edited card re-parses");
-    assert_eq!(first.memo(), untouched, "the other card's parse is untouched");
-    assert_ne!(first.memo(), second.memo(), "different cards never share a parse");
+    assert_ne!(
+        second.memo(),
+        preview_key(Some(2), "three\n---\nfour"),
+        "the edited card re-parses"
+    );
+    assert_eq!(
+        first.memo(),
+        untouched,
+        "the other card's parse is untouched"
+    );
+    assert_ne!(
+        first.memo(),
+        second.memo(),
+        "different cards never share a parse"
+    );
 }
 
 #[test]
@@ -26,16 +38,27 @@ fn typing_into_the_buffer_changes_the_preview_source_without_a_mode() {
 
     assert!(editor.dirty());
     assert_eq!(editor.buffer.text, "**bold**");
-    assert_ne!(editor.memo(), before, "the preview is derived from the buffer, and moved with it");
+    assert_ne!(
+        editor.memo(),
+        before,
+        "the preview is derived from the buffer, and moved with it"
+    );
 }
 
 #[test]
 fn the_preview_renders_the_typed_markdown() {
     let editor = Editor::new(None, "**bold**".to_string());
-    let mut runtime = rune::Runtime::new(editor, |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
-        (900.0, 600.0), rune::Env::new(true, 1.0));
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
     runtime.frame(0.0);
-    assert!(runtime.find("preview-pane").is_some(), "the rendered side is on screen");
+    assert!(
+        runtime.find("preview-pane").is_some(),
+        "the rendered side is on screen"
+    );
     assert!(runtime.find("sides").is_some(), "and so is the source");
 }
 
@@ -54,7 +77,10 @@ fn leaving_an_unsaved_card_asks_first() {
     assert_eq!(editor.request_leave(), super::Leaving::Ask);
     assert!(editor.asking);
 
-    assert_eq!(editor.resolve(super::Choice::Discard), Some(super::Answer::Discard));
+    assert_eq!(
+        editor.resolve(super::Choice::Discard),
+        Some(super::Answer::Discard)
+    );
     assert_eq!(editor.buffer.text, "old", "discarding puts the buffer back");
     assert!(!editor.dirty());
     assert!(!editor.asking);
@@ -89,8 +115,12 @@ fn the_confirmation_lists_save_discard_and_stay() {
     let mut editor = Editor::new(None, "card".to_string());
     editor.buffer.insert(" edited");
     editor.request_leave();
-    let mut runtime = rune::Runtime::new(editor, |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
-        (900.0, 600.0), rune::Env::new(true, 1.0));
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
     for _ in 0..30 {
         runtime.frame(1.0 / 60.0);
     }
@@ -117,13 +147,25 @@ fn an_empty_card_is_refused_and_explained_instead_of_rendered() {
     assert!(editor.dirty());
 
     let runtime_view = |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s);
-    let mut runtime = rune::Runtime::new(editor, runtime_view, (900.0, 600.0), rune::Env::new(true, 1.0));
+    let mut runtime = rune::Runtime::new(
+        editor,
+        runtime_view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
     runtime.frame(0.0);
-    assert!(runtime.find("preview-empty").is_some(), "the preview explains itself");
+    assert!(
+        runtime.find("preview-empty").is_some(),
+        "the preview explains itself"
+    );
     assert!(runtime.find("refusal").is_some());
 
     runtime.state.buffer.insert("front");
-    assert_eq!(runtime.state.refusal(), None, "and the refusal clears once there is content");
+    assert_eq!(
+        runtime.state.refusal(),
+        None,
+        "and the refusal clears once there is content"
+    );
     assert!(runtime.state.save());
     assert!(!runtime.state.dirty());
 }
@@ -134,13 +176,24 @@ fn a_missing_attachment_renders_a_placeholder_instead_of_breaking_the_preview() 
     let mut editor = Editor::new(None, "Look:\n\n![diagram](diagram.png)".to_string());
     editor.attachments = crate::attachments::Attachments::detached(dir.path().to_path_buf());
 
-    let mut runtime = rune::Runtime::new(editor, |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
-        (900.0, 600.0), rune::Env::new(true, 1.0));
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
     for _ in 0..5 {
         runtime.frame(1.0 / 60.0);
     }
-    assert!(runtime.find("preview-pane").is_some(), "the preview still draws");
-    assert_eq!(runtime.state.attachments.resolve("diagram.png"), None, "and nothing was loaded");
+    assert!(
+        runtime.find("preview-pane").is_some(),
+        "the preview still draws"
+    );
+    assert_eq!(
+        runtime.state.attachments.resolve("diagram.png"),
+        None,
+        "and nothing was loaded"
+    );
 }
 
 #[test]
@@ -155,6 +208,12 @@ fn attaching_an_image_copies_it_and_writes_its_reference() {
 
     let name = editor.attach_image(&source).unwrap();
     assert_eq!(name, "kreb cycle.png");
-    assert!(editor.buffer.text.contains("![kreb cycle](kreb cycle.png)"), "the reference is in the card");
-    assert!(editor.attachments.resolve(&name).is_some(), "and the file is beside the library");
+    assert!(
+        editor.buffer.text.contains("![kreb cycle](kreb cycle.png)"),
+        "the reference is in the card"
+    );
+    assert!(
+        editor.attachments.resolve(&name).is_some(),
+        "and the file is beside the library"
+    );
 }

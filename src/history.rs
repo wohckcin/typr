@@ -61,10 +61,22 @@ fn row_view(entry: &ReviewRow) -> El {
         .key(format!("history-{}", entry.at))
         .w_full()
         .gap(16.0)
-        .child(text(when(entry.at)).color(t.text_secondary).font(type_::MONO_CAPTION))
-        .child(text(entry.phase.as_str()).color(t.text_secondary).font(type_::MONO_CAPTION))
+        .child(
+            text(when(entry.at))
+                .color(t.text_secondary)
+                .font(type_::MONO_CAPTION),
+        )
+        .child(
+            text(entry.phase.as_str())
+                .color(t.text_secondary)
+                .font(type_::MONO_CAPTION),
+        )
         .child(text(grade).color(t.text).font(type_::MONO_CAPTION))
-        .child(text(format!("due {due}")).color(t.text_secondary).font(type_::MONO_CAPTION))
+        .child(
+            text(format!("due {due}"))
+                .color(t.text_secondary)
+                .font(type_::MONO_CAPTION),
+        )
 }
 
 /// The panel: a count that only reviews contribute to, then every record.
@@ -90,7 +102,12 @@ pub fn view<S: Host>(s: &S) -> El {
     for entry in &history.rows {
         list = list.child(row_view(entry));
     }
-    root(list.scroll(ScrollSpec { stick_bottom: false }), Vec::new())
+    root(
+        list.scroll(ScrollSpec {
+            stick_bottom: false,
+        }),
+        Vec::new(),
+    )
 }
 
 #[cfg(test)]

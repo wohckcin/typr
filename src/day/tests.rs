@@ -9,7 +9,10 @@ const MIDNIGHT: i64 = 1_768_089_600_000;
 fn a_moment_just_after_midnight_belongs_to_the_previous_study_day() {
     let just_after_midnight = MIDNIGHT + 30 * 60 * 1000;
     let late_evening = MIDNIGHT - 10 * 60 * 1000;
-    assert_eq!(study_day(just_after_midnight, 0), study_day(late_evening, 0));
+    assert_eq!(
+        study_day(just_after_midnight, 0),
+        study_day(late_evening, 0)
+    );
 }
 
 #[test]
@@ -35,5 +38,8 @@ fn bounds_wrap_the_moments_of_one_day() {
 fn an_offset_moves_the_boundary_with_the_clock() {
     // 02:00 UTC is 04:00 at UTC+2: the same instant lands on the next study day.
     let two_am = MIDNIGHT + 2 * 60 * 60 * 1000;
-    assert_eq!(study_day(two_am, 0), study_day(two_am, 2 * 60 * 60 * 1000) - 1);
+    assert_eq!(
+        study_day(two_am, 0),
+        study_day(two_am, 2 * 60 * 60 * 1000) - 1
+    );
 }

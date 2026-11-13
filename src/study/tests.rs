@@ -23,7 +23,12 @@ impl App {
                 sides: sides.iter().map(|s| s.to_string()).collect(),
             })
             .collect();
-        App { session: Session::new(queue, entries), sent: Vec::new(), due: 0, left: false }
+        App {
+            session: Session::new(queue, entries),
+            sent: Vec::new(),
+            due: 0,
+            left: false,
+        }
     }
 
     /// Play the acknowledgements the store owes.
@@ -61,14 +66,25 @@ impl Host for App {
 }
 
 fn press(rt: &mut Runtime<App>, key_press: Key) {
-    rt.key(KeyEvent { key: key_press, mods: Mods::default() });
+    rt.key(KeyEvent {
+        key: key_press,
+        mods: Mods::default(),
+    });
     rt.frame(0.0);
 }
 
 #[test]
 fn a_whole_queue_is_answered_with_no_pointer() {
-    let app = App::with(Queue::New, &[(1, &["front", "back"]), (2, &["front", "back"])]);
-    let mut rt = Runtime::new(app, |s: &App, _| view::<App>(s), (900.0, 700.0), Env::new(true, 1.0));
+    let app = App::with(
+        Queue::New,
+        &[(1, &["front", "back"]), (2, &["front", "back"])],
+    );
+    let mut rt = Runtime::new(
+        app,
+        |s: &App, _| view::<App>(s),
+        (900.0, 700.0),
+        Env::new(true, 1.0),
+    );
     rt.on_key = Some(|s: &mut App, ev: &KeyEvent, _: &mut Tx| key::<App>(s, ev));
     rt.frame(0.0);
 
@@ -79,7 +95,10 @@ fn a_whole_queue_is_answered_with_no_pointer() {
         rt.update(|s: &mut App, _| s.acknowledge());
     }
 
-    assert_eq!(rt.state.session.grades, vec![Grade::Remembered, Grade::Remembered]);
+    assert_eq!(
+        rt.state.session.grades,
+        vec![Grade::Remembered, Grade::Remembered]
+    );
     assert!(rt.state.session.finished());
     assert!(rt.state.sent.is_empty());
 }
@@ -87,10 +106,18 @@ fn a_whole_queue_is_answered_with_no_pointer() {
 #[test]
 fn the_answers_are_offered_only_after_the_last_side() {
     let app = App::with(Queue::New, &[(1, &["one", "two"])]);
-    let mut rt = Runtime::new(app, |s: &App, _| view::<App>(s), (900.0, 700.0), Env::new(true, 1.0));
+    let mut rt = Runtime::new(
+        app,
+        |s: &App, _| view::<App>(s),
+        (900.0, 700.0),
+        Env::new(true, 1.0),
+    );
     rt.on_key = Some(|s: &mut App, ev: &KeyEvent, _: &mut Tx| key::<App>(s, ev));
     rt.frame(0.0);
-    assert!(rt.find("remembered").is_none(), "no grade before the last side");
+    assert!(
+        rt.find("remembered").is_none(),
+        "no grade before the last side"
+    );
 
     press(&mut rt, Key::Text(" ".into()));
     rt.frame(0.0);
@@ -105,7 +132,12 @@ fn the_answers_are_offered_only_after_the_last_side() {
 #[test]
 fn backward_from_the_keyboard_shows_the_graded_card_read_only() {
     let app = App::with(Queue::New, &[(1, &["one", "two"]), (2, &["front", "back"])]);
-    let mut rt = Runtime::new(app, |s: &App, _| view::<App>(s), (900.0, 700.0), Env::new(true, 1.0));
+    let mut rt = Runtime::new(
+        app,
+        |s: &App, _| view::<App>(s),
+        (900.0, 700.0),
+        Env::new(true, 1.0),
+    );
     rt.on_key = Some(|s: &mut App, ev: &KeyEvent, _: &mut Tx| key::<App>(s, ev));
     rt.frame(0.0);
 
@@ -118,12 +150,18 @@ fn backward_from_the_keyboard_shows_the_graded_card_read_only() {
     press(&mut rt, Key::Left);
     assert_eq!(rt.state.session.current().unwrap().card, 1);
     assert!(rt.state.session.read_only);
-    assert!(rt.state.session.grades.len() == 1, "nothing was graded again");
+    assert!(
+        rt.state.session.grades.len() == 1,
+        "nothing was graded again"
+    );
 }
 
 #[test]
 fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
-    let mut app = App::with(Queue::Due, &[(1, &["front"]), (2, &["front"]), (3, &["front"])]);
+    let mut app = App::with(
+        Queue::Due,
+        &[(1, &["front"]), (2, &["front"]), (3, &["front"])],
+    );
     app.due = 12;
     for grade in [Grade::Remembered, Grade::Forgot, Grade::Remembered] {
         app.session.reveal();
@@ -133,7 +171,8 @@ fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
         app.acknowledge();
     }
     // The forgotten card is in a relearning step; once ten minutes pass it is back.
-    app.session.advance_clock(NOON + crate::clock::LEARNING_STEP_MS);
+    app.session
+        .advance_clock(NOON + crate::clock::LEARNING_STEP_MS);
     app.session.reveal();
     let (card, grade) = app.session.grade(Grade::Remembered).unwrap();
     let id = app.submit_grade(card, grade);
@@ -141,7 +180,12 @@ fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
     app.acknowledge();
     assert!(app.session.finished());
 
-    let mut rt = Runtime::new(app, |s: &App, _| summary::<App>(s), (900.0, 700.0), Env::new(true, 1.0));
+    let mut rt = Runtime::new(
+        app,
+        |s: &App, _| summary::<App>(s),
+        (900.0, 700.0),
+        Env::new(true, 1.0),
+    );
     rt.frame(0.0);
     assert!(rt.find("summary").is_some());
     assert!(rt.find("back-to-library").is_some());

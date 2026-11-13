@@ -117,7 +117,9 @@ impl Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { new_per_day: Self::DEFAULT_NEW_PER_DAY }
+        Self {
+            new_per_day: Self::DEFAULT_NEW_PER_DAY,
+        }
     }
 }
 
@@ -143,12 +145,19 @@ pub enum CardMode {
 impl Snapshot {
     /// The deck and everything under it, or every deck when `deck` is `None`.
     pub fn subtree(&self, deck: Option<Id>) -> Vec<Id> {
-        let Some(deck) = deck else { return self.decks.iter().map(|deck| deck.id).collect() };
+        let Some(deck) = deck else {
+            return self.decks.iter().map(|deck| deck.id).collect();
+        };
         let mut ids = vec![deck];
         let mut index = 0;
         while index < ids.len() {
             let parent = ids[index];
-            ids.extend(self.decks.iter().filter(|d| d.parent == Some(parent)).map(|d| d.id));
+            ids.extend(
+                self.decks
+                    .iter()
+                    .filter(|d| d.parent == Some(parent))
+                    .map(|d| d.id),
+            );
             index += 1;
         }
         ids
@@ -165,7 +174,11 @@ impl Snapshot {
                     if archived(id) {
                         return false;
                     }
-                    chain = self.decks.iter().find(|d| d.id == id).and_then(|d| d.parent);
+                    chain = self
+                        .decks
+                        .iter()
+                        .find(|d| d.id == id)
+                        .and_then(|d| d.parent);
                 }
                 true
             })
@@ -189,14 +202,18 @@ impl Snapshot {
             .iter()
             .filter(|card| match mode {
                 CardMode::Active => {
-                    !card.archived && card.trashed_at.is_none() && visible_decks.contains(&card.deck)
+                    !card.archived
+                        && card.trashed_at.is_none()
+                        && visible_decks.contains(&card.deck)
                 }
                 CardMode::Archived => card.archived && card.trashed_at.is_none(),
                 CardMode::Trash => card.trashed_at.is_some(),
             })
             .filter(|card| deck.is_none() || scope.contains(&card.deck))
             .filter(|card| {
-                wanted_tag.as_ref().is_none_or(|tag| card.tags.iter().any(|own| folded(own) == *tag))
+                wanted_tag
+                    .as_ref()
+                    .is_none_or(|tag| card.tags.iter().any(|own| folded(own) == *tag))
             })
             .filter(|card| needle.is_empty() || card.search_text.contains(&needle))
             .collect()
@@ -241,30 +258,93 @@ pub struct ReviewRow {
 /// A typed mutation or query. Every command produces exactly one [`Event`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
-    CreateDeck { parent: Option<Id>, name: String },
-    RenameDeck { id: Id, name: String },
-    ArchiveDeck { id: Id, archived: bool },
-    MoveDeck { id: Id, parent: Option<Id> },
-    CreateCard { deck: Id, markdown: String },
-    SaveCard { id: Id, markdown: String },
-    MoveCard { id: Id, deck: Id },
-    ArchiveCard { id: Id, archived: bool },
+    CreateDeck {
+        parent: Option<Id>,
+        name: String,
+    },
+    RenameDeck {
+        id: Id,
+        name: String,
+    },
+    ArchiveDeck {
+        id: Id,
+        archived: bool,
+    },
+    MoveDeck {
+        id: Id,
+        parent: Option<Id>,
+    },
+    CreateCard {
+        deck: Id,
+        markdown: String,
+    },
+    SaveCard {
+        id: Id,
+        markdown: String,
+    },
+    MoveCard {
+        id: Id,
+        deck: Id,
+    },
+    ArchiveCard {
+        id: Id,
+        archived: bool,
+    },
     EmptyTrash,
-    SetTags { card: Id, tags: Vec<String> },
-    TrashCard { id: Id },
-    RestoreCard { id: Id },
-    SetDraft { card: Id, text: Option<String> },
-    Draft { card: Id },
-    Grade { card: Id, key: String, grade: Grade, duration_ms: Option<i64> },
-    ResetHistory { card: Id, key: String },
+    SetTags {
+        card: Id,
+        tags: Vec<String>,
+    },
+    TrashCard {
+        id: Id,
+    },
+    RestoreCard {
+        id: Id,
+    },
+    SetDraft {
+        card: Id,
+        text: Option<String>,
+    },
+    Draft {
+        card: Id,
+    },
+    Grade {
+        card: Id,
+        key: String,
+        grade: Grade,
+        duration_ms: Option<i64>,
+    },
+    ResetHistory {
+        card: Id,
+        key: String,
+    },
     /// The due queue, ordered and capped exactly as the scheduler would serve it.
-    DuePrompts { now_ms: i64, offset_ms: i64, seed: u64 },
+    DuePrompts {
+        now_ms: i64,
+        offset_ms: i64,
+        seed: u64,
+    },
     /// The new-card queue, capped by what the study day still allows.
-    NewPrompts { now_ms: i64, offset_ms: i64, seed: u64 },
-    Search { query: String, deck: Option<Id> },
-    SetSetting { key: String, value: String },
-    History { card: Id },
-    Stats { from_ms: i64, to_ms: i64 },
+    NewPrompts {
+        now_ms: i64,
+        offset_ms: i64,
+        seed: u64,
+    },
+    Search {
+        query: String,
+        deck: Option<Id>,
+    },
+    SetSetting {
+        key: String,
+        value: String,
+    },
+    History {
+        card: Id,
+    },
+    Stats {
+        from_ms: i64,
+        to_ms: i64,
+    },
 }
 
 /// What a command did.
@@ -275,7 +355,10 @@ pub enum Outcome {
     /// How many rows changed; zero means the id did not exist.
     Changed(usize),
     /// Where the grade left the prompt.
-    Graded { phase: Phase, due_at: Option<i64> },
+    Graded {
+        phase: Phase,
+        due_at: Option<i64>,
+    },
     History(Vec<ReviewRow>),
     Due(Vec<DuePrompt>),
     New(Vec<NewPrompt>),
@@ -299,11 +382,19 @@ pub enum StoreError {
     /// No home folder, so there is nowhere to keep the library.
     NoDataDir,
     /// A database written by a newer build: refused rather than downgraded.
-    TooNew { found: i64, supported: i64 },
+    TooNew {
+        found: i64,
+        supported: i64,
+    },
     /// A grade for a prompt that does not exist, e.g. for a card with one side.
-    NoPrompt { card: Id, key: String },
+    NoPrompt {
+        card: Id,
+        key: String,
+    },
     /// A move that would put a deck inside itself.
-    Cycle { deck: Id },
+    Cycle {
+        deck: Id,
+    },
     Io(std::io::Error),
 }
 

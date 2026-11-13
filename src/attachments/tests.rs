@@ -27,11 +27,20 @@ fn a_path_escaping_the_directory_is_refused() {
     std::fs::write(&outside, b"png").unwrap();
     let attachments = Attachments::detached(dir.path().to_path_buf());
 
-    for src in ["../outside.png", "sub/../../outside.png", "/etc/passwd", "~/secret.png"] {
+    for src in [
+        "../outside.png",
+        "sub/../../outside.png",
+        "/etc/passwd",
+        "~/secret.png",
+    ] {
         assert_eq!(attachments.resolve(src), None, "{src} must not resolve");
     }
     assert_eq!(attachments.resolve(""), None);
-    assert_eq!(attachments.resolve("missing.png"), None, "a missing file is not resolved");
+    assert_eq!(
+        attachments.resolve("missing.png"),
+        None,
+        "a missing file is not resolved"
+    );
 }
 
 #[test]
@@ -45,7 +54,10 @@ fn attaching_copies_the_file_and_names_it_without_overwriting() {
     let second = attach(dir.path(), &source).unwrap();
 
     assert_eq!(first, "diagram.png");
-    assert_eq!(second, "diagram-2.png", "the second copy does not overwrite the first");
+    assert_eq!(
+        second, "diagram-2.png",
+        "the second copy does not overwrite the first"
+    );
     assert_eq!(std::fs::read(dir.path().join(&first)).unwrap(), b"bytes");
     let attachments = Attachments::detached(dir.path().to_path_buf());
     assert!(attachments.resolve(&second).is_some());
