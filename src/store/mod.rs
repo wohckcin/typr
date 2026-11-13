@@ -98,6 +98,8 @@ pub struct CardSummary {
     pub updated_at: i64,
     /// The first side's first line, cut short: what a list row shows.
     pub preview: String,
+    /// The card's text, so a session can split it into sides without another round trip.
+    pub markdown: String,
     /// The card's text folded the way `LIKE` compares it, so the library can filter without a
     /// round trip to the store thread.
     pub search_text: String,
@@ -255,6 +257,10 @@ pub enum Command {
     Draft { card: Id },
     Grade { card: Id, key: String, grade: Grade, duration_ms: Option<i64> },
     ResetHistory { card: Id, key: String },
+    /// The due queue, ordered and capped exactly as the scheduler would serve it.
+    DuePrompts { now_ms: i64, offset_ms: i64, seed: u64 },
+    /// The new-card queue, capped by what the study day still allows.
+    NewPrompts { now_ms: i64, offset_ms: i64, seed: u64 },
     Search { query: String, deck: Option<Id> },
     SetSetting { key: String, value: String },
     History { card: Id },
@@ -271,6 +277,8 @@ pub enum Outcome {
     /// Where the grade left the prompt.
     Graded { phase: Phase, due_at: Option<i64> },
     History(Vec<ReviewRow>),
+    Due(Vec<DuePrompt>),
+    New(Vec<NewPrompt>),
     Draft(Option<String>),
     Search(Vec<Id>),
     Stats(Stats),
@@ -334,6 +342,17 @@ pub fn database_path(dirs: &AppDirs) -> PathBuf {
     dirs.data().join("typr.sqlite3")
 }
 
+/// The folder a card's images are copied into, beside the database.
+pub fn attachments_root(dirs: &AppDirs) -> PathBuf {
+    dirs.data().join("attachments")
+}
+
+/// The attachments folder for the process environment.
+pub fn attachments_root_from_environment() -> Result<PathBuf, StoreError> {
+    let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;
+    Ok(attachments_root(&dirs))
+}
+
 /// Open the library from the process environment, creating its folder if needed.
 ///
 /// `RUNE_DIRS_ROOT`, when set, moves every folder (see [`rune::dirs`]), which is how a test or an
@@ -346,6 +365,7 @@ pub fn open_from_environment() -> Result<Db, StoreError> {
 /// Open the library inside the given folders.
 pub fn open_in(dirs: &AppDirs) -> Result<Db, StoreError> {
     std::fs::create_dir_all(dirs.data())?;
+    std::fs::create_dir_all(attachments_root(dirs))?;
     Db::open(&database_path(dirs))
 }
 
@@ -374,6 +394,10 @@ pub trait Store: Send + Sync {
     fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64;
     fn reset_history(&self, card: Id, key: &str) -> u64;
     fn search(&self, query: &str, deck: Option<Id>) -> u64;
+    /// The due queue as the scheduler would serve it: most overdue first, ties shuffled.
+    fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64;
+    /// The new-card queue, capped by what this study day still allows.
+    fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64;
     fn set_setting(&self, key: &str, value: &str) -> u64;
     fn history(&self, card: Id) -> u64;
     fn stats(&self, from_ms: i64, to_ms: i64) -> u64;

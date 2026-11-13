@@ -9,4 +9,6 @@ pub mod schedule;
 pub mod shuffle;
 pub mod sides;
 pub mod screen;
+pub mod session;
+pub mod study;
 pub mod store;

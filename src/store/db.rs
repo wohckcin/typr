@@ -156,6 +156,12 @@ impl Db {
                 self.grade(*card, key, *grade, *duration_ms, now_ms)
             }
             Command::ResetHistory { card, key } => self.reset_history(*card, key),
+            Command::DuePrompts { now_ms, offset_ms, seed } => {
+                Ok(Outcome::Due(self.due_prompts(*now_ms, *offset_ms, *seed)?))
+            }
+            Command::NewPrompts { now_ms, offset_ms, seed } => {
+                Ok(Outcome::New(self.new_prompts(*now_ms, *offset_ms, *seed)?))
+            }
             Command::Search { query, deck } => Ok(Outcome::Search(self.search(query, *deck)?)),
             Command::History { card } => Ok(Outcome::History(self.history(*card)?)),
             Command::Stats { from_ms, to_ms } => Ok(Outcome::Stats(self.stats(*from_ms, *to_ms)?)),
@@ -193,6 +199,7 @@ impl Db {
                     trashed_at: row.get(4)?,
                     updated_at: row.get(5)?,
                     preview: preview(&row.get::<_, String>(6)?),
+                    markdown: row.get(6)?,
                     search_text: row.get(7)?,
                 })
             })?;

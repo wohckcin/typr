@@ -102,6 +102,14 @@ impl Store for Handle {
         std::mem::take(&mut *self.shared.events.lock().expect("events"))
     }
 
+    fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64 {
+        self.submit(Command::DuePrompts { now_ms, offset_ms, seed })
+    }
+
+    fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64 {
+        self.submit(Command::NewPrompts { now_ms, offset_ms, seed })
+    }
+
     fn create_deck(&self, parent: Option<Id>, name: &str) -> u64 {
         self.submit(Command::CreateDeck { parent, name: name.to_string() })
     }

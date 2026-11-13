@@ -53,14 +53,14 @@
 
 ## 6. Study session
 
-- [ ] 6.1 Build the new-card queue over studyable two-sided cards with no scheduling state, deck-scoped, and verify a new card appears there, not in the due queue, and that a one-sided card appears in neither
-- [ ] 6.2 Implement `forgot` in the learning queue as a move to the end of the remaining queue with no due date, and verify with a four-card queue that the forgotten card returns last
-- [ ] 6.3 Implement sequential side reveal with the grade offered only after the last side, in both queues, and verify a three-sided card produces one review and that grade actions are unavailable before the last reveal
-- [ ] 6.4 Bind the keyboard actions (reveal, remembered, forgot, forward, backward) and show the bindings in the session, and verify a scripted run of a whole queue that uses no pointer, that moving backward shows a graded card read-only, and that moving forward past an ungraded card leaves it queued
-- [ ] 6.5 Advance the session only on the store's acknowledgement for the grade and implement resume, and verify that quitting after 5 of 12 due cards leaves 7 in the next session
-- [ ] 6.6 Implement re-shuffling the due queue within equal-overdue groups, and verify the order changes inside a group, the order between groups does not, and every `prompt.due_at` stays identical
-- [ ] 6.7 Add prompts that fall due mid-session to the running due queue, and verify that a `forgot` grade producing a 10-minute relearning step returns within the same session when the clock is advanced
-- [ ] 6.8 Build the session summary: grades recorded in this session, prompts due at that moment, and a way back to the library, and verify against a scripted session's known grade sequence
+- [x] 6.1 Build the new-card queue over studyable two-sided cards with no scheduling state, deck-scoped, and verify a new card appears there, not in the due queue, and that a one-sided card appears in neither
+- [x] 6.2 Implement `forgot` in the learning queue as a move to the end of the remaining queue with no due date, and verify with a four-card queue that the forgotten card returns last
+- [x] 6.3 Implement sequential side reveal with the grade offered only after the last side, in both queues, and verify a three-sided card produces one review and that grade actions are unavailable before the last reveal
+- [x] 6.4 Bind the keyboard actions (reveal, remembered, forgot, forward, backward) and show the bindings in the session, and verify a scripted run of a whole queue that uses no pointer, that moving backward shows a graded card read-only, and that moving forward past an ungraded card leaves it queued
+- [x] 6.5 Advance the session only on the store's acknowledgement for the grade and implement resume, and verify that quitting after 5 of 12 due cards leaves 7 in the next session
+- [x] 6.6 Implement re-shuffling the due queue within equal-overdue groups, and verify the order changes inside a group, the order between groups does not, and every `prompt.due_at` stays identical
+- [x] 6.7 Add prompts that fall due mid-session to the running due queue, and verify that a `forgot` grade producing a 10-minute relearning step returns within the same session when the clock is advanced
+- [x] 6.8 Build the session summary: grades recorded in this session, prompts due at that moment, and a way back to the library, and verify against a scripted session's known grade sequence
 
 ## 7. Integration and headless verification
 

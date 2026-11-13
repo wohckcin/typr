@@ -59,6 +59,12 @@ impl Default for Library {
 }
 
 impl Library {
+    /// Replace the library the screen draws, and rebuild the rows the filters keep.
+    pub fn set_snapshot(&mut self, snapshot: Snapshot) {
+        self.snapshot = snapshot;
+        self.refresh();
+    }
+
     /// Recompute the visible rows from the current filters.
     pub fn refresh(&mut self) {
         self.visible = self
@@ -86,6 +92,7 @@ impl Library {
                 trashed_at: None,
                 updated_at: 0,
                 preview: format!("Card {id}"),
+                markdown: format!("Card {id}\n---\nCard {id}"),
                 search_text: format!("card {id}"),
             })
             .collect();
