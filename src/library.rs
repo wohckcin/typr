@@ -31,14 +31,16 @@ impl Host for Library {
 
 /// What the library screen shows and what the user is filtering it by.
 pub struct Library {
-    pub snapshot: Arc<Snapshot>,
+    /// The published library this list is a view of.
+    snapshot: Arc<Snapshot>,
     pub mode: CardMode,
     pub selected_deck: Option<Id>,
     pub selected_card: Option<Id>,
     pub query: TextEdit,
     pub tag: Option<String>,
     /// The rows the filters keep, rebuilt whenever a filter changes.
-    pub visible: Vec<CardSummary>,
+    /// The cards the current deck, tag, search and mode select, in list order.
+    visible: Vec<CardSummary>,
     /// Every index the list has built. A virtualised list builds only what is on screen, so a
     /// large library must leave this far below the row count.
     pub built_rows: AtomicUsize,
@@ -61,13 +63,25 @@ impl Default for Library {
 
 impl Library {
     /// Replace the library the screen draws, and rebuild the rows the filters keep.
+    /// The library this list shows.
+    pub fn snapshot(&self) -> &Snapshot {
+        &self.snapshot
+    }
+
+    /// The cards on screen, in the order they are drawn.
+    pub fn cards(&self) -> &[CardSummary] {
+        &self.visible
+    }
+
+    /// Take a newly published library and rebuild the list from it. The only way in, so the two
+    /// can never disagree.
     pub fn set_snapshot(&mut self, snapshot: Arc<Snapshot>) {
         self.snapshot = snapshot;
         self.refresh();
     }
 
     /// Recompute the visible rows from the current filters.
-    pub fn refresh(&mut self) {
+    fn refresh(&mut self) {
         self.visible = self
             .snapshot
             .cards_matching(

@@ -186,7 +186,7 @@ impl State {
     fn deck_for_new_card(&self) -> Option<Id> {
         self.library.selected_deck.or_else(|| {
             self.library
-                .snapshot
+                .snapshot()
                 .decks
                 .iter()
                 .find(|deck| !deck.archived && deck.parent.is_none())
