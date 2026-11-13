@@ -163,6 +163,7 @@ pub enum Command {
     CreateDeck { parent: Option<Id>, name: String },
     RenameDeck { id: Id, name: String },
     ArchiveDeck { id: Id, archived: bool },
+    MoveDeck { id: Id, parent: Option<Id> },
     CreateCard { deck: Id, markdown: String },
     SaveCard { id: Id, markdown: String },
     TrashCard { id: Id },
@@ -206,6 +207,8 @@ pub enum StoreError {
     TooNew { found: i64, supported: i64 },
     /// A grade for a prompt that does not exist, e.g. for a card with one side.
     NoPrompt { card: Id, key: String },
+    /// A move that would put a deck inside itself.
+    Cycle { deck: Id },
     Io(std::io::Error),
 }
 
@@ -219,6 +222,7 @@ impl std::fmt::Display for StoreError {
                 "this library was written by a newer version of typr (schema {found}, this build knows {supported})"
             ),
             StoreError::NoPrompt { card, key } => write!(f, "card {card} has no prompt {key}"),
+            StoreError::Cycle { deck } => write!(f, "deck {deck} cannot be moved inside itself"),
             StoreError::Io(e) => write!(f, "could not create the library folder: {e}"),
         }
     }
@@ -269,6 +273,7 @@ pub trait Store: Send + Sync {
     fn create_deck(&self, parent: Option<Id>, name: &str) -> u64;
     fn rename_deck(&self, id: Id, name: &str) -> u64;
     fn archive_deck(&self, id: Id, archived: bool) -> u64;
+    fn move_deck(&self, id: Id, parent: Option<Id>) -> u64;
     fn create_card(&self, deck: Id, markdown: &str) -> u64;
     fn save_card(&self, id: Id, markdown: &str) -> u64;
     fn trash_card(&self, id: Id) -> u64;

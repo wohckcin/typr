@@ -14,7 +14,7 @@ CREATE TABLE deck (
     name      TEXT    NOT NULL,
     archived  INTEGER NOT NULL DEFAULT 0
 );
-CREATE UNIQUE INDEX deck_name ON deck(IFNULL(parent_id, -1), name);
+CREATE UNIQUE INDEX deck_name ON deck(IFNULL(parent_id, -1), name COLLATE NOCASE);
 
 CREATE TABLE card (
     id          INTEGER PRIMARY KEY,
@@ -42,9 +42,15 @@ CREATE TABLE prompt (
 CREATE INDEX prompt_due ON prompt(due_at) WHERE due_at IS NOT NULL;
 
 CREATE TABLE tag (
+    id   INTEGER PRIMARY KEY,
+    -- One row per tag, in the casing it was first written: matching is case-insensitive, display
+    -- is not.
+    name TEXT NOT NULL COLLATE NOCASE UNIQUE
+);
+CREATE TABLE card_tag (
     card_id INTEGER NOT NULL REFERENCES card(id) ON DELETE CASCADE,
-    tag     TEXT    NOT NULL,
-    PRIMARY KEY (card_id, tag)
+    tag_id  INTEGER NOT NULL REFERENCES tag(id) ON DELETE CASCADE,
+    PRIMARY KEY (card_id, tag_id)
 );
 
 CREATE TABLE review_log (

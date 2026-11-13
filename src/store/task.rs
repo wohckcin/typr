@@ -114,6 +114,10 @@ impl Store for Handle {
         self.submit(Command::ArchiveDeck { id, archived })
     }
 
+    fn move_deck(&self, id: Id, parent: Option<Id>) -> u64 {
+        self.submit(Command::MoveDeck { id, parent })
+    }
+
     fn create_card(&self, deck: Id, markdown: &str) -> u64 {
         self.submit(Command::CreateCard { deck, markdown: markdown.to_string() })
     }

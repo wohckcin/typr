@@ -531,3 +531,43 @@ fn statistics_are_counted_per_study_day() {
     assert_eq!(tomorrow_stats.reviews, 1);
     assert_eq!(tomorrow_stats.lapses, 1);
 }
+
+#[test]
+fn a_deck_cannot_be_moved_inside_itself() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let parent = deck(&mut db, "Parent");
+    let child = match db.apply(&Command::CreateDeck { parent: Some(parent), name: "Child".to_string() }, 0) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("{other:?}"),
+    };
+    let grandchild = match db.apply(&Command::CreateDeck { parent: Some(child), name: "Grandchild".to_string() }, 0) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("{other:?}"),
+    };
+
+    let error = db.apply(&Command::MoveDeck { id: parent, parent: Some(grandchild) }, 0).expect_err("cycle");
+    assert!(matches!(error, StoreError::Cycle { deck } if deck == parent), "{error}");
+    let error = db.apply(&Command::MoveDeck { id: parent, parent: Some(parent) }, 0).expect_err("cycle");
+    assert!(matches!(error, StoreError::Cycle { .. }), "{error}");
+
+    // A legal move out of the tree, and one into a sibling branch, both work.
+    db.apply(&Command::MoveDeck { id: grandchild, parent: None }, 0).expect("move to root");
+    db.apply(&Command::MoveDeck { id: child, parent: None }, 0).expect("move to root");
+    let roots = db.snapshot().expect("snapshot").decks.iter().filter(|deck| deck.parent.is_none()).count();
+    assert_eq!(roots, 3);
+}
+
+#[test]
+fn deck_names_are_unique_under_one_parent_and_free_elsewhere() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let first = deck(&mut db, "Japanese");
+    let second = deck(&mut db, "Spanish");
+
+    let error = db.apply(&Command::CreateDeck { parent: None, name: "JAPANESE".to_string() }, 0).expect_err("duplicate");
+    assert!(error.to_string().contains("UNIQUE"), "{error}");
+
+    db.apply(&Command::CreateDeck { parent: Some(first), name: "Verbs".to_string() }, 0).expect("nested");
+    db.apply(&Command::CreateDeck { parent: Some(second), name: "Verbs".to_string() }, 0).expect("nested elsewhere");
+}

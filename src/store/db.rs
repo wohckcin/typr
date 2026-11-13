@@ -72,6 +72,7 @@ impl Db {
                 )?;
                 Ok(Outcome::Changed(changed))
             }
+            Command::MoveDeck { id, parent } => self.move_deck(*id, *parent),
             Command::CreateCard { deck, markdown } => {
                 let sides = sides_of(markdown);
                 self.conn.execute(
@@ -205,6 +206,27 @@ impl Db {
             )?;
         }
         Ok(())
+    }
+
+    /// Move a deck under another, refusing a move that would put it inside its own subtree.
+    pub fn move_deck(&mut self, id: Id, parent: Option<Id>) -> Result<Outcome, StoreError> {
+        if let Some(parent) = parent {
+            let mut cursor = Some(parent);
+            while let Some(deck) = cursor {
+                if deck == id {
+                    return Err(StoreError::Cycle { deck: id });
+                }
+                cursor = self
+                    .conn
+                    .query_row("SELECT parent_id FROM deck WHERE id = ?1", params![deck], |row| row.get(0))
+                    .optional()?;
+            }
+        }
+        let changed = self.conn.execute(
+            "UPDATE deck SET parent_id = ?2 WHERE id = ?1",
+            params![id, parent],
+        )?;
+        Ok(Outcome::Changed(changed))
     }
 
     /// Append one grade and leave the prompt agreeing with it.
