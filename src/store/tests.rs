@@ -1217,7 +1217,7 @@ fn an_unsaved_draft_survives_reopening_the_database() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("library.sqlite3");
     {
-        let mut db = Db::open(&path).unwrap();
+        let db = Db::open(&path).unwrap();
         db.apply(
             &Command::SetDraft {
                 card: 0,
@@ -1228,7 +1228,7 @@ fn an_unsaved_draft_survives_reopening_the_database() {
         .unwrap();
     }
 
-    let mut db = Db::open(&path).unwrap();
+    let db = Db::open(&path).unwrap();
     assert_eq!(
         db.draft(0).unwrap().as_deref(),
         Some("half a card"),
@@ -1307,5 +1307,27 @@ fn a_percent_or_underscore_in_the_query_matches_itself() {
     assert!(
         db.search("_", None).expect("search").is_empty(),
         "an underscore is not a single-character wildcard"
+    );
+}
+
+#[test]
+fn a_failing_command_leaves_no_partial_write() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+
+    let error = db
+        .apply(
+            &Command::SetTags {
+                card: 404,
+                tags: vec!["orphan".to_string()],
+            },
+            0,
+        )
+        .expect_err("no card 404");
+
+    assert!(matches!(error, StoreError::Sqlite(_)), "{error:?}");
+    assert!(
+        db.tag_names().expect("the tag table").is_empty(),
+        "the tag written before the foreign key refused the card is gone"
     );
 }

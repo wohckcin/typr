@@ -235,12 +235,7 @@ impl Store for Handle {
     }
 }
 
-fn work(
-    mut db: Db,
-    rx: Receiver<Message>,
-    shared: Arc<Shared>,
-    clock: Box<dyn Clock + Send + Sync>,
-) {
+fn work(db: Db, rx: Receiver<Message>, shared: Arc<Shared>, clock: Box<dyn Clock + Send + Sync>) {
     while let Ok(message) = rx.recv() {
         let id = message.id;
         let result = db.apply(&message.command, clock.now_ms());

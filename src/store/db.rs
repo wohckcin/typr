@@ -66,7 +66,18 @@ impl Db {
 
     /// Apply one command and report what it did. `now_ms` is the caller's clock, never this
     /// module's.
-    pub fn apply(&mut self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
+    ///
+    /// The whole command is one transaction: a command that fails halfway leaves nothing behind,
+    /// and a command that writes several rows pays one fsync.
+    pub fn apply(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let outcome = self.dispatch(command, now_ms)?;
+        tx.commit()?;
+        Ok(outcome)
+    }
+
+    /// The body of one command, run inside the transaction [`Db::apply`] opens.
+    fn dispatch(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
         match command {
             Command::CreateDeck { parent, name } => {
                 self.conn.execute(
@@ -316,7 +327,7 @@ impl Db {
 
     /// Replace a card's tags. Matching is case-insensitive and the first casing ever written wins,
     /// so `Grammar` stays `Grammar` even when a later card types `grammar`.
-    pub fn set_tags(&mut self, card: Id, tags: &[String]) -> Result<Outcome, StoreError> {
+    pub fn set_tags(&self, card: Id, tags: &[String]) -> Result<Outcome, StoreError> {
         self.conn
             .execute("DELETE FROM card_tag WHERE card_id = ?1", params![card])?;
         for tag in tags {
@@ -361,7 +372,7 @@ impl Db {
     }
 
     /// Move a deck under another, refusing a move that would put it inside its own subtree.
-    pub fn move_deck(&mut self, id: Id, parent: Option<Id>) -> Result<Outcome, StoreError> {
+    pub fn move_deck(&self, id: Id, parent: Option<Id>) -> Result<Outcome, StoreError> {
         if let Some(parent) = parent {
             let mut cursor = Some(parent);
             while let Some(deck) = cursor {
@@ -390,7 +401,7 @@ impl Db {
     /// The recorded phase is where the grade *put* the prompt: a first success graduates the card
     /// and is recorded as `review`, a failure in the review phase is recorded as `relearn`.
     pub fn grade(
-        &mut self,
+        &self,
         card: Id,
         key: &str,
         grade: Grade,
@@ -422,7 +433,7 @@ impl Db {
 
     /// Drop a prompt's whole history and put it back to new, which is the only place records are
     /// ever removed: individually they are append-only.
-    pub fn reset_history(&mut self, card: Id, key: &str) -> Result<Outcome, StoreError> {
+    pub fn reset_history(&self, card: Id, key: &str) -> Result<Outcome, StoreError> {
         let removed = self.conn.execute(
             "DELETE FROM review_log WHERE card_id = ?1 AND key = ?2",
             params![card, key],
@@ -475,7 +486,7 @@ impl Db {
     }
 
     /// Recompute a prompt from its records, so the prompt row never says more than the history.
-    fn refresh_prompt(&mut self, card: Id, key: &str) -> Result<(), StoreError> {
+    fn refresh_prompt(&self, card: Id, key: &str) -> Result<(), StoreError> {
         let Some(folded) = self.fold_records(card, key)? else {
             return Ok(());
         };
@@ -666,7 +677,7 @@ impl Db {
 
     /// Rewrite every prompt from its records, which is what makes the prompt a cache rather than a
     /// second source of truth. Returns how many prompts were rewritten.
-    pub fn rebuild_prompts(&mut self) -> Result<usize, StoreError> {
+    pub fn rebuild_prompts(&self) -> Result<usize, StoreError> {
         let pairs = {
             let mut stmt = self
                 .conn
