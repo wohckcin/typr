@@ -122,6 +122,14 @@ pub struct Snapshot {
     pub revision: u64,
 }
 
+/// One prompt that is due now, with the card it belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DuePrompt {
+    pub card: Id,
+    pub key: String,
+    pub due_at: i64,
+}
+
 /// Grades recorded in a window, counting real reviews only.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Stats {
@@ -154,6 +162,7 @@ pub enum Command {
     RestoreCard { id: Id },
     SetDraft { card: Id, text: Option<String> },
     Grade { card: Id, key: String, grade: Grade, duration_ms: Option<i64> },
+    ResetHistory { card: Id, key: String },
     SetSetting { key: String, value: String },
     History { card: Id },
     Stats { from_ms: i64, to_ms: i64 },
@@ -259,6 +268,7 @@ pub trait Store: Send + Sync {
     fn restore_card(&self, id: Id) -> u64;
     fn set_draft(&self, card: Id, text: Option<&str>) -> u64;
     fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64;
+    fn reset_history(&self, card: Id, key: &str) -> u64;
     fn set_setting(&self, key: &str, value: &str) -> u64;
     fn history(&self, card: Id) -> u64;
     fn stats(&self, from_ms: i64, to_ms: i64) -> u64;

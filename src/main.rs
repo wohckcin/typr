@@ -28,5 +28,8 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
 }
 
 fn main() {
+    // The study day needs the machine's zone, and `time` only answers on the main thread, so read
+    // it before any worker starts.
+    let _ = typr::day::local_offset_ms();
     rune::run(AppSpec::new("typr", (960.0, 640.0), State::default, view));
 }

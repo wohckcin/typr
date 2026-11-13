@@ -343,3 +343,113 @@ fn prompt_keys_beyond_fwd_fold_into_their_own_prompts() {
         assert_eq!(db.prompt(card, key).expect("prompt"), db.fold_records(card, key).expect("fold"));
     }
 }
+
+/// Noon-ish of a fixed day, so a test never straddles a rollover.
+const NOON: i64 = 1_768_089_600_000 + 13 * 60 * 60 * 1000;
+const HOUR: i64 = 60 * 60 * 1000;
+const WEEK: i64 = 7 * 24 * HOUR;
+
+/// Put a prompt's schedule where a record would have put it.
+fn schedule(db: &mut Db, card: Id, due_at: i64) {
+    db.append_record_for_test(card, "fwd", Phase::Review, Grade::Remembered, due_at - 24 * HOUR, 24 * HOUR, Some(due_at))
+        .expect("record");
+    db.rebuild_prompts().expect("rebuild");
+}
+
+#[test]
+fn the_most_overdue_study_day_comes_first() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Urgency");
+
+    let week_ago = card(&mut db, deck, "old\n---\nancient");
+    let an_hour_ago = card(&mut db, deck, "recent\n---\nnow");
+    let two_hours_ago = card(&mut db, deck, "also recent\n---\nnow");
+    schedule(&mut db, week_ago, NOON - WEEK);
+    schedule(&mut db, an_hour_ago, NOON - HOUR);
+    schedule(&mut db, two_hours_ago, NOON - 2 * HOUR);
+
+    let due = db.due_prompts(NOON, 0, 11).expect("due");
+    assert_eq!(due.len(), 3);
+    assert_eq!(due[0].card, week_ago);
+}
+
+#[test]
+fn prompts_due_on_the_same_study_day_are_ordered_by_the_shuffle() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Ties");
+    let first = card(&mut db, deck, "a\n---\nb");
+    let second = card(&mut db, deck, "c\n---\nd");
+    schedule(&mut db, first, NOON - 2 * HOUR);
+    schedule(&mut db, second, NOON - HOUR);
+
+    let mut orders = std::collections::BTreeSet::new();
+    for seed in 1..40 {
+        let due = db.due_prompts(NOON, 0, seed).expect("due");
+        orders.insert(due.iter().map(|prompt| prompt.card).collect::<Vec<_>>());
+    }
+    assert_eq!(orders.len(), 2, "the timestamp must not decide the order: {orders:?}");
+}
+
+#[test]
+fn trashed_archived_and_note_prompts_are_never_due() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let archived_root = deck(&mut db, "Archived root");
+    let child = match db.apply(&Command::CreateDeck { parent: Some(archived_root), name: "Child".to_string() }, 0) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("{other:?}"),
+    };
+    let open = deck(&mut db, "Open");
+
+    let kept = card(&mut db, open, "kept\n---\nkept");
+    let trashed = card(&mut db, open, "trashed\n---\ntrashed");
+    let under_archived = card(&mut db, child, "archived\n---\narchived");
+    let note = card(&mut db, open, "just a note");
+    for card in [kept, trashed, under_archived, note] {
+        schedule(&mut db, card, NOON - HOUR);
+    }
+    db.apply(&Command::TrashCard { id: trashed }, NOON).expect("trash");
+    db.apply(&Command::ArchiveDeck { id: archived_root, archived: true }, NOON).expect("archive");
+
+    let due = db.due_prompts(NOON, 0, 5).expect("due");
+    assert_eq!(due.iter().map(|prompt| prompt.card).collect::<Vec<_>>(), vec![kept]);
+}
+
+#[test]
+fn a_prompt_due_tomorrow_is_not_in_todays_queue() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Tomorrow");
+    let card = card(&mut db, deck, "a\n---\nb");
+    schedule(&mut db, card, NOON + 24 * HOUR);
+
+    assert!(db.due_prompts(NOON, 0, 1).expect("due").is_empty());
+    assert_eq!(db.due_prompts(NOON + 25 * HOUR, 0, 1).expect("due").len(), 1);
+}
+
+#[test]
+fn resetting_history_makes_a_card_new_again() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Reset");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    let mut at = NOON - WEEK;
+    for _ in 0..3 {
+        db.apply(&Command::Grade { card, key: "fwd".to_string(), grade: Grade::Remembered, duration_ms: None }, at)
+            .expect("grade");
+        at += 24 * HOUR;
+    }
+    assert_eq!(db.review_count(card).expect("count"), 3);
+
+    db.apply(&Command::ResetHistory { card, key: "fwd".to_string() }, NOON).expect("reset");
+
+    assert!(db.history(card).expect("history").is_empty(), "learn records go too");
+    assert_eq!(db.review_count(card).expect("count"), 0);
+    assert_eq!(db.fold_records(card, "fwd").expect("fold"), None);
+    let prompt = db.prompt(card, "fwd").expect("prompt").expect("still exists");
+    assert_eq!((prompt.phase, prompt.interval_ms, prompt.due_at, prompt.reps), (Phase::Learn, 0, None, 0));
+    assert!(db.due_prompts(NOON, 0, 1).expect("due").is_empty(), "the card stops being due");
+}

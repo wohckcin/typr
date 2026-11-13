@@ -138,6 +138,10 @@ impl Store for Handle {
         self.submit(Command::Grade { card, key: key.to_string(), grade, duration_ms })
     }
 
+    fn reset_history(&self, card: Id, key: &str) -> u64 {
+        self.submit(Command::ResetHistory { card, key: key.to_string() })
+    }
+
     fn set_setting(&self, key: &str, value: &str) -> u64 {
         self.submit(Command::SetSetting { key: key.to_string(), value: value.to_string() })
     }

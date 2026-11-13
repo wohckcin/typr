@@ -10,8 +10,8 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
 
 use super::{
-    CardSummary, Command, Deck, Grade, Id, Outcome, Phase, ReviewRow, Settings, Snapshot, Stats,
-    StoreError, schema,
+    CardSummary, Command, Deck, DuePrompt, Grade, Id, Outcome, Phase, ReviewRow, Settings, Snapshot,
+    Stats, StoreError, schema,
 };
 
 /// A prompt as its records describe it.
@@ -131,6 +131,7 @@ impl Db {
             Command::Grade { card, key, grade, duration_ms } => {
                 self.grade(*card, key, *grade, *duration_ms, now_ms)
             }
+            Command::ResetHistory { card, key } => self.reset_history(*card, key),
             Command::History { card } => Ok(Outcome::History(self.history(*card)?)),
             Command::Stats { from_ms, to_ms } => Ok(Outcome::Stats(self.stats(*from_ms, *to_ms)?)),
         }
@@ -238,6 +239,21 @@ impl Db {
         Ok(Outcome::Graded { phase: outcome.phase, due_at: outcome.due_at })
     }
 
+    /// Drop a prompt's whole history and put it back to new, which is the only place records are
+    /// ever removed: individually they are append-only.
+    pub fn reset_history(&mut self, card: Id, key: &str) -> Result<Outcome, StoreError> {
+        let removed = self.conn.execute(
+            "DELETE FROM review_log WHERE card_id = ?1 AND key = ?2",
+            params![card, key],
+        )?;
+        self.conn.execute(
+            "UPDATE prompt SET phase = 'learn', due_at = NULL, interval_ms = 0, reps = 0, lapses = 0
+             WHERE card_id = ?1 AND key = ?2",
+            params![card, key],
+        )?;
+        Ok(Outcome::Changed(removed))
+    }
+
     /// How many real reviews a card has had: learning cycles are not reviews.
     pub fn review_count(&self, card: Id) -> Result<u32, StoreError> {
         let count: i64 = self.conn.query_row(
@@ -306,6 +322,58 @@ impl Db {
             params![card, key, phase.as_str(), at, grade.as_str(), interval_ms, due_at],
         )?;
         Ok(())
+    }
+
+    /// Prompts that are due now, most overdue study day first and shuffled within a day.
+    ///
+    /// The bucket is whole study days, not seconds: two prompts that became due on the same day are
+    /// equally urgent, and a timestamp is not an urgency, so the order inside a day is the shuffle's.
+    pub fn due_prompts(
+        &self,
+        now_ms: i64,
+        offset_ms: i64,
+        seed: u64,
+    ) -> Result<Vec<DuePrompt>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "WITH RECURSIVE archived_deck(id) AS (
+                 SELECT id FROM deck WHERE archived = 1
+                 UNION
+                 SELECT d.id FROM deck d JOIN archived_deck a ON d.parent_id = a.id
+             )
+             SELECT p.card_id, p.key, p.due_at
+             FROM prompt p JOIN card c ON c.id = p.card_id
+             WHERE p.due_at IS NOT NULL
+               AND p.due_at <= ?1
+               AND c.trashed_at IS NULL
+               AND c.archived = 0
+               AND c.sides >= 2
+               AND c.deck_id NOT IN (SELECT id FROM archived_deck)",
+        )?;
+        let mut due = stmt
+            .query_map(params![now_ms], |row| {
+                Ok(DuePrompt { card: row.get(0)?, key: row.get(1)?, due_at: row.get(2)? })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let today = crate::day::study_day(now_ms, offset_ms);
+        // Stable sort by overdue study days, so equal days keep the query's order until shuffled.
+        due.sort_by_key(|prompt| -(today - crate::day::study_day(prompt.due_at, offset_ms)));
+
+        let mut shuffle = crate::shuffle::Shuffle::new(seed);
+        let mut ordered = Vec::with_capacity(due.len());
+        let mut rest = due.as_slice();
+        while let Some(first) = rest.first() {
+            let overdue = today - crate::day::study_day(first.due_at, offset_ms);
+            let same = rest
+                .iter()
+                .position(|prompt| today - crate::day::study_day(prompt.due_at, offset_ms) != overdue)
+                .unwrap_or(rest.len());
+            let mut group: Vec<DuePrompt> = rest[..same].to_vec();
+            shuffle.reorder(&mut group);
+            ordered.extend(group);
+            rest = &rest[same..];
+        }
+        Ok(ordered)
     }
 
     /// One prompt row as stored.
