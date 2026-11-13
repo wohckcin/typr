@@ -62,7 +62,8 @@ impl Session {
 
     /// The sides still hidden.
     pub fn hidden(&self) -> usize {
-        self.current().map_or(0, |entry| entry.sides.len().saturating_sub(self.revealed))
+        self.current()
+            .map_or(0, |entry| entry.sides.len().saturating_sub(self.revealed))
     }
 
     /// The next side, which revealing would show.
@@ -74,7 +75,9 @@ impl Session {
     /// Whether the grade is offered: only after the last side, and not while revisiting.
     pub fn gradeable(&self) -> bool {
         match self.current() {
-            Some(entry) => !self.read_only && self.revealed >= entry.sides.len() && self.awaiting.is_none(),
+            Some(entry) => {
+                !self.read_only && self.revealed >= entry.sides.len() && self.awaiting.is_none()
+            }
             None => false,
         }
     }
@@ -104,9 +107,22 @@ impl Session {
         }
     }
 
+    /// The store did not take the grade: the card stays as it was, so it can be answered again.
+    pub fn refuse(&mut self, id: u64) {
+        if let Some((awaiting, _)) = self.awaiting {
+            if awaiting != id {
+                return;
+            }
+            self.awaiting = None;
+        }
+        self.pending = None;
+    }
+
     /// The store has answered `id`; the session can move on.
     pub fn acknowledge(&mut self, id: u64, now_ms: i64) -> bool {
-        let Some((awaiting, grade)) = self.awaiting else { return false };
+        let Some((awaiting, grade)) = self.awaiting else {
+            return false;
+        };
         if awaiting != id {
             return false;
         }

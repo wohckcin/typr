@@ -6,7 +6,10 @@ use crate::store::Grade;
 const NOON: i64 = 1_760_000_000_000;
 
 fn entry(card: i64, sides: &[&str]) -> Entry {
-    Entry { card: card as crate::store::Id, sides: sides.iter().map(|s| s.to_string()).collect() }
+    Entry {
+        card: card as crate::store::Id,
+        sides: sides.iter().map(|s| s.to_string()).collect(),
+    }
 }
 
 /// Answers the card on screen: reveal everything, grade, and acknowledge.
@@ -24,14 +27,21 @@ fn answer(session: &mut Session, grade: Grade, now_ms: i64) {
 fn a_new_card_is_scheduled_only_after_its_last_side() {
     let mut session = Session::new(Queue::New, vec![entry(1, &["front"]), entry(2, &["front"])]);
     assert_eq!(session.current().unwrap().card, 1);
-    assert!(!session.gradeable(), "nothing is graded before the last side");
+    assert!(
+        !session.gradeable(),
+        "nothing is graded before the last side"
+    );
     assert_eq!(session.grade(Grade::Remembered), None);
 
     assert!(session.reveal());
     assert!(session.gradeable());
 
     answer(&mut session, Grade::Remembered, NOON);
-    assert_eq!(session.current().unwrap().card, 2, "the next new card follows");
+    assert_eq!(
+        session.current().unwrap().card,
+        2,
+        "the next new card follows"
+    );
     assert_eq!(session.grades, vec![Grade::Remembered]);
 }
 
@@ -58,7 +68,12 @@ fn a_three_sided_card_is_one_review() {
 fn a_forgotten_new_card_returns_last_in_the_queue() {
     let mut session = Session::new(
         Queue::New,
-        vec![entry(1, &["a"]), entry(2, &["b"]), entry(3, &["c"]), entry(4, &["d"])],
+        vec![
+            entry(1, &["a"]),
+            entry(2, &["b"]),
+            entry(3, &["c"]),
+            entry(4, &["d"]),
+        ],
     );
 
     answer(&mut session, Grade::Forgot, NOON);
@@ -67,13 +82,20 @@ fn a_forgotten_new_card_returns_last_in_the_queue() {
         order.push(session.current().unwrap().card);
         answer(&mut session, Grade::Remembered, NOON);
     }
-    assert_eq!(order, vec![2, 3, 4, 1], "the forgotten card comes back last");
+    assert_eq!(
+        order,
+        vec![2, 3, 4, 1],
+        "the forgotten card comes back last"
+    );
     assert_eq!(session.remaining(), 0);
 }
 
 #[test]
 fn going_back_shows_a_graded_card_read_only_and_forward_returns() {
-    let mut session = Session::new(Queue::New, vec![entry(1, &["one", "two"]), entry(2, &["front"])]);
+    let mut session = Session::new(
+        Queue::New,
+        vec![entry(1, &["one", "two"]), entry(2, &["front"])],
+    );
     answer(&mut session, Grade::Remembered, NOON);
     assert_eq!(session.current().unwrap().card, 2);
 
@@ -93,10 +115,18 @@ fn going_forward_leaves_an_ungraded_card_queued() {
     let mut session = Session::new(Queue::New, vec![entry(1, &["a"]), entry(2, &["b"])]);
     assert!(session.forward());
     assert_eq!(session.current().unwrap().card, 2);
-    assert_eq!(session.remaining(), 2, "the skipped card is still to answer");
+    assert_eq!(
+        session.remaining(),
+        2,
+        "the skipped card is still to answer"
+    );
 
     answer(&mut session, Grade::Remembered, NOON);
-    assert_eq!(session.current().unwrap().card, 1, "and it comes round again");
+    assert_eq!(
+        session.current().unwrap().card,
+        1,
+        "and it comes round again"
+    );
 }
 
 #[test]
@@ -119,13 +149,29 @@ fn a_forgotten_due_card_returns_when_its_relearning_step_lands() {
     let mut session = Session::new(Queue::Due, vec![entry(1, &["front"]), entry(2, &["back"])]);
     answer(&mut session, Grade::Forgot, NOON);
     assert_eq!(session.current().unwrap().card, 2);
-    assert_eq!(session.remaining(), 2, "the forgotten card is waiting, not queued");
+    assert_eq!(
+        session.remaining(),
+        2,
+        "the forgotten card is waiting, not queued"
+    );
 
-    assert_eq!(session.advance_clock(NOON + LEARNING_STEP_MS - 1), 0, "not yet");
-    assert_eq!(session.advance_clock(NOON + LEARNING_STEP_MS), 1, "ten minutes later it is back");
+    assert_eq!(
+        session.advance_clock(NOON + LEARNING_STEP_MS - 1),
+        0,
+        "not yet"
+    );
+    assert_eq!(
+        session.advance_clock(NOON + LEARNING_STEP_MS),
+        1,
+        "ten minutes later it is back"
+    );
     assert_eq!(session.current().unwrap().card, 2);
     answer(&mut session, Grade::Remembered, NOON);
-    assert_eq!(session.current().unwrap().card, 1, "the relearning step returns within the session");
+    assert_eq!(
+        session.current().unwrap().card,
+        1,
+        "the relearning step returns within the session"
+    );
 }
 
 #[test]
@@ -143,7 +189,35 @@ fn a_grade_is_ignored_until_the_store_answers() {
     assert!(session.grade(Grade::Remembered).is_some());
     session.sent(3);
     assert_eq!(session.grade(Grade::Forgot), None, "one grade at a time");
-    assert!(!session.acknowledge(4, NOON), "a different id is not this grade");
+    assert!(
+        !session.acknowledge(4, NOON),
+        "a different id is not this grade"
+    );
     assert!(session.acknowledge(3, NOON));
     assert_eq!(session.grades, vec![Grade::Remembered]);
+}
+
+#[test]
+fn a_refused_grade_frees_the_card_again() {
+    let mut session = Session::new(Queue::Due, vec![entry(1, &["front"])]);
+    assert!(session.reveal());
+
+    let (_, grade) = session.grade(Grade::Remembered).expect("offered");
+    assert_eq!(grade, Grade::Remembered);
+    session.sent(4);
+    assert!(!session.gradeable(), "the card waits on the store");
+
+    session.refuse(4);
+    assert!(session.gradeable(), "a refused grade frees the card");
+    assert_eq!(session.remaining(), 1, "and the card is still unanswered");
+    assert!(session.grade(Grade::Remembered).is_some());
+}
+
+#[test]
+fn a_grade_that_was_never_sent_can_be_taken_again() {
+    let mut session = Session::new(Queue::New, vec![entry(1, &["front"])]);
+    assert!(session.reveal());
+    assert!(session.grade(Grade::Forgot).is_some());
+    session.refuse(0);
+    assert!(session.gradeable());
 }

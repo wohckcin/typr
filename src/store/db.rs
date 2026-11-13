@@ -15,6 +15,19 @@ use super::{
 };
 use unicode_normalization::UnicodeNormalization;
 
+/// A record as a later build would have written it, for the extra keys a future version schedules.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Record {
+    pub(crate) card: Id,
+    pub(crate) key: &'static str,
+    pub(crate) phase: Phase,
+    pub(crate) grade: Grade,
+    pub(crate) at: i64,
+    pub(crate) interval_ms: i64,
+    pub(crate) due_at: Option<i64>,
+}
+
 /// A prompt as its records describe it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Folded {
@@ -39,7 +52,9 @@ impl Db {
     pub fn open(path: &Path) -> Result<Self, StoreError> {
         let conn = Connection::open_with_flags(
             path,
-            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         let mut db = Self { conn };
         db.conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -60,10 +75,9 @@ impl Db {
                 Ok(Outcome::Deck(self.conn.last_insert_rowid()))
             }
             Command::RenameDeck { id, name } => {
-                let changed = self.conn.execute(
-                    "UPDATE deck SET name = ?2 WHERE id = ?1",
-                    params![id, name],
-                )?;
+                let changed = self
+                    .conn
+                    .execute("UPDATE deck SET name = ?2 WHERE id = ?1", params![id, name])?;
                 Ok(Outcome::Changed(changed))
             }
             Command::ArchiveDeck { id, archived } => {
@@ -83,7 +97,10 @@ impl Db {
                 )?;
                 let id = self.conn.last_insert_rowid();
                 self.sync_prompt(id, sides)?;
-                self.conn.execute("DELETE FROM editor_draft WHERE card_id IN (0, ?1)", params![id])?;
+                self.conn.execute(
+                    "DELETE FROM editor_draft WHERE card_id IN (0, ?1)",
+                    params![id],
+                )?;
                 Ok(Outcome::Card(id))
             }
             Command::SaveCard { id, markdown } => {
@@ -93,7 +110,8 @@ impl Db {
                     params![id, markdown, sides as i64, folded(markdown), now_ms],
                 )?;
                 self.sync_prompt(*id, sides)?;
-                self.conn.execute("DELETE FROM editor_draft WHERE card_id = ?1", params![id])?;
+                self.conn
+                    .execute("DELETE FROM editor_draft WHERE card_id = ?1", params![id])?;
                 Ok(Outcome::Changed(changed))
             }
             Command::MoveCard { id, deck } => {
@@ -112,7 +130,9 @@ impl Db {
                 Ok(Outcome::Changed(changed))
             }
             Command::EmptyTrash => {
-                let removed = self.conn.execute("DELETE FROM card WHERE trashed_at IS NOT NULL", [])?;
+                let removed = self
+                    .conn
+                    .execute("DELETE FROM card WHERE trashed_at IS NOT NULL", [])?;
                 Ok(Outcome::Changed(removed))
             }
             Command::TrashCard { id } => {
@@ -123,9 +143,10 @@ impl Db {
                 Ok(Outcome::Changed(changed))
             }
             Command::RestoreCard { id } => {
-                let changed = self
-                    .conn
-                    .execute("UPDATE card SET trashed_at = NULL WHERE id = ?1", params![id])?;
+                let changed = self.conn.execute(
+                    "UPDATE card SET trashed_at = NULL WHERE id = ?1",
+                    params![id],
+                )?;
                 Ok(Outcome::Changed(changed))
             }
             Command::SetDraft { card, text } => match text {
@@ -152,16 +173,23 @@ impl Db {
                 )?;
                 Ok(Outcome::Ok)
             }
-            Command::Grade { card, key, grade, duration_ms } => {
-                self.grade(*card, key, *grade, *duration_ms, now_ms)
-            }
+            Command::Grade {
+                card,
+                key,
+                grade,
+                duration_ms,
+            } => self.grade(*card, key, *grade, *duration_ms, now_ms),
             Command::ResetHistory { card, key } => self.reset_history(*card, key),
-            Command::DuePrompts { now_ms, offset_ms, seed } => {
-                Ok(Outcome::Due(self.due_prompts(*now_ms, *offset_ms, *seed)?))
-            }
-            Command::NewPrompts { now_ms, offset_ms, seed } => {
-                Ok(Outcome::New(self.new_prompts(*now_ms, *offset_ms, *seed)?))
-            }
+            Command::DuePrompts {
+                now_ms,
+                offset_ms,
+                seed,
+            } => Ok(Outcome::Due(self.due_prompts(*now_ms, *offset_ms, *seed)?)),
+            Command::NewPrompts {
+                now_ms,
+                offset_ms,
+                seed,
+            } => Ok(Outcome::New(self.new_prompts(*now_ms, *offset_ms, *seed)?)),
             Command::Search { query, deck } => Ok(Outcome::Search(self.search(query, *deck)?)),
             Command::History { card } => Ok(Outcome::History(self.history(*card)?)),
             Command::Stats { from_ms, to_ms } => Ok(Outcome::Stats(self.stats(*from_ms, *to_ms)?)),
@@ -209,7 +237,9 @@ impl Db {
                 "SELECT ct.card_id, t.name FROM card_tag ct JOIN tag t ON t.id = ct.tag_id
                  ORDER BY t.name COLLATE NOCASE",
             )?;
-            let pairs = stmt.query_map([], |row| Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?)))?;
+            let pairs = stmt.query_map([], |row| {
+                Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?))
+            })?;
             for pair in pairs {
                 let (card, name) = pair?;
                 if let Some(summary) = cards.iter_mut().find(|summary| summary.id == card) {
@@ -218,16 +248,27 @@ impl Db {
             }
             cards
         };
-        Ok(Snapshot { decks, cards, settings: self.settings()?, revision: 0 })
+        Ok(Snapshot {
+            decks,
+            cards,
+            settings: self.settings()?,
+            revision: 0,
+        })
     }
 
     pub fn settings(&self) -> Result<Settings, StoreError> {
         let limit: Option<String> = self
             .conn
-            .query_row("SELECT value FROM settings WHERE key = 'new_per_day'", [], |row| row.get(0))
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'new_per_day'",
+                [],
+                |row| row.get(0),
+            )
             .optional()?;
         Ok(Settings {
-            new_per_day: limit.and_then(|v| v.parse().ok()).unwrap_or(Settings::DEFAULT_NEW_PER_DAY),
+            new_per_day: limit
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(Settings::DEFAULT_NEW_PER_DAY),
         })
     }
 
@@ -235,7 +276,9 @@ impl Db {
     /// and history stay intact and come back when it has two sides again.
     /// The text as it was left, if it was left unsaved.
     pub fn draft(&self, card: Id) -> Result<Option<String>, StoreError> {
-        let mut stmt = self.conn.prepare("SELECT text FROM editor_draft WHERE card_id = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT text FROM editor_draft WHERE card_id = ?1")?;
         let mut rows = stmt.query(params![card])?;
         match rows.next()? {
             Some(row) => Ok(Some(row.get(0)?)),
@@ -269,15 +312,22 @@ impl Db {
     /// Replace a card's tags. Matching is case-insensitive and the first casing ever written wins,
     /// so `Grammar` stays `Grammar` even when a later card types `grammar`.
     pub fn set_tags(&mut self, card: Id, tags: &[String]) -> Result<Outcome, StoreError> {
-        self.conn.execute("DELETE FROM card_tag WHERE card_id = ?1", params![card])?;
+        self.conn
+            .execute("DELETE FROM card_tag WHERE card_id = ?1", params![card])?;
         for tag in tags {
             let name = tag.trim();
             if name.is_empty() {
                 continue;
             }
-            self.conn
-                .execute("INSERT INTO tag (name) VALUES (?1) ON CONFLICT DO NOTHING", params![name])?;
-            let id: Id = self.conn.query_row("SELECT id FROM tag WHERE name = ?1", params![name], |row| row.get(0))?;
+            self.conn.execute(
+                "INSERT INTO tag (name) VALUES (?1) ON CONFLICT DO NOTHING",
+                params![name],
+            )?;
+            let id: Id = self.conn.query_row(
+                "SELECT id FROM tag WHERE name = ?1",
+                params![name],
+                |row| row.get(0),
+            )?;
             self.conn.execute(
                 "INSERT OR IGNORE INTO card_tag (card_id, tag_id) VALUES (?1, ?2)",
                 params![card, id],
@@ -288,7 +338,9 @@ impl Db {
 
     /// The tags currently in use, each in its first-written casing.
     pub fn tag_names(&self) -> Result<Vec<String>, StoreError> {
-        let mut stmt = self.conn.prepare("SELECT name FROM tag ORDER BY name COLLATE NOCASE")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name FROM tag ORDER BY name COLLATE NOCASE")?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
@@ -313,7 +365,11 @@ impl Db {
                 }
                 cursor = self
                     .conn
-                    .query_row("SELECT parent_id FROM deck WHERE id = ?1", params![deck], |row| row.get(0))
+                    .query_row(
+                        "SELECT parent_id FROM deck WHERE id = ?1",
+                        params![deck],
+                        |row| row.get(0),
+                    )
                     .optional()?;
             }
         }
@@ -353,7 +409,10 @@ impl Db {
             ],
         )?;
         self.refresh_prompt(card, key)?;
-        Ok(Outcome::Graded { phase: outcome.phase, due_at: outcome.due_at })
+        Ok(Outcome::Graded {
+            phase: outcome.phase,
+            due_at: outcome.due_at,
+        })
     }
 
     /// Drop a prompt's whole history and put it back to new, which is the only place records are
@@ -374,7 +433,9 @@ impl Db {
     /// Every record in the log, for tests that prove an emptied card takes its history with it.
     #[cfg(test)]
     pub fn record_total(&self) -> Result<i64, StoreError> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM review_log", [], |row| row.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM review_log", [], |row| row.get(0))?)
     }
 
     /// How many real reviews a card has had: learning cycles are not reviews.
@@ -400,16 +461,19 @@ impl Db {
                 },
             )
             .map_err(|error| match error {
-                rusqlite::Error::QueryReturnedNoRows => {
-                    StoreError::NoPrompt { card, key: key.to_string() }
-                }
+                rusqlite::Error::QueryReturnedNoRows => StoreError::NoPrompt {
+                    card,
+                    key: key.to_string(),
+                },
                 other => StoreError::Sqlite(other),
             })
     }
 
     /// Recompute a prompt from its records, so the prompt row never says more than the history.
     fn refresh_prompt(&mut self, card: Id, key: &str) -> Result<(), StoreError> {
-        let Some(folded) = self.fold_records(card, key)? else { return Ok(()) };
+        let Some(folded) = self.fold_records(card, key)? else {
+            return Ok(());
+        };
         self.conn.execute(
             "UPDATE prompt SET phase = ?3, due_at = ?4, interval_ms = ?5, reps = ?6, lapses = ?7
              WHERE card_id = ?1 AND key = ?2",
@@ -429,20 +493,19 @@ impl Db {
     /// Append a record for a key this build does not schedule yet, standing in for the rows a
     /// later version writes for reverse, cloze and mask prompts.
     #[cfg(test)]
-    pub(crate) fn append_record_for_test(
-        &mut self,
-        card: Id,
-        key: &str,
-        phase: Phase,
-        grade: Grade,
-        at: i64,
-        interval_ms: i64,
-        due_at: Option<i64>,
-    ) -> Result<(), StoreError> {
+    pub(crate) fn append_record_for_test(&mut self, record: Record) -> Result<(), StoreError> {
         self.conn.execute(
             "INSERT INTO review_log (card_id, key, phase, at, grade, interval_ms, due_at, duration_ms)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
-            params![card, key, phase.as_str(), at, grade.as_str(), interval_ms, due_at],
+            params![
+                record.card,
+                record.key,
+                record.phase.as_str(),
+                record.at,
+                record.grade.as_str(),
+                record.interval_ms,
+                record.due_at
+            ],
         )?;
         Ok(())
     }
@@ -474,7 +537,11 @@ impl Db {
         )?;
         let mut due = stmt
             .query_map(params![now_ms], |row| {
-                Ok(DuePrompt { card: row.get(0)?, key: row.get(1)?, due_at: row.get(2)? })
+                Ok(DuePrompt {
+                    card: row.get(0)?,
+                    key: row.get(1)?,
+                    due_at: row.get(2)?,
+                })
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -489,7 +556,9 @@ impl Db {
             let overdue = today - crate::day::study_day(first.due_at, offset_ms);
             let same = rest
                 .iter()
-                .position(|prompt| today - crate::day::study_day(prompt.due_at, offset_ms) != overdue)
+                .position(|prompt| {
+                    today - crate::day::study_day(prompt.due_at, offset_ms) != overdue
+                })
                 .unwrap_or(rest.len());
             let mut group: Vec<DuePrompt> = rest[..same].to_vec();
             shuffle.reorder(&mut group);
@@ -504,9 +573,9 @@ impl Db {
     /// A grade before the card ever left the new queue does not count: the cap is on cards
     /// *learned*, not on how many times a new card was answered today.
     pub fn learned_on(&self, day: i64, offset_ms: i64) -> Result<u32, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT MIN(at) FROM review_log WHERE phase <> 'learn' GROUP BY card_id",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT MIN(at) FROM review_log WHERE phase <> 'learn' GROUP BY card_id")?;
         let firsts = stmt
             .query_map([], |row| row.get::<_, i64>(0))?
             .collect::<Result<Vec<_>, _>>()?;
@@ -543,7 +612,12 @@ impl Db {
              ORDER BY p.card_id, p.key",
         )?;
         let waiting = stmt
-            .query_map([], |row| Ok(NewPrompt { card: row.get(0)?, key: row.get(1)? }))?
+            .query_map([], |row| {
+                Ok(NewPrompt {
+                    card: row.get(0)?,
+                    key: row.get(1)?,
+                })
+            })?
             .collect::<Result<Vec<_>, _>>()?;
 
         let allowance = self.settings()?.new_per_day as usize;
@@ -592,7 +666,9 @@ impl Db {
             let mut stmt = self
                 .conn
                 .prepare("SELECT DISTINCT card_id, key FROM review_log ORDER BY card_id, key")?;
-            let rows = stmt.query_map([], |row| Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?)))?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?))
+            })?;
             rows.collect::<Result<Vec<_>, _>>()?
         };
         for (card, key) in &pairs {
@@ -614,7 +690,9 @@ impl Db {
     pub fn fold_records(&self, card: Id, key: &str) -> Result<Option<Folded>, StoreError> {
         let rows = self.history(card)?;
         let counted: Vec<&ReviewRow> = rows.iter().filter(|row| row.key == key).collect();
-        let Some(last) = counted.last() else { return Ok(None) };
+        let Some(last) = counted.last() else {
+            return Ok(None);
+        };
         Ok(Some(Folded {
             phase: last.phase,
             interval_ms: last.interval_ms,
@@ -629,17 +707,19 @@ impl Db {
 
     /// Grades recorded between two instants, counting real reviews only.
     pub fn stats(&self, from_ms: i64, to_ms: i64) -> Result<Stats, StoreError> {
-        self.conn.query_row(
-            "SELECT COUNT(*), COALESCE(SUM(grade = 'forgot'), 0) FROM review_log
+        self.conn
+            .query_row(
+                "SELECT COUNT(*), COALESCE(SUM(grade = 'forgot'), 0) FROM review_log
              WHERE phase <> 'learn' AND at >= ?1 AND at < ?2",
-            params![from_ms, to_ms],
-            |row| {
-                Ok(Stats {
-                    reviews: row.get::<_, i64>(0)?.max(0) as u32,
-                    lapses: row.get::<_, i64>(1)?.max(0) as u32,
-                })
-            },
-        ).map_err(Into::into)
+                params![from_ms, to_ms],
+                |row| {
+                    Ok(Stats {
+                        reviews: row.get::<_, i64>(0)?.max(0) as u32,
+                        lapses: row.get::<_, i64>(1)?.max(0) as u32,
+                    })
+                },
+            )
+            .map_err(Into::into)
     }
 
     /// Every grade a card ever got, oldest first, learning cycles included.
@@ -665,7 +745,7 @@ impl Db {
     /// Cards whose folded text contains the folded query, restricted to `deck`'s subtree when given.
     /// Trashed cards never match.
     pub fn search(&self, query: &str, deck: Option<Id>) -> Result<Vec<Id>, StoreError> {
-        let needle = folded(query);
+        let needle = escape_like(&folded(query));
         if needle.is_empty() {
             return Ok(Vec::new());
         }
@@ -677,7 +757,7 @@ impl Db {
              )
              SELECT c.id FROM card c
              WHERE c.trashed_at IS NULL
-               AND c.search_text LIKE '%' || ?1 || '%'
+               AND c.search_text LIKE '%' || ?1 || '%' ESCAPE '\\'
                AND (?2 IS NULL OR c.deck_id IN (SELECT id FROM subtree))
              ORDER BY c.id",
         )?;
@@ -685,11 +765,16 @@ impl Db {
             .query_map(params![needle, deck], |row| row.get(0))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ids)
-    }}
+    }
+}
 
 /// The first line that has words in it, cut to fit a row.
 fn preview(markdown: &str) -> String {
-    let line = markdown.lines().map(str::trim).find(|line| !line.is_empty()).unwrap_or("");
+    let line = markdown
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("");
     let mut cut: String = line.chars().take(80).collect();
     if line.chars().count() > 80 {
         cut.push('…');
@@ -699,6 +784,18 @@ fn preview(markdown: &str) -> String {
 
 fn sides_of(markdown: &str) -> usize {
     crate::sides::split(markdown).len()
+}
+
+/// A LIKE pattern's metacharacters, escaped so a typed `%` or `_` matches itself.
+fn escape_like(needle: &str) -> String {
+    let mut escaped = String::with_capacity(needle.len());
+    for character in needle.chars() {
+        if matches!(character, '\\' | '%' | '_') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
 }
 
 /// What search compares against: the text in the case a `LIKE` can fold.

@@ -31,8 +31,13 @@ pub const BINDINGS: &[(&str, &str)] = &[
 ];
 
 fn answer<S: Host>(s: &mut S, grade: Grade) {
-    if let Some((card, grade)) = s.session_mut().grade(grade) {
-        let id = s.submit_grade(card, grade);
+    let Some((card, grade)) = s.session_mut().grade(grade) else {
+        return;
+    };
+    let id = s.submit_grade(card, grade);
+    if id == 0 {
+        s.session_mut().refuse(0);
+    } else {
         s.session_mut().sent(id);
     }
 }
@@ -66,13 +71,15 @@ pub fn key<S: Host>(s: &mut S, event: &KeyEvent) -> bool {
     }
 }
 
-fn bindings<S: Host>() -> El {
+fn bindings() -> El {
     let t = tok::theme(true);
     row()
         .key("bindings")
         .gap(12.0)
         .children(BINDINGS.iter().map(|(key, action)| {
-            text(format!("{key}  {action}")).font(type_::LABEL).color(t.text_secondary)
+            text(format!("{key}  {action}"))
+                .font(type_::LABEL)
+                .color(t.text_secondary)
         }))
         .gap(12.0)
 }
@@ -92,13 +99,27 @@ pub fn view<S: Host>(s: &S) -> El {
     let session = s.session();
     let entry = session.current();
     let shown: Vec<String> = entry
-        .map(|entry| entry.sides.iter().take(session.revealed()).cloned().collect())
+        .map(|entry| {
+            entry
+                .sides
+                .iter()
+                .take(session.revealed())
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default();
     let body = shown
         .iter()
         .map(|side| Markdown::new(side.clone()).render(&MarkdownStyle::neutral(true)));
 
-    let mut card = col().key("session-card").grow(1.0).w_full().gap(16.0).scroll(ScrollSpec { stick_bottom: false });
+    let mut card = col()
+        .key("session-card")
+        .grow(1.0)
+        .w_full()
+        .gap(16.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        });
     for el in body {
         card = card.child(el);
     }
@@ -136,10 +157,14 @@ pub fn view<S: Host>(s: &S) -> El {
         .fill(t.bg)
         .padding(24.0)
         .gap(16.0)
-        .child(text(side_heading::<S>(s)).font(type_::LABEL).color(t.text_secondary))
+        .child(
+            text(side_heading::<S>(s))
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
         .child(card)
         .child(answers)
-        .child(bindings::<S>())
+        .child(bindings())
         .on_key(|s: &mut S, event: &KeyEvent, _: &mut Tx| key::<S>(s, event));
     root(body, Vec::new())
 }
@@ -148,7 +173,11 @@ pub fn view<S: Host>(s: &S) -> El {
 pub fn summary<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let session = s.session();
-    let remembered = session.grades.iter().filter(|g| **g == Grade::Remembered).count();
+    let remembered = session
+        .grades
+        .iter()
+        .filter(|g| **g == Grade::Remembered)
+        .count();
     let forgot = session.grades.len() - remembered;
     let body = col()
         .key("summary")
@@ -164,7 +193,9 @@ pub fn summary<S: Host>(s: &S) -> El {
                 .color(t.text_secondary),
         )
         .child(
-            text(format!("{} due now", s.due_now())).key("summary-due").color(t.text_secondary),
+            text(format!("{} due now", s.due_now()))
+                .key("summary-due")
+                .color(t.text_secondary),
         )
         .child(
             Button::new("Back to library")

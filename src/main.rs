@@ -1,23 +1,23 @@
 //! `typr` — a local-first flashcard app on Rune.
 
-use rune::machine::Seq;
-use rune::{AppSpec, Cx, El, Tx, Waker, col, text};
+use rune::{AppSpec, Cx, El, Tx, Waker};
 use typr::attachments::Attachments;
+use typr::clock::Clock;
 use typr::editor::{self, Editor};
 use typr::history::{self, History};
 use typr::library::{self, Library};
 use typr::screen::{Queue, Screen};
 use typr::session::{Entry, Session};
-use typr::clock::Clock;
 use typr::store::{self, Grade, Handle, Id, Outcome, Store};
 use typr::study::{self, Host};
 use typr::{day, sides};
 
+/// A named starting state for a headless `--scene` run.
+type Scene = (&'static str, fn(&mut State));
+
 struct State {
     /// Drives `screen::step`; the library screen has no events of its own yet, so nothing reads
     /// it until the editor and session screens arrive.
-    #[allow(dead_code)]
-    seq: Seq,
     screen: Screen,
     library: Library,
     editor: Editor,
@@ -37,7 +37,6 @@ struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            seq: Seq::default(),
             screen: Screen::Library,
             library: Library::default(),
             editor: Editor::default(),
@@ -135,10 +134,10 @@ impl State {
         let now = typr::clock::SystemClock.now_ms();
         let offset = day::local_offset_ms();
         let seed = now as u64;
-        match queue {
-            Queue::Due => store.due_prompts(now, offset, seed),
-            Queue::New => store.new_prompts(now, offset, seed),
-        };
+        store.due_prompts(now, offset, seed);
+        if queue == Queue::New {
+            store.new_prompts(now, offset, seed);
+        }
         self.wanted = Some(queue);
     }
 
@@ -152,25 +151,25 @@ impl State {
                 let card = snapshot.cards.iter().find(|card| card.id == id)?;
                 Some(Entry {
                     card: card.id,
-                    sides: sides::split(&card.markdown).into_iter().map(str::to_string).collect(),
+                    sides: sides::split(&card.markdown)
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect(),
                 })
             })
             .collect();
         if entries.is_empty() {
             return;
         }
-        self.due_now = snapshot
-            .cards
-            .iter()
-            .filter(|_card| queue == Queue::Due)
-            .count();
         self.session = Session::new(queue, entries);
         self.screen = Screen::Session { queue };
     }
 
     /// Answer what the store has said. A grade the store refused is dropped, so the card stays.
     fn drain(&mut self) -> bool {
-        let Some(store) = &self.store else { return false };
+        let Some(store) = &self.store else {
+            return false;
+        };
         let events = store.poll();
         let now = typr::clock::SystemClock.now_ms();
         let mut changed = false;
@@ -184,9 +183,12 @@ impl State {
                     }
                 }
                 Ok(Outcome::Due(prompts)) => {
-                    let queue = self.wanted.take().unwrap_or(Queue::Due);
-                    let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
-                    self.open_session(queue, prompts);
+                    self.due_now = prompts.iter().filter(|prompt| prompt.key == "fwd").count();
+                    if self.wanted == Some(Queue::Due) {
+                        self.wanted = None;
+                        let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
+                        self.open_session(Queue::Due, prompts);
+                    }
                 }
                 Ok(Outcome::History(rows)) => {
                     if let Some(card) = self.history_wanted.take() {
@@ -194,12 +196,13 @@ impl State {
                     }
                 }
                 Ok(Outcome::New(prompts)) => {
-                    let queue = self.wanted.take().unwrap_or(Queue::New);
-                    let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
-                    self.open_session(queue, prompts);
+                    if self.wanted.take() == Some(Queue::New) {
+                        let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
+                        self.open_session(Queue::New, prompts);
+                    }
                 }
                 Ok(_) => {}
-                Err(_) => {}
+                Err(_) => self.session.refuse(event.id),
             }
         }
         if changed && let Some(store) = &self.store {
@@ -267,21 +270,29 @@ fn main() {
     // The study day needs the machine's zone, and `time` only answers on the main thread, so read
     // it before any worker starts.
     let _ = typr::day::local_offset_ms();
-    let scenes: &'static [(&'static str, fn(&mut State))] = &[
+    let scenes: &'static [Scene] = &[
         ("library-5000", |state: &mut State| {
             state.library = Library::seeded(5000);
             state.seeded = true;
         }),
         ("editor", |state: &mut State| {
             state.screen = Screen::Editor { card: None };
-            state.editor = Editor::new(None, "What is **mitosis**?\n---\nCell division.".to_string());
+            state.editor = Editor::new(
+                None,
+                "What is **mitosis**?\n---\nCell division.".to_string(),
+            );
         }),
         ("library-empty", |state: &mut State| {
             state.screen = Screen::Library;
         }),
         ("history", |state: &mut State| {
-            state.screen = Screen::Editor { card: Some(typr::screen::CardId(1)) };
-            state.editor = Editor::new(Some(1), "What is **mitosis**?\n---\nCell division.".to_string());
+            state.screen = Screen::Editor {
+                card: Some(typr::screen::CardId(1)),
+            };
+            state.editor = Editor::new(
+                Some(1),
+                "What is **mitosis**?\n---\nCell division.".to_string(),
+            );
             state.editor.showing_history = true;
             let row = |phase, grade, at, due_at| typr::store::ReviewRow {
                 card: 1,
@@ -297,20 +308,48 @@ fn main() {
                 1,
                 vec![
                     row(typr::store::Phase::Learn, Grade::Forgot, 1_000, None),
-                    row(typr::store::Phase::Review, Grade::Remembered, 2_000, Some(86_400_000)),
-                    row(typr::store::Phase::Review, Grade::Forgot, 3_000, Some(3_600_000)),
+                    row(
+                        typr::store::Phase::Review,
+                        Grade::Remembered,
+                        2_000,
+                        Some(86_400_000),
+                    ),
+                    row(
+                        typr::store::Phase::Review,
+                        Grade::Forgot,
+                        3_000,
+                        Some(3_600_000),
+                    ),
                 ],
             );
         }),
         ("session-new", |state: &mut State| {
-            let entries = vec![Entry { card: 4, sides: vec!["What is **osmosis**?".to_string(), "Water across a membrane.".to_string()] }];
+            let entries = vec![Entry {
+                card: 4,
+                sides: vec![
+                    "What is **osmosis**?".to_string(),
+                    "Water across a membrane.".to_string(),
+                ],
+            }];
             state.session = Session::new(Queue::New, entries);
             state.screen = Screen::Session { queue: Queue::New };
         }),
         ("session", |state: &mut State| {
             let entries = vec![
-                Entry { card: 1, sides: vec!["What is **mitosis**?".to_string(), "Cell division.".to_string()] },
-                Entry { card: 2, sides: vec!["What is **osmosis**?".to_string(), "Water across a membrane.".to_string()] },
+                Entry {
+                    card: 1,
+                    sides: vec![
+                        "What is **mitosis**?".to_string(),
+                        "Cell division.".to_string(),
+                    ],
+                },
+                Entry {
+                    card: 2,
+                    sides: vec![
+                        "What is **osmosis**?".to_string(),
+                        "Water across a membrane.".to_string(),
+                    ],
+                },
             ];
             state.session = Session::new(Queue::Due, entries);
             state.session.reveal();
@@ -323,7 +362,10 @@ fn main() {
         }),
         ("editor-leave", |state: &mut State| {
             state.screen = Screen::Editor { card: None };
-            state.editor = Editor::new(None, "What is **mitosis**?\n---\nCell division.".to_string());
+            state.editor = Editor::new(
+                None,
+                "What is **mitosis**?\n---\nCell division.".to_string(),
+            );
             state.editor.buffer.insert(" Edited.");
             state.editor.request_leave();
         }),
