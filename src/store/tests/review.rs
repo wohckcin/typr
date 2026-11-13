@@ -1,0 +1,471 @@
+//! Scheduling: what a record does to a prompt, the queues, the cap and the day's counts.
+
+use super::*;
+
+#[test]
+fn three_learning_cycles_then_two_reviews_report_a_count_of_two() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Counting");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    let mut at = 1_700_000_000_000;
+    for _ in 0..3 {
+        db.apply(
+            &Command::Grade {
+                card,
+                key: "fwd".to_string(),
+                grade: Grade::Forgot,
+                duration_ms: None,
+            },
+            at,
+        )
+        .expect("grade");
+        at += 10 * 60_000;
+    }
+    for _ in 0..2 {
+        db.apply(
+            &Command::Grade {
+                card,
+                key: "fwd".to_string(),
+                grade: Grade::Remembered,
+                duration_ms: None,
+            },
+            at,
+        )
+        .expect("grade");
+        at += 24 * 60 * 60_000;
+    }
+
+    let history = db.history(card).expect("history");
+    assert_eq!(history.len(), 5);
+    assert_eq!(
+        history.iter().map(|row| row.phase).collect::<Vec<_>>(),
+        vec![
+            Phase::Learn,
+            Phase::Learn,
+            Phase::Learn,
+            Phase::Review,
+            Phase::Review
+        ]
+    );
+    assert_eq!(db.review_count(card).expect("count"), 2);
+}
+
+#[test]
+fn a_prompt_always_equals_the_fold_of_its_records() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Fold");
+
+    // Five prompts, each pushed into a different phase by a different grade sequence.
+    let sequences: [&[Grade]; 5] = [
+        &[Grade::Remembered],
+        &[Grade::Forgot],
+        &[Grade::Remembered, Grade::Remembered],
+        &[Grade::Remembered, Grade::Remembered, Grade::Remembered],
+        &[Grade::Remembered, Grade::Remembered, Grade::Forgot],
+    ];
+    let mut cards = Vec::new();
+    for (index, sequence) in sequences.iter().enumerate() {
+        let card = card(&mut db, deck, &format!("front {index}\n---\nback {index}"));
+        let mut at = 1_700_000_000_000;
+        for grade in sequence.iter() {
+            db.apply(
+                &Command::Grade {
+                    card,
+                    key: "fwd".to_string(),
+                    grade: *grade,
+                    duration_ms: None,
+                },
+                at,
+            )
+            .expect("grade");
+            at += 11 * 60_000;
+        }
+        cards.push(card);
+    }
+
+    let phases: Vec<Phase> = cards
+        .iter()
+        .map(|card| {
+            db.prompt(*card, "fwd")
+                .expect("prompt")
+                .expect("exists")
+                .phase
+        })
+        .collect();
+    assert!(
+        phases.contains(&Phase::Learn)
+            && phases.contains(&Phase::Relearn)
+            && phases.contains(&Phase::Review)
+    );
+
+    for card in &cards {
+        let stored = db.prompt(*card, "fwd").expect("prompt");
+        let folded = db.fold_records(*card, "fwd").expect("fold");
+        assert_eq!(stored, folded, "card {card} disagrees with its history");
+    }
+
+    // Rebuilding from history changes nothing, which is the invariant in action.
+    assert_eq!(db.rebuild_prompts().expect("rebuild"), cards.len());
+    for card in &cards {
+        assert_eq!(
+            db.prompt(*card, "fwd").expect("prompt"),
+            db.fold_records(*card, "fwd").expect("fold")
+        );
+    }
+}
+
+#[test]
+fn prompt_keys_beyond_fwd_fold_into_their_own_prompts() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Keys");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    // Records a later version will write: a reverse direction, a cloze group and a mask group.
+    let mut at = 1_700_000_000_000;
+    for key in ["clair", "cloze:1", "mask:a1"] {
+        db.append_record_for_test(Record {
+            card,
+            key,
+            phase: Phase::Review,
+            grade: Grade::Remembered,
+            at,
+            interval_ms: 86_400_000,
+            due_at: Some(at + 86_400_000),
+        })
+        .expect("record");
+        at += 1_000;
+    }
+
+    // Only the three keys that have records are rewritten; `fwd` has none and keeps its row.
+    assert_eq!(db.rebuild_prompts().expect("rebuild"), 3);
+    assert_eq!(
+        db.prompt_keys(card).expect("keys"),
+        vec![
+            "clair".to_string(),
+            "cloze:1".to_string(),
+            "fwd".to_string(),
+            "mask:a1".to_string()
+        ]
+    );
+    for key in ["clair", "cloze:1", "mask:a1"] {
+        assert_eq!(
+            db.prompt(card, key).expect("prompt"),
+            db.fold_records(card, key).expect("fold")
+        );
+    }
+}
+
+/// Noon-ish of a fixed day, so a test never straddles a rollover.
+const NOON: i64 = 1_768_089_600_000 + 13 * 60 * 60 * 1000;
+const HOUR: i64 = 60 * 60 * 1000;
+const WEEK: i64 = 7 * 24 * HOUR;
+
+/// Put a prompt's schedule where a record would have put it.
+#[test]
+fn the_most_overdue_study_day_comes_first() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Urgency");
+
+    let week_ago = card(&mut db, deck, "old\n---\nancient");
+    let an_hour_ago = card(&mut db, deck, "recent\n---\nnow");
+    let two_hours_ago = card(&mut db, deck, "also recent\n---\nnow");
+    schedule(&mut db, week_ago, NOON - WEEK);
+    schedule(&mut db, an_hour_ago, NOON - HOUR);
+    schedule(&mut db, two_hours_ago, NOON - 2 * HOUR);
+
+    let due = db.due_prompts(NOON, 0, 11).expect("due");
+    assert_eq!(due.len(), 3);
+    assert_eq!(due[0].card, week_ago);
+}
+
+#[test]
+fn prompts_due_on_the_same_study_day_are_ordered_by_the_shuffle() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Ties");
+    let first = card(&mut db, deck, "a\n---\nb");
+    let second = card(&mut db, deck, "c\n---\nd");
+    schedule(&mut db, first, NOON - 2 * HOUR);
+    schedule(&mut db, second, NOON - HOUR);
+
+    let mut orders = std::collections::BTreeSet::new();
+    for seed in 1..40 {
+        let due = db.due_prompts(NOON, 0, seed).expect("due");
+        orders.insert(due.iter().map(|prompt| prompt.card).collect::<Vec<_>>());
+    }
+    assert_eq!(
+        orders.len(),
+        2,
+        "the timestamp must not decide the order: {orders:?}"
+    );
+}
+
+#[test]
+fn trashed_archived_and_note_prompts_are_never_due() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let archived_root = deck(&mut db, "Archived root");
+    let child = match db.apply(
+        &Command::CreateDeck {
+            parent: Some(archived_root),
+            name: "Child".to_string(),
+        },
+        0,
+    ) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("{other:?}"),
+    };
+    let open = deck(&mut db, "Open");
+
+    let kept = card(&mut db, open, "kept\n---\nkept");
+    let trashed = card(&mut db, open, "trashed\n---\ntrashed");
+    let under_archived = card(&mut db, child, "archived\n---\narchived");
+    let note = card(&mut db, open, "just a note");
+    for card in [kept, trashed, under_archived, note] {
+        schedule(&mut db, card, NOON - HOUR);
+    }
+    db.apply(&Command::TrashCard { id: trashed }, NOON)
+        .expect("trash");
+    db.apply(
+        &Command::ArchiveDeck {
+            id: archived_root,
+            archived: true,
+        },
+        NOON,
+    )
+    .expect("archive");
+
+    let due = db.due_prompts(NOON, 0, 5).expect("due");
+    assert_eq!(
+        due.iter().map(|prompt| prompt.card).collect::<Vec<_>>(),
+        vec![kept]
+    );
+}
+
+#[test]
+fn a_prompt_due_tomorrow_is_not_in_todays_queue() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Tomorrow");
+    let card = card(&mut db, deck, "a\n---\nb");
+    schedule(&mut db, card, NOON + 24 * HOUR);
+
+    assert!(db.due_prompts(NOON, 0, 1).expect("due").is_empty());
+    assert_eq!(
+        db.due_prompts(NOON + 25 * HOUR, 0, 1).expect("due").len(),
+        1
+    );
+}
+
+#[test]
+fn resetting_history_makes_a_card_new_again() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Reset");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    let mut at = NOON - WEEK;
+    for _ in 0..3 {
+        db.apply(
+            &Command::Grade {
+                card,
+                key: "fwd".to_string(),
+                grade: Grade::Remembered,
+                duration_ms: None,
+            },
+            at,
+        )
+        .expect("grade");
+        at += 24 * HOUR;
+    }
+    assert_eq!(db.review_count(card).expect("count"), 3);
+
+    db.apply(
+        &Command::ResetHistory {
+            card,
+            key: "fwd".to_string(),
+        },
+        NOON,
+    )
+    .expect("reset");
+
+    assert!(
+        db.history(card).expect("history").is_empty(),
+        "learn records go too"
+    );
+    assert_eq!(db.review_count(card).expect("count"), 0);
+    assert_eq!(db.fold_records(card, "fwd").expect("fold"), None);
+    let prompt = db
+        .prompt(card, "fwd")
+        .expect("prompt")
+        .expect("still exists");
+    assert_eq!(
+        (prompt.phase, prompt.interval_ms, prompt.due_at, prompt.reps),
+        (Phase::Learn, 0, None, 0)
+    );
+    assert!(
+        db.due_prompts(NOON, 0, 1).expect("due").is_empty(),
+        "the card stops being due"
+    );
+}
+
+#[test]
+fn the_cap_counts_graduated_cards_across_decks_and_ignores_learning_cycles() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let first_deck = deck(&mut db, "First");
+    let second_deck = deck(&mut db, "Second");
+    let stubborn = card(&mut db, first_deck, "a\n---\nb");
+    let other = card(&mut db, second_deck, "c\n---\nd");
+
+    let mut at = NOON;
+    for _ in 0..3 {
+        db.apply(
+            &Command::Grade {
+                card: stubborn,
+                key: "fwd".to_string(),
+                grade: Grade::Forgot,
+                duration_ms: None,
+            },
+            at,
+        )
+        .expect("grade");
+        at += 60_000;
+    }
+    assert_eq!(
+        db.learned_on(crate::day::study_day(NOON, 0), 0)
+            .expect("learned"),
+        0
+    );
+
+    db.apply(
+        &Command::Grade {
+            card: stubborn,
+            key: "fwd".to_string(),
+            grade: Grade::Remembered,
+            duration_ms: None,
+        },
+        at,
+    )
+    .expect("grade");
+    db.apply(
+        &Command::Grade {
+            card: other,
+            key: "fwd".to_string(),
+            grade: Grade::Remembered,
+            duration_ms: None,
+        },
+        at + 60_000,
+    )
+    .expect("grade");
+
+    assert_eq!(
+        db.learned_on(crate::day::study_day(NOON, 0), 0)
+            .expect("learned"),
+        2
+    );
+}
+
+#[test]
+fn the_new_queue_stops_at_the_cap_and_resumes_the_next_day() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Backlog");
+    for index in 0..3 {
+        card(&mut db, deck, &format!("front {index}\n---\nback {index}"));
+    }
+    db.apply(
+        &Command::SetSetting {
+            key: "new_per_day".to_string(),
+            value: "2".to_string(),
+        },
+        NOON,
+    )
+    .expect("setting");
+    assert_eq!(db.settings().expect("settings").new_per_day, 2);
+
+    assert_eq!(
+        db.new_prompts(NOON, 0, 3).expect("new").len(),
+        2,
+        "the queue stops at the cap"
+    );
+
+    // Learning two of them spends today's allowance.
+    let waiting = db.new_prompts(NOON, 0, 3).expect("new");
+    for prompt in waiting {
+        db.apply(
+            &Command::Grade {
+                card: prompt.card,
+                key: prompt.key,
+                grade: Grade::Remembered,
+                duration_ms: None,
+            },
+            NOON + HOUR,
+        )
+        .expect("grade");
+    }
+    assert!(
+        db.new_prompts(NOON + HOUR, 0, 3).expect("new").is_empty(),
+        "the day is spent"
+    );
+
+    let tomorrow = NOON + 24 * HOUR;
+    assert_eq!(
+        db.new_prompts(tomorrow, 0, 3).expect("new").len(),
+        1,
+        "the last card waits for tomorrow"
+    );
+}
+
+#[test]
+fn statistics_are_counted_per_study_day() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Stats");
+    let card = card(&mut db, deck, "a\n---\nb");
+
+    let today = crate::day::study_day(NOON, 0);
+    let tomorrow_at = NOON + 24 * HOUR;
+    db.apply(
+        &Command::Grade {
+            card,
+            key: "fwd".to_string(),
+            grade: Grade::Remembered,
+            duration_ms: None,
+        },
+        NOON,
+    )
+    .expect("grade");
+    db.apply(
+        &Command::Grade {
+            card,
+            key: "fwd".to_string(),
+            grade: Grade::Remembered,
+            duration_ms: None,
+        },
+        NOON + 600_000,
+    )
+    .expect("grade");
+    db.apply(
+        &Command::Grade {
+            card,
+            key: "fwd".to_string(),
+            grade: Grade::Forgot,
+            duration_ms: None,
+        },
+        tomorrow_at,
+    )
+    .expect("grade");
+
+    let today_stats = db.stats_for_day(today, 0).expect("stats");
+    assert_eq!(today_stats.reviews, 2);
+    assert_eq!(today_stats.lapses, 0);
+    let tomorrow_stats = db.stats_for_day(today + 1, 0).expect("stats");
+    assert_eq!(tomorrow_stats.reviews, 1);
+    assert_eq!(tomorrow_stats.lapses, 1);
+}
