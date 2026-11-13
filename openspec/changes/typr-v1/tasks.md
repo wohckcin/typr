@@ -27,7 +27,7 @@
 - [x] 3.4 Implement the fold that recomputes a `prompt` row from `review_log`, and verify fold-equality for five graded prompts plus a log containing `rev`, `cloze:1` and `mask:a1` keys that folds to one prompt per key
 - [x] 3.5 Implement the due query returning prompts due at the injected clock, ordered by whole study days overdue with ties shuffled, and verify a test that a week-overdue prompt precedes two same-day ones and that a tomorrow-due prompt is excluded
 - [x] 3.6 Implement reset-history for one prompt, deleting all rows including `learn`, and verify the card returns to the new-card queue with no due date
-- [ ] 3.7 Store the new-cards-per-day limit in `settings` (default 20) and count it per study day — earliest `review`-phase record within a day starting 04:00 local — and verify that a card deferred by the limit is still new on the next study day, and that a grade at 23:50 and one at 00:30 fall on the same study day
+- [x] 3.7 Store the new-cards-per-day limit in `settings` (default 20) and count it per study day — earliest `review`-phase record within a day starting 04:00 local — and verify that a card deferred by the limit is still new on the next study day, and that a grade at 23:50 and one at 00:30 fall on the same study day
 
 ## 4. Card library
 

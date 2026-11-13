@@ -130,6 +130,13 @@ pub struct DuePrompt {
     pub due_at: i64,
 }
 
+/// A card still waiting for its first lesson.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewPrompt {
+    pub card: Id,
+    pub key: String,
+}
+
 /// Grades recorded in a window, counting real reviews only.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Stats {

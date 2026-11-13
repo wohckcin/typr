@@ -10,8 +10,8 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
 
 use super::{
-    CardSummary, Command, Deck, DuePrompt, Grade, Id, Outcome, Phase, ReviewRow, Settings, Snapshot,
-    Stats, StoreError, schema,
+    CardSummary, Command, Deck, DuePrompt, Grade, Id, NewPrompt, Outcome, Phase, ReviewRow,
+    Settings, Snapshot, Stats, StoreError, schema,
 };
 
 /// A prompt as its records describe it.
@@ -374,6 +374,71 @@ impl Db {
             rest = &rest[same..];
         }
         Ok(ordered)
+    }
+
+    /// Cards that graduated on one study day, counted across every deck.
+    ///
+    /// A grade before the card ever left the new queue does not count: the cap is on cards
+    /// *learned*, not on how many times a new card was answered today.
+    pub fn learned_on(&self, day: i64, offset_ms: i64) -> Result<u32, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT MIN(at) FROM review_log WHERE phase <> 'learn' GROUP BY card_id",
+        )?;
+        let firsts = stmt
+            .query_map([], |row| row.get::<_, i64>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let count = firsts
+            .into_iter()
+            .filter(|at| crate::day::study_day(*at, offset_ms) == day)
+            .count();
+        Ok(count as u32)
+    }
+
+    /// The new-card queue: studyable cards whose prompt has never been graded, capped by the
+    /// settings' daily allowance minus what was already learned today.
+    pub fn new_prompts(
+        &self,
+        now_ms: i64,
+        offset_ms: i64,
+        seed: u64,
+    ) -> Result<Vec<NewPrompt>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "WITH RECURSIVE archived_deck(id) AS (
+                 SELECT id FROM deck WHERE archived = 1
+                 UNION
+                 SELECT d.id FROM deck d JOIN archived_deck a ON d.parent_id = a.id
+             )
+             SELECT p.card_id, p.key
+             FROM prompt p JOIN card c ON c.id = p.card_id
+             WHERE c.trashed_at IS NULL
+               AND c.archived = 0
+               AND c.sides >= 2
+               AND c.deck_id NOT IN (SELECT id FROM archived_deck)
+               AND NOT EXISTS (
+                   SELECT 1 FROM review_log r WHERE r.card_id = p.card_id AND r.key = p.key
+               )
+             ORDER BY p.card_id, p.key",
+        )?;
+        let waiting = stmt
+            .query_map([], |row| Ok(NewPrompt { card: row.get(0)?, key: row.get(1)? }))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let allowance = self.settings()?.new_per_day as usize;
+        let today = crate::day::study_day(now_ms, offset_ms);
+        let learned = self.learned_on(today, offset_ms)? as usize;
+        let room = allowance.saturating_sub(learned);
+
+        let mut shuffle = crate::shuffle::Shuffle::new(seed);
+        let mut waiting = waiting;
+        shuffle.reorder(&mut waiting);
+        waiting.truncate(room);
+        Ok(waiting)
+    }
+
+    /// Grades inside one study day, so a summary and a cap agree about which day it is.
+    pub fn stats_for_day(&self, day: i64, offset_ms: i64) -> Result<Stats, StoreError> {
+        let (from, to) = crate::day::study_day_bounds(day, offset_ms);
+        self.stats(from, to)
     }
 
     /// One prompt row as stored.

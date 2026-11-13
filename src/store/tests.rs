@@ -453,3 +453,81 @@ fn resetting_history_makes_a_card_new_again() {
     assert_eq!((prompt.phase, prompt.interval_ms, prompt.due_at, prompt.reps), (Phase::Learn, 0, None, 0));
     assert!(db.due_prompts(NOON, 0, 1).expect("due").is_empty(), "the card stops being due");
 }
+
+#[test]
+fn the_cap_counts_graduated_cards_across_decks_and_ignores_learning_cycles() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let first_deck = deck(&mut db, "First");
+    let second_deck = deck(&mut db, "Second");
+    let stubborn = card(&mut db, first_deck, "a\n---\nb");
+    let other = card(&mut db, second_deck, "c\n---\nd");
+
+    let mut at = NOON;
+    for _ in 0..3 {
+        db.apply(&Command::Grade { card: stubborn, key: "fwd".to_string(), grade: Grade::Forgot, duration_ms: None }, at)
+            .expect("grade");
+        at += 60_000;
+    }
+    assert_eq!(db.learned_on(crate::day::study_day(NOON, 0), 0).expect("learned"), 0);
+
+    db.apply(&Command::Grade { card: stubborn, key: "fwd".to_string(), grade: Grade::Remembered, duration_ms: None }, at)
+        .expect("grade");
+    db.apply(&Command::Grade { card: other, key: "fwd".to_string(), grade: Grade::Remembered, duration_ms: None }, at + 60_000)
+        .expect("grade");
+
+    assert_eq!(db.learned_on(crate::day::study_day(NOON, 0), 0).expect("learned"), 2);
+}
+
+#[test]
+fn the_new_queue_stops_at_the_cap_and_resumes_the_next_day() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Backlog");
+    for index in 0..3 {
+        card(&mut db, deck, &format!("front {index}\n---\nback {index}"));
+    }
+    db.apply(&Command::SetSetting { key: "new_per_day".to_string(), value: "2".to_string() }, NOON)
+        .expect("setting");
+    assert_eq!(db.settings().expect("settings").new_per_day, 2);
+
+    assert_eq!(db.new_prompts(NOON, 0, 3).expect("new").len(), 2, "the queue stops at the cap");
+
+    // Learning two of them spends today's allowance.
+    let waiting = db.new_prompts(NOON, 0, 3).expect("new");
+    for prompt in waiting {
+        db.apply(
+            &Command::Grade { card: prompt.card, key: prompt.key, grade: Grade::Remembered, duration_ms: None },
+            NOON + HOUR,
+        )
+        .expect("grade");
+    }
+    assert!(db.new_prompts(NOON + HOUR, 0, 3).expect("new").is_empty(), "the day is spent");
+
+    let tomorrow = NOON + 24 * HOUR;
+    assert_eq!(db.new_prompts(tomorrow, 0, 3).expect("new").len(), 1, "the last card waits for tomorrow");
+}
+
+#[test]
+fn statistics_are_counted_per_study_day() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Stats");
+    let card = card(&mut db, deck, "a\n---\nb");
+
+    let today = crate::day::study_day(NOON, 0);
+    let tomorrow_at = NOON + 24 * HOUR;
+    db.apply(&Command::Grade { card, key: "fwd".to_string(), grade: Grade::Remembered, duration_ms: None }, NOON)
+        .expect("grade");
+    db.apply(&Command::Grade { card, key: "fwd".to_string(), grade: Grade::Remembered, duration_ms: None }, NOON + 600_000)
+        .expect("grade");
+    db.apply(&Command::Grade { card, key: "fwd".to_string(), grade: Grade::Forgot, duration_ms: None }, tomorrow_at)
+        .expect("grade");
+
+    let today_stats = db.stats_for_day(today, 0).expect("stats");
+    assert_eq!(today_stats.reviews, 2);
+    assert_eq!(today_stats.lapses, 0);
+    let tomorrow_stats = db.stats_for_day(today + 1, 0).expect("stats");
+    assert_eq!(tomorrow_stats.reviews, 1);
+    assert_eq!(tomorrow_stats.lapses, 1);
+}
