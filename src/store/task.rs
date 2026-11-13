@@ -243,15 +243,17 @@ fn work(
 ) {
     while let Ok(message) = rx.recv() {
         let id = message.id;
-        let mut result = db.apply(&message.command, clock.now_ms());
+        let result = db.apply(&message.command, clock.now_ms());
         if result.is_ok() {
+            // A snapshot that cannot be read must not turn a committed command into a failure:
+            // the caller would retry work the database has already done.
             match db.snapshot() {
                 Ok(mut snapshot) => {
                     let mut published = shared.snapshot.lock().expect("snapshot");
                     snapshot.revision = published.revision + 1;
                     *published = snapshot;
                 }
-                Err(error) => result = Err(error),
+                Err(error) => eprintln!("typr: the library could not be read back: {error}"),
             }
         }
         shared
