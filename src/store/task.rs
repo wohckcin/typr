@@ -97,6 +97,14 @@ impl Handle {
     }
 }
 
+impl Drop for Handle {
+    /// Dropping the handle is a quit: the worker drains what it was sent and the join waits for
+    /// it. Rune's `AppSpec` has no quit hook, so nothing else would ever call [`Handle::close`].
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
 impl Store for Handle {
     fn snapshot(&self) -> Snapshot {
         self.shared.snapshot.lock().expect("snapshot").clone()

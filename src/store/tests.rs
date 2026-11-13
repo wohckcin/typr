@@ -201,6 +201,31 @@ fn a_command_sent_and_then_quit_is_on_disk() {
 }
 
 #[test]
+fn dropping_the_handle_writes_what_was_sent() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+
+    {
+        let store = Handle::spawn(
+            Db::open(&path).expect("open"),
+            Box::new(TestClock::new(0)),
+            noop_waker(),
+        )
+        .expect("spawn");
+        store.create_deck(None, "Biology");
+        store.create_card(1, "mitochondria\n---\nthe powerhouse");
+        // No close(): the drop is the quit, and Rune's AppSpec has no quit hook to call one.
+    }
+
+    let db = Db::open(&path).expect("reopen");
+    assert_eq!(
+        db.snapshot().expect("snapshot").cards.len(),
+        1,
+        "the card sent before the drop is on disk"
+    );
+}
+
+#[test]
 fn a_file_that_is_not_a_database_is_reported_and_left_alone() {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("typr.sqlite3");
