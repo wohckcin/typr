@@ -150,6 +150,10 @@ impl Store for Handle {
         self.submit(Command::SetDraft { card, text: text.map(str::to_string) })
     }
 
+    fn draft(&self, card: Id) -> u64 {
+        self.submit(Command::Draft { card })
+    }
+
     fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64 {
         self.submit(Command::Grade { card, key: key.to_string(), grade, duration_ms })
     }

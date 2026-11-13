@@ -703,3 +703,31 @@ fn a_restored_card_keeps_its_history_and_an_emptied_one_loses_everything() {
     assert!(db.search("doomed", None).expect("search").is_empty());
     assert!(db.prompt(doomed, "fwd").expect("prompt").is_none());
 }
+
+#[test]
+fn an_unsaved_draft_survives_reopening_the_database() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("library.sqlite3");
+    {
+        let mut db = Db::open(&path).unwrap();
+        db.apply(&Command::SetDraft { card: 0, text: Some("half a card".to_string()) }, NOON).unwrap();
+    }
+
+    let mut db = Db::open(&path).unwrap();
+    assert_eq!(db.draft(0).unwrap().as_deref(), Some("half a card"), "the draft is still there");
+
+    db.apply(&Command::SetDraft { card: 0, text: None }, NOON).unwrap();
+    assert_eq!(db.draft(0).unwrap(), None, "and it is cleared once the card exists");
+
+    let deck = match db.apply(&Command::CreateDeck { parent: None, name: "Deck".into() }, NOON).unwrap() {
+        Outcome::Deck(id) => id,
+        other => panic!("expected a deck, got {other:?}"),
+    };
+    db.apply(&Command::SetDraft { card: 0, text: Some("draft of a new card".into()) }, NOON).unwrap();
+    let card = match db.apply(&Command::CreateCard { deck, markdown: "draft of a new card".into() }, NOON).unwrap() {
+        Outcome::Card(id) => id,
+        other => panic!("expected a card, got {other:?}"),
+    };
+    assert_eq!(db.draft(0).unwrap(), None, "creating the card consumes the draft");
+    assert_eq!(db.draft(card).unwrap(), None);
+}

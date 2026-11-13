@@ -5,7 +5,21 @@ use rusqlite::Connection;
 use super::StoreError;
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1];
+pub const MIGRATIONS: &[&str] = &[V1, V2];
+
+/// Drafts belong to a card, or to the card that has not been saved yet, so the key needs no
+/// foreign key: `0` stands for the new card.
+const V2: &str = r#"
+CREATE TABLE editor_draft_v2 (
+    card_id    INTEGER PRIMARY KEY,
+    text       TEXT    NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+INSERT INTO editor_draft_v2 (card_id, text, updated_at)
+    SELECT card_id, text, updated_at FROM editor_draft;
+DROP TABLE editor_draft;
+ALTER TABLE editor_draft_v2 RENAME TO editor_draft;
+"#;
 
 const V1: &str = r#"
 CREATE TABLE deck (

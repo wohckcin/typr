@@ -83,6 +83,7 @@ impl Db {
                 )?;
                 let id = self.conn.last_insert_rowid();
                 self.sync_prompt(id, sides)?;
+                self.conn.execute("DELETE FROM editor_draft WHERE card_id IN (0, ?1)", params![id])?;
                 Ok(Outcome::Card(id))
             }
             Command::SaveCard { id, markdown } => {
@@ -92,6 +93,7 @@ impl Db {
                     params![id, markdown, sides as i64, folded(markdown), now_ms],
                 )?;
                 self.sync_prompt(*id, sides)?;
+                self.conn.execute("DELETE FROM editor_draft WHERE card_id = ?1", params![id])?;
                 Ok(Outcome::Changed(changed))
             }
             Command::MoveCard { id, deck } => {
@@ -141,6 +143,7 @@ impl Db {
                     Ok(Outcome::Ok)
                 }
             },
+            Command::Draft { card } => Ok(Outcome::Draft(self.draft(*card)?)),
             Command::SetSetting { key, value } => {
                 self.conn.execute(
                     "INSERT INTO settings (key, value) VALUES (?1, ?2)
@@ -223,6 +226,16 @@ impl Db {
 
     /// The prompt keys a card holds. A card that became a note keeps them: its schedule, due date
     /// and history stay intact and come back when it has two sides again.
+    /// The text as it was left, if it was left unsaved.
+    pub fn draft(&self, card: Id) -> Result<Option<String>, StoreError> {
+        let mut stmt = self.conn.prepare("SELECT text FROM editor_draft WHERE card_id = ?1")?;
+        let mut rows = stmt.query(params![card])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(row.get(0)?)),
+            None => Ok(None),
+        }
+    }
+
     pub fn prompt_keys(&self, card: Id) -> Result<Vec<String>, StoreError> {
         let mut stmt = self
             .conn

@@ -92,6 +92,11 @@ impl Editor {
         self.memo = preview_key(self.card, &self.buffer.text);
     }
 
+    /// The draft belongs to the card, or to the unsaved new card.
+    pub fn draft_key(&self) -> Id {
+        self.card.unwrap_or(0)
+    }
+
     /// Mark the buffer as stored. The caller persists it.
     pub fn save(&mut self) {
         self.saved = self.buffer.text.clone();
