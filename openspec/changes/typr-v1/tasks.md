@@ -38,7 +38,7 @@
 - [x] 4.5 Implement archive for cards and decks with the archived view and restore, and verify an archived due card is absent from the due queue and its due date survives restore
 - [x] 4.6 Implement the studyable predicate (not archived, not trashed, no archived ancestor), and verify a card under an archived deck is absent from both queues while a sibling deck's cards remain
 - [x] 4.7 Implement trash, restore and empty, and verify restored cards keep their history while emptied ones are gone with their `review_log` rows and appear nowhere in the library
-- [ ] 4.8 Build the library view: sidebar of decks, virtualised card list as a growth stack — `col().growth(GrowthSpec::default()).virtual_rows(count, row_height, key, build)` — tag filter and search box, and verify its scene renders with 5000 seeded cards while building only the mounted rows (assert the build closure ran for far fewer than 5000 indices)
+- [x] 4.8 Build the library view: sidebar of decks, virtualised card list as a growth stack — `col().growth(GrowthSpec::default()).virtual_rows(count, row_height, key, build)` — tag filter and search box, and verify its scene renders with 5000 seeded cards while building only the mounted rows (assert the build closure ran for far fewer than 5000 indices)
 
 ## 5. Card editor
 

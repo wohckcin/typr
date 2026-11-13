@@ -2,6 +2,7 @@
 
 pub mod clock;
 pub mod day;
+pub mod library;
 pub mod schedule;
 pub mod shuffle;
 pub mod sides;

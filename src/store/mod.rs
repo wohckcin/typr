@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use rune::dirs::AppDirs;
 
-pub use db::{Db, Folded};
+pub use db::{Db, Folded, folded};
 pub use schema::CURRENT_VERSION;
 pub use task::Handle;
 
@@ -96,6 +96,11 @@ pub struct CardSummary {
     pub archived: bool,
     pub trashed_at: Option<i64>,
     pub updated_at: i64,
+    /// The first side's first line, cut short: what a list row shows.
+    pub preview: String,
+    /// The card's text folded the way `LIKE` compares it, so the library can filter without a
+    /// round trip to the store thread.
+    pub search_text: String,
 }
 
 /// Settings the user can change. Only the new-card cap exists in v1.
@@ -122,6 +127,78 @@ pub struct Snapshot {
     pub settings: Settings,
     /// Bumped once per applied command, so a view can tell a re-publish from a change.
     pub revision: u64,
+}
+
+/// Which slice of the library a list shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CardMode {
+    #[default]
+    Active,
+    Archived,
+    Trash,
+}
+
+impl Snapshot {
+    /// The deck and everything under it, or every deck when `deck` is `None`.
+    pub fn subtree(&self, deck: Option<Id>) -> Vec<Id> {
+        let Some(deck) = deck else { return self.decks.iter().map(|deck| deck.id).collect() };
+        let mut ids = vec![deck];
+        let mut index = 0;
+        while index < ids.len() {
+            let parent = ids[index];
+            ids.extend(self.decks.iter().filter(|d| d.parent == Some(parent)).map(|d| d.id));
+            index += 1;
+        }
+        ids
+    }
+
+    /// Decks whose cards the study queues may touch: no archived deck in the chain.
+    fn studyable_decks(&self) -> Vec<Id> {
+        let archived = |id: Id| self.decks.iter().any(|deck| deck.id == id && deck.archived);
+        self.decks
+            .iter()
+            .filter(|deck| {
+                let mut chain = Some(deck.id);
+                while let Some(id) = chain {
+                    if archived(id) {
+                        return false;
+                    }
+                    chain = self.decks.iter().find(|d| d.id == id).and_then(|d| d.parent);
+                }
+                true
+            })
+            .map(|deck| deck.id)
+            .collect()
+    }
+
+    /// The cards a library list shows for a filter.
+    pub fn cards_matching(
+        &self,
+        query: &str,
+        tag: Option<&str>,
+        deck: Option<Id>,
+        mode: CardMode,
+    ) -> Vec<&CardSummary> {
+        let needle = folded(query);
+        let scope = self.subtree(deck);
+        let visible_decks = self.studyable_decks();
+        let wanted_tag = tag.map(folded);
+        self.cards
+            .iter()
+            .filter(|card| match mode {
+                CardMode::Active => {
+                    !card.archived && card.trashed_at.is_none() && visible_decks.contains(&card.deck)
+                }
+                CardMode::Archived => card.archived && card.trashed_at.is_none(),
+                CardMode::Trash => card.trashed_at.is_some(),
+            })
+            .filter(|card| deck.is_none() || scope.contains(&card.deck))
+            .filter(|card| {
+                wanted_tag.as_ref().is_none_or(|tag| card.tags.iter().any(|own| folded(own) == *tag))
+            })
+            .filter(|card| needle.is_empty() || card.search_text.contains(&needle))
+            .collect()
+    }
 }
 
 /// One prompt that is due now, with the card it belongs to.

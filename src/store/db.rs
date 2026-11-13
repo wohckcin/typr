@@ -79,7 +79,7 @@ impl Db {
                 self.conn.execute(
                     "INSERT INTO card (deck_id, markdown, sides, search_text, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-                    params![deck, markdown, sides as i64, searchable(markdown), now_ms],
+                    params![deck, markdown, sides as i64, folded(markdown), now_ms],
                 )?;
                 let id = self.conn.last_insert_rowid();
                 self.sync_prompt(id, sides)?;
@@ -89,7 +89,7 @@ impl Db {
                 let sides = sides_of(markdown);
                 let changed = self.conn.execute(
                     "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
-                    params![id, markdown, sides as i64, searchable(markdown), now_ms],
+                    params![id, markdown, sides as i64, folded(markdown), now_ms],
                 )?;
                 self.sync_prompt(*id, sides)?;
                 Ok(Outcome::Changed(changed))
@@ -177,7 +177,8 @@ impl Db {
         };
         let cards = {
             let mut stmt = self.conn.prepare(
-                "SELECT id, deck_id, sides, archived, trashed_at, updated_at FROM card ORDER BY updated_at DESC, id",
+                "SELECT id, deck_id, sides, archived, trashed_at, updated_at, markdown, search_text
+                 FROM card ORDER BY updated_at DESC, id",
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(CardSummary {
@@ -188,6 +189,8 @@ impl Db {
                     archived: row.get::<_, i64>(3)? != 0,
                     trashed_at: row.get(4)?,
                     updated_at: row.get(5)?,
+                    preview: preview(&row.get::<_, String>(6)?),
+                    search_text: row.get(7)?,
                 })
             })?;
             let mut cards = rows.collect::<Result<Vec<_>, _>>()?;
@@ -642,7 +645,7 @@ impl Db {
     /// Cards whose folded text contains the folded query, restricted to `deck`'s subtree when given.
     /// Trashed cards never match.
     pub fn search(&self, query: &str, deck: Option<Id>) -> Result<Vec<Id>, StoreError> {
-        let needle = searchable(query);
+        let needle = folded(query);
         if needle.is_empty() {
             return Ok(Vec::new());
         }
@@ -664,12 +667,22 @@ impl Db {
         Ok(ids)
     }}
 
+/// The first line that has words in it, cut to fit a row.
+fn preview(markdown: &str) -> String {
+    let line = markdown.lines().map(str::trim).find(|line| !line.is_empty()).unwrap_or("");
+    let mut cut: String = line.chars().take(80).collect();
+    if line.chars().count() > 80 {
+        cut.push('…');
+    }
+    cut
+}
+
 fn sides_of(markdown: &str) -> usize {
     crate::sides::split(markdown).len()
 }
 
 /// What search compares against: the text in the case a `LIKE` can fold.
-fn searchable(text: &str) -> String {
+pub fn folded(text: &str) -> String {
     text.nfd()
         .filter(|character| !is_combining_mark(*character))
         .flat_map(char::to_lowercase)
