@@ -1393,3 +1393,19 @@ fn a_failing_command_leaves_no_partial_write() {
         "the tag written before the foreign key refused the card is gone"
     );
 }
+
+#[test]
+fn a_negative_schema_version_is_refused() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    {
+        let conn = rusqlite::Connection::open(&path).expect("a raw connection");
+        conn.pragma_update(None, "user_version", -1i64)
+            .expect("a nonsense version");
+    }
+
+    match Db::open(&path) {
+        Err(StoreError::Corrupt { version }) => assert_eq!(version, -1),
+        other => panic!("{other:?}"),
+    }
+}

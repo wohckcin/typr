@@ -98,14 +98,16 @@ pub const CURRENT_VERSION: i64 = MIGRATIONS.len() as i64;
 /// Bring `conn` up to [`CURRENT_VERSION`], or refuse a database from a newer build without
 /// touching it.
 pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
-    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    if version > CURRENT_VERSION {
+    let recorded: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let version =
+        usize::try_from(recorded).map_err(|_| StoreError::Corrupt { version: recorded })?;
+    if version > MIGRATIONS.len() {
         return Err(StoreError::TooNew {
-            found: version,
+            found: recorded,
             supported: CURRENT_VERSION,
         });
     }
-    for (index, sql) in MIGRATIONS.iter().enumerate().skip(version as usize) {
+    for (index, sql) in MIGRATIONS.iter().enumerate().skip(version) {
         let tx = conn.transaction()?;
         tx.execute_batch(sql)?;
         tx.pragma_update(None, "user_version", (index + 1) as i64)?;

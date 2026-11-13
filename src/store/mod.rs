@@ -395,6 +395,10 @@ pub enum StoreError {
     Cycle {
         deck: Id,
     },
+    /// A schema version no build could have written: the file is not one of ours.
+    Corrupt {
+        version: i64,
+    },
     Io(std::io::Error),
 }
 
@@ -409,6 +413,10 @@ impl std::fmt::Display for StoreError {
             ),
             StoreError::NoPrompt { card, key } => write!(f, "card {card} has no prompt {key}"),
             StoreError::Cycle { deck } => write!(f, "deck {deck} cannot be moved inside itself"),
+            StoreError::Corrupt { version } => write!(
+                f,
+                "this file records schema version {version}, which is not a typr library"
+            ),
             StoreError::Io(e) => write!(f, "a file operation on the library failed: {e}"),
         }
     }
