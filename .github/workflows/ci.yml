@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Rune draws through wgpu, so the runner needs Vulkan and the X11/wayland client libraries
+    # even for headless snapshots: the tooling path still creates a surface for the frames it
+    # renders. Development packages build and link, runtime packages load when a window opens.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rune's Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libwayland-dev \
+            libxkbcommon-x11-0 mesa-vulkan-drivers
+
+      # rust-toolchain.toml pins the channel, so rustup installs 1.99.1 without being told.
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Snapshot every scene
+        run: |
+          set -euo pipefail
+          export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"
+          mkdir -p "$RUNNER_TEMP/snaps"
+          for scene in $(./target/debug/typr --list-scenes); do
+            ./target/debug/typr --scene "$scene" --snap "$RUNNER_TEMP/snaps/$scene.png"
+            test -s "$RUNNER_TEMP/snaps/$scene.png"
+          done

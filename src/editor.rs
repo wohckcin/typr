@@ -44,6 +44,10 @@ pub struct Editor {
     pub refused: bool,
     /// Where this card's pictures live.
     pub attachments: Attachments,
+    /// Whether the card's review history is showing beside the preview.
+    pub showing_history: bool,
+    /// This card's review count and records, when the panel is open.
+    pub history: crate::history::History,
 }
 
 /// What the user asked for when leaving an unsaved card.
@@ -68,6 +72,16 @@ pub enum Answer {
     Discard,
 }
 
+impl crate::history::Host for Editor {
+    fn history(&self) -> &crate::history::History {
+        &self.history
+    }
+
+    fn history_mut(&mut self) -> &mut crate::history::History {
+        &mut self.history
+    }
+}
+
 impl Default for Editor {
     fn default() -> Self {
         Editor::new(None, String::new())
@@ -79,7 +93,17 @@ impl Editor {
         let mut buffer = TextEdit::default();
         buffer.replace_text(text.clone());
         let memo = preview_key(card, &text);
-        Editor { card, buffer, saved: text, memo, asking: false, refused: false, attachments: Attachments::default() }
+        Editor {
+            card,
+            buffer,
+            saved: text,
+            memo,
+            asking: false,
+            refused: false,
+            attachments: Attachments::default(),
+            showing_history: false,
+            history: crate::history::History::default(),
+        }
     }
 
     /// Whether the buffer holds something the card does not.
@@ -273,7 +297,7 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
 
 /// The editor screen. The preview is rebuilt from the buffer on the same frame, so there is no
 /// mode to switch into.
-pub fn view<S: Host>(s: &S) -> El {
+pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
     let t = tok::theme(true);
     let unsaved = s.editor().dirty();
     let refusal = s.editor().refusal();
@@ -305,7 +329,10 @@ pub fn view<S: Host>(s: &S) -> El {
                 .padding(12.0)
                 .gap(12.0)
                 .child(col().key("source").grow(1.0).h_full().child(source_pane::<S>(s)))
-                .child(preview_pane::<S>(s)),
+                .child(preview_pane::<S>(s))
+                .children(s.editor().showing_history.then(|| {
+                    col().key("history-panel").w(320.0).h_full().padding(12.0).child(crate::history::view::<S>(s))
+                })),
         ));
     root(body, layer)
 }

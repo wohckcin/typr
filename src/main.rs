@@ -4,6 +4,7 @@ use rune::machine::Seq;
 use rune::{AppSpec, Cx, El, Tx, Waker, col, text};
 use typr::attachments::Attachments;
 use typr::editor::{self, Editor};
+use typr::history::{self, History};
 use typr::library::{self, Library};
 use typr::screen::{Queue, Screen};
 use typr::session::{Entry, Session};
@@ -27,6 +28,10 @@ struct State {
     due_now: usize,
     /// The queue the user asked for, waiting on the store's answer.
     wanted: Option<Queue>,
+    /// The card whose history was asked for.
+    history_wanted: Option<Id>,
+    /// A scene brought its own library, so opening the real one must not replace it.
+    seeded: bool,
 }
 
 impl Default for State {
@@ -40,6 +45,8 @@ impl Default for State {
             store: None,
             due_now: 0,
             wanted: None,
+            history_wanted: None,
+            seeded: false,
         }
     }
 }
@@ -51,6 +58,16 @@ impl library::Host for State {
 
     fn library_mut(&mut self) -> &mut Library {
         &mut self.library
+    }
+}
+
+impl history::Host for State {
+    fn history(&self) -> &History {
+        self.editor.history()
+    }
+
+    fn history_mut(&mut self) -> &mut History {
+        self.editor.history_mut()
     }
 }
 
@@ -91,14 +108,20 @@ impl study::Host for State {
 }
 
 impl State {
-    /// Open the library, and draw whatever the editor was left holding.
+    /// Open the library, unless this run is a headless snapshot or script: those draw fixtures
+    /// and must never touch the real one.
     fn setup(&mut self, waker: Waker) {
+        if rune::tooling::is_headless() {
+            return;
+        }
         let draw = waker.clone();
         let opened = store::attachments_root_from_environment()
             .and_then(|root| Ok((root, Handle::open_system(waker)?)));
         match opened {
             Ok((root, handle)) => {
-                self.library.set_snapshot(handle.snapshot());
+                if !self.seeded {
+                    self.library.set_snapshot(handle.snapshot());
+                }
                 self.editor.attachments = Attachments::new(root, draw);
                 self.store = Some(handle);
             }
@@ -165,6 +188,11 @@ impl State {
                     let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
                     self.open_session(queue, prompts);
                 }
+                Ok(Outcome::History(rows)) => {
+                    if let Some(card) = self.history_wanted.take() {
+                        self.editor.history.set(card, rows);
+                    }
+                }
                 Ok(Outcome::New(prompts)) => {
                     let queue = self.wanted.take().unwrap_or(Queue::New);
                     let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
@@ -206,6 +234,20 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
             }
         }
         // Two ways into a session from the library, so the keyboard can start one.
+        Screen::Editor { .. } => match &event.key {
+            // `h` shows this card's review history beside the preview, or hides it again.
+            rune::Key::Text(t) if t == "h" => {
+                s.editor.showing_history = !s.editor.showing_history;
+                if s.editor.showing_history
+                    && let (Some(card), Some(store)) = (s.editor.card, &s.store)
+                {
+                    s.history_wanted = Some(card);
+                    store.history(card);
+                }
+                true
+            }
+            _ => false,
+        },
         Screen::Library if s.session.finished() => match &event.key {
             rune::Key::Text(t) if t == "s" => {
                 s.start_session(Queue::Due);
@@ -226,10 +268,44 @@ fn main() {
     // it before any worker starts.
     let _ = typr::day::local_offset_ms();
     let scenes: &'static [(&'static str, fn(&mut State))] = &[
-        ("library-5000", |state: &mut State| state.library = Library::seeded(5000)),
+        ("library-5000", |state: &mut State| {
+            state.library = Library::seeded(5000);
+            state.seeded = true;
+        }),
         ("editor", |state: &mut State| {
             state.screen = Screen::Editor { card: None };
             state.editor = Editor::new(None, "What is **mitosis**?\n---\nCell division.".to_string());
+        }),
+        ("library-empty", |state: &mut State| {
+            state.screen = Screen::Library;
+        }),
+        ("history", |state: &mut State| {
+            state.screen = Screen::Editor { card: Some(typr::screen::CardId(1)) };
+            state.editor = Editor::new(Some(1), "What is **mitosis**?\n---\nCell division.".to_string());
+            state.editor.showing_history = true;
+            let row = |phase, grade, at, due_at| typr::store::ReviewRow {
+                card: 1,
+                key: "fwd".to_string(),
+                phase,
+                at,
+                grade,
+                interval_ms: 600_000,
+                due_at,
+                duration_ms: None,
+            };
+            state.editor.history.set(
+                1,
+                vec![
+                    row(typr::store::Phase::Learn, Grade::Forgot, 1_000, None),
+                    row(typr::store::Phase::Review, Grade::Remembered, 2_000, Some(86_400_000)),
+                    row(typr::store::Phase::Review, Grade::Forgot, 3_000, Some(3_600_000)),
+                ],
+            );
+        }),
+        ("session-new", |state: &mut State| {
+            let entries = vec![Entry { card: 4, sides: vec!["What is **osmosis**?".to_string(), "Water across a membrane.".to_string()] }];
+            state.session = Session::new(Queue::New, entries);
+            state.screen = Screen::Session { queue: Queue::New };
         }),
         ("session", |state: &mut State| {
             let entries = vec![

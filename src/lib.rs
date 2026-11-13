@@ -4,6 +4,7 @@ pub mod attachments;
 pub mod clock;
 pub mod day;
 pub mod editor;
+pub mod history;
 pub mod library;
 pub mod schedule;
 pub mod shuffle;
