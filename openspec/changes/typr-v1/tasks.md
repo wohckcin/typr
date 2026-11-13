@@ -69,7 +69,7 @@
 - [x] 7.3 Add `--snap` output per scene and verify every registered scene produces a non-blank PNG
 - [ ] 7.4 Add the CI workflow: Ubuntu runner, install the Linux packages Rune's README lists (`libxkbcommon-dev libwayland-dev` to build, `libxkbcommon-x11-0 mesa-vulkan-drivers` for windowed runs), build debug, run the test suite, run `--snap` per scene, and verify the workflow is green on a pushed branch
 - [x] 7.5 Run an end-to-end scripted session (create deck, create card, learn it, advance the clock a day, review it, check stats) and verify the recorded `review_log` matches expectations
-- [ ] 7.6 Verify a release build with the `tooling` feature accepts `--snap` and `--script`, and record the command in `README.md`
+- [x] 7.6 Verify a release build with the `tooling` feature accepts `--snap` and `--script`, and record the command in `README.md`
 
 ## Workflow follow-up
 

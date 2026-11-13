@@ -24,10 +24,23 @@ Headless, no window — the same renderer, one frame captured to a PNG:
 ```sh
 cargo run -- --snap /tmp/typr.png
 cargo run -q -- --list-scenes
+cargo run -- --scene history --snap /tmp/history.png
 ```
 
+A headless run never opens the library, so it writes nothing under the app's data folder.
+
 Debug builds always accept the headless arguments. A release build needs Rune's `tooling`
-feature to take them.
+feature to take them:
+
+```sh
+cargo build --release --features rune/tooling
+./target/release/typr --list-scenes
+./target/release/typr --scene summary --snap /tmp/summary.png
+```
+
+`--script` replays input, and `--video` records the frames the script produces. Each event is a
+JSON object: `{"key": "remembered"}` taps an element by its key, `{"text": "…"}` types into the
+focused field, `{"physical": "Escape"}` presses a key, and a `"t"` field places it in seconds.
 
 ## Dependencies
 
