@@ -4,7 +4,7 @@ use rune::tok::{self, type_};
 use rune::{El, ScrollSpec, col, row, text};
 use rune_kit::root;
 
-use crate::store::{Grade, Id, Phase, ReviewRow};
+use crate::store::{Grade, Id, ReviewRow};
 
 /// One card's history, as the screen shows it.
 #[derive(Debug, Default)]
@@ -16,9 +16,11 @@ pub struct History {
 }
 
 impl History {
-    pub fn set(&mut self, card: Id, rows: Vec<ReviewRow>) {
-        self.count = rows.iter().filter(|row| row.phase != Phase::Learn).count() as u32;
+    /// Show one card's records. `reviews` comes from the store, so the rule for what counts as a
+    /// review lives in one place.
+    pub fn set(&mut self, card: Id, rows: Vec<ReviewRow>, reviews: u32) {
         self.card = Some(card);
+        self.count = reviews;
         self.rows = rows;
     }
 }
@@ -39,12 +41,25 @@ impl Host for History {
     }
 }
 
+/// A moment as the user's clock shows it, `2026-11-14 09:05`.
 fn when(at_ms: i64) -> String {
-    // Whole minutes are enough here: the record list is read next to a due date, not a stopwatch.
-    let minutes = at_ms / 60_000;
-    let days = minutes / (60 * 24);
-    let rest = minutes % (60 * 24);
-    format!("+{}d {:02}:{:02}", days, rest / 60, rest % 60)
+    let seconds = i32::try_from(crate::day::local_offset_ms() / 1000).unwrap_or(0);
+    let Ok(offset) = time::UtcOffset::from_whole_seconds(seconds) else {
+        return String::new();
+    };
+    let Ok(moment) = time::OffsetDateTime::from_unix_timestamp_nanos(i128::from(at_ms) * 1_000_000)
+    else {
+        return String::new();
+    };
+    let local = moment.to_offset(offset);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}",
+        local.year(),
+        u8::from(local.month()),
+        local.day(),
+        local.hour(),
+        local.minute()
+    )
 }
 
 fn row_view(entry: &ReviewRow) -> El {

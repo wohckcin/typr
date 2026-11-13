@@ -178,6 +178,12 @@ impl Db {
             },
             Command::Draft { card } => Ok(Outcome::Draft(self.draft(*card)?)),
             Command::SetSetting { key, value } => {
+                if key == "new_per_day" && value.parse::<u32>().is_err() {
+                    return Err(StoreError::Setting {
+                        key: key.clone(),
+                        value: value.clone(),
+                    });
+                }
                 self.conn.execute(
                     "INSERT INTO settings (key, value) VALUES (?1, ?2)
                      ON CONFLICT (key) DO UPDATE SET value = excluded.value",
@@ -203,7 +209,10 @@ impl Db {
                 seed,
             } => Ok(Outcome::New(self.new_prompts(*now_ms, *offset_ms, *seed)?)),
             Command::Search { query, deck } => Ok(Outcome::Search(self.search(query, *deck)?)),
-            Command::History { card } => Ok(Outcome::History(self.history(*card)?)),
+            Command::History { card } => Ok(Outcome::History {
+                rows: self.history(*card)?,
+                reviews: self.review_count(*card)?,
+            }),
             Command::Stats { from_ms, to_ms } => Ok(Outcome::Stats(self.stats(*from_ms, *to_ms)?)),
         }
     }
@@ -281,11 +290,14 @@ impl Db {
                 |row| row.get(0),
             )
             .optional()?;
-        Ok(Settings {
-            new_per_day: limit
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(Settings::DEFAULT_NEW_PER_DAY),
-        })
+        let new_per_day = match limit {
+            None => Settings::DEFAULT_NEW_PER_DAY,
+            Some(value) => value.parse().map_err(|_| StoreError::Setting {
+                key: "new_per_day".to_string(),
+                value,
+            })?,
+        };
+        Ok(Settings { new_per_day })
     }
 
     /// The text as it was left, if it was left unsaved.
@@ -470,13 +482,12 @@ impl Db {
             .query_row(
                 "SELECT phase, interval_ms FROM prompt WHERE card_id = ?1 AND key = ?2",
                 params![card, key],
-                |row| {
-                    Ok(PromptState {
-                        phase: Phase::parse(&row.get::<_, String>(0)?),
-                        interval_ms: row.get(1)?,
-                    })
-                },
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
             )
+            .map(|(phase, interval_ms)| PromptState {
+                phase: Phase::parse(&phase).unwrap_or(Phase::Review),
+                interval_ms,
+            })
             .map_err(|error| match error {
                 rusqlite::Error::QueryReturnedNoRows => StoreError::NoPrompt {
                     card,
@@ -550,7 +561,8 @@ impl Db {
                AND c.trashed_at IS NULL
                AND c.archived = 0
                AND c.sides >= 2
-               AND c.deck_id NOT IN (SELECT id FROM archived_deck)",
+               AND c.deck_id NOT IN (SELECT id FROM archived_deck)
+             ORDER BY p.due_at, p.card_id",
         )?;
         let mut due = stmt
             .query_map(params![now_ms], |row| {
@@ -663,17 +675,26 @@ impl Db {
                  FROM prompt WHERE card_id = ?1 AND key = ?2",
                 params![card, key],
                 |row| {
-                    Ok(Folded {
-                        phase: Phase::parse(&row.get::<_, String>(0)?),
-                        interval_ms: row.get(1)?,
-                        due_at: row.get(2)?,
-                        reps: row.get(3)?,
-                        lapses: row.get(4)?,
-                    })
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, i64>(4)?,
+                    ))
                 },
             )
             .optional()
-            .map_err(Into::into)
+            .map_err(StoreError::from)
+            .map(|row| {
+                row.map(|(phase, interval_ms, due_at, reps, lapses)| Folded {
+                    phase: Phase::parse(&phase).unwrap_or(Phase::Review),
+                    interval_ms,
+                    due_at,
+                    reps,
+                    lapses,
+                })
+            })
     }
 
     /// Rewrite every prompt from its records, which is what makes the prompt a cache rather than a
@@ -746,18 +767,37 @@ impl Db {
              FROM review_log WHERE card_id = ?1 ORDER BY at, rowid",
         )?;
         let rows = stmt.query_map(params![card], |row| {
-            Ok(ReviewRow {
-                card: row.get(0)?,
-                key: row.get(1)?,
-                phase: Phase::parse(&row.get::<_, String>(2)?),
-                at: row.get(3)?,
-                grade: Grade::parse(&row.get::<_, String>(4)?),
-                interval_ms: row.get(5)?,
-                due_at: row.get(6)?,
-                duration_ms: row.get(7)?,
-            })
+            Ok((
+                row.get::<_, Id>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, Option<i64>>(6)?,
+                row.get::<_, Option<i64>>(7)?,
+            ))
         })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        rows.map(|row| {
+            let (card, key, phase, at, grade, interval_ms, due_at, duration_ms) = row?;
+            Ok(ReviewRow {
+                card,
+                key,
+                phase: Phase::parse(&phase).ok_or_else(|| StoreError::Text {
+                    column: "review_log.phase",
+                    value: phase.clone(),
+                })?,
+                at,
+                grade: Grade::parse(&grade).ok_or_else(|| StoreError::Text {
+                    column: "review_log.grade",
+                    value: grade.clone(),
+                })?,
+                interval_ms,
+                due_at,
+                duration_ms,
+            })
+        })
+        .collect()
     }
     /// Cards whose folded text contains the folded query, restricted to `deck`'s subtree when given.
     /// Trashed cards never match.

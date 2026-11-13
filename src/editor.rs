@@ -54,6 +54,8 @@ pub struct Editor {
     pub asking: bool,
     /// Whether the last save was refused because the card is empty.
     pub refused: bool,
+    /// Why the last attachment did not happen, until another one succeeds.
+    pub attach_error: Option<String>,
     /// Where this card's pictures live.
     pub attachments: Attachments,
     /// Whether the card's review history is showing beside the preview.
@@ -112,6 +114,7 @@ impl Editor {
             memo,
             asking: false,
             refused: false,
+            attach_error: None,
             attachments: Attachments::default(),
             showing_history: false,
             history: crate::history::History::default(),
@@ -142,17 +145,31 @@ impl Editor {
         self.sides().iter().any(|side| !side.trim().is_empty())
     }
 
-    /// Whether a save has been refused, so the editor can say why.
-    pub fn refusal(&self) -> Option<&'static str> {
+    /// Why the last save or attachment did not happen, so the editor can say so.
+    pub fn refusal(&self) -> Option<&str> {
         if self.refused && !self.saveable() {
             Some("This card is empty")
         } else {
-            None
+            self.attach_error.as_deref()
         }
     }
 
-    /// Copy a chosen file beside the library and write its reference where the cursor is.
+    /// Copy a chosen file beside the library and write its reference where the cursor is. A
+    /// failure is kept on the editor, because the file dialog answers on its own thread.
     pub fn attach_image(&mut self, source: &std::path::Path) -> std::io::Result<String> {
+        match self.copy_in(source) {
+            Ok(name) => {
+                self.attach_error = None;
+                Ok(name)
+            }
+            Err(error) => {
+                self.attach_error = Some(format!("The image was not attached: {error}"));
+                Err(error)
+            }
+        }
+    }
+
+    fn copy_in(&mut self, source: &std::path::Path) -> std::io::Result<String> {
         let name = attachments::attach(self.attachments.root(), source)?;
         let alt = name
             .rsplit_once('.')
@@ -319,6 +336,7 @@ fn attach_button<S: Host>() -> El {
             );
             tx.open_file(options, |s: &mut S, result, _| {
                 if let Ok(Some(path)) = result {
+                    // The error is kept on the editor and drawn in the header.
                     let _ = s.editor_mut().attach_image(&path);
                 }
             });

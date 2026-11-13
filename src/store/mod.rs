@@ -42,12 +42,13 @@ impl Phase {
         }
     }
 
-    /// The schema's `CHECK` constraint keeps this total; an unknown value reads as `Review`.
-    pub fn parse(text: &str) -> Self {
+    /// `None` when the text is not one of the three the schema's `CHECK` allows.
+    pub fn parse(text: &str) -> Option<Phase> {
         match text {
-            "learn" => Phase::Learn,
-            "relearn" => Phase::Relearn,
-            _ => Phase::Review,
+            "learn" => Some(Phase::Learn),
+            "review" => Some(Phase::Review),
+            "relearn" => Some(Phase::Relearn),
+            _ => None,
         }
     }
 }
@@ -67,10 +68,12 @@ impl Grade {
         }
     }
 
-    pub fn parse(text: &str) -> Self {
+    /// `None` when the text is not one of the two the schema's `CHECK` allows.
+    pub fn parse(text: &str) -> Option<Grade> {
         match text {
-            "remembered" => Grade::Remembered,
-            _ => Grade::Forgot,
+            "remembered" => Some(Grade::Remembered),
+            "forgot" => Some(Grade::Forgot),
+            _ => None,
         }
     }
 }
@@ -359,13 +362,37 @@ pub enum Outcome {
         phase: Phase,
         due_at: Option<i64>,
     },
-    History(Vec<ReviewRow>),
+    History {
+        rows: Vec<ReviewRow>,
+        /// Real reviews, the ones the summary and the history panel count.
+        reviews: u32,
+    },
     Due(Vec<DuePrompt>),
     New(Vec<NewPrompt>),
     Draft(Option<String>),
     Search(Vec<Id>),
     Stats(Stats),
     Ok,
+}
+
+impl Outcome {
+    /// Whether this answer came from a command that wrote to the library. Only a write moves the
+    /// revision and only a write means the snapshot the views hold is stale.
+    pub fn writes(&self) -> bool {
+        match self {
+            Outcome::Deck(_)
+            | Outcome::Card(_)
+            | Outcome::Changed(_)
+            | Outcome::Graded { .. }
+            | Outcome::Ok => true,
+            Outcome::History { .. }
+            | Outcome::Due(_)
+            | Outcome::New(_)
+            | Outcome::Draft(_)
+            | Outcome::Search(_)
+            | Outcome::Stats(_) => false,
+        }
+    }
 }
 
 /// The answer to one command, carrying the id it was submitted with.
@@ -399,6 +426,16 @@ pub enum StoreError {
     Corrupt {
         version: i64,
     },
+    /// A value in the database that no build of typr writes.
+    Text {
+        column: &'static str,
+        value: String,
+    },
+    /// A setting the store cannot honour.
+    Setting {
+        key: String,
+        value: String,
+    },
     Io(std::io::Error),
 }
 
@@ -417,6 +454,15 @@ impl std::fmt::Display for StoreError {
                 f,
                 "this file records schema version {version}, which is not a typr library"
             ),
+            StoreError::Text { column, value } => {
+                write!(
+                    f,
+                    "the library holds {value} in {column}, which typr never wrote"
+                )
+            }
+            StoreError::Setting { key, value } => {
+                write!(f, "{value} is not a valid value for {key}")
+            }
             StoreError::Io(e) => write!(f, "a file operation on the library failed: {e}"),
         }
     }
@@ -481,7 +527,9 @@ pub fn open_in(dirs: &AppDirs) -> Result<Db, StoreError> {
 /// Every command answers exactly one [`Event`] carrying the id the method returned. An id that
 /// never answers means the worker has already closed, which only happens while quitting.
 pub trait Store: Send + Sync {
-    /// The last published snapshot: decks, cards and settings, never card text.
+    /// The last published snapshot: decks, cards and settings. Cards carry their markdown, so a
+    /// session can split sides without another round trip; the snapshot is cloned per call and is
+    /// republished only when a command wrote.
     fn snapshot(&self) -> Snapshot;
 
     /// Take the events that arrived since the last call.

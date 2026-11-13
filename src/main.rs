@@ -17,8 +17,7 @@ use typr::{day, sides};
 type Scene = (&'static str, fn(&mut State));
 
 struct State {
-    /// Drives `screen::step`; the library screen has no events of its own yet, so nothing reads
-    /// it until the editor and session screens arrive.
+    /// The screen on display.
     screen: Screen,
     library: Library,
     editor: Editor,
@@ -229,7 +228,7 @@ impl State {
             return;
         }
         self.session = Session::new(queue, entries);
-        self.screen = Screen::Session { queue };
+        self.screen = Screen::Session;
     }
 
     /// Answer what the store has said. A grade the store refused is dropped, so the card stays.
@@ -240,14 +239,16 @@ impl State {
         let events = store.poll();
         let now = typr::clock::SystemClock.now_ms();
         let mut changed = false;
+        let mut wrote = false;
         for event in events {
             changed = true;
+            wrote |= event.result.as_ref().is_ok_and(Outcome::writes);
             match event.result {
                 Ok(Outcome::Graded { .. }) => {
                     let acknowledged = self.session.acknowledge(event.id, now);
                     // Leaving the session first must not be undone by a grade that lands after.
                     if acknowledged
-                        && matches!(self.screen, Screen::Session { .. })
+                        && matches!(self.screen, Screen::Session)
                         && self.session.finished()
                     {
                         self.screen = Screen::Summary;
@@ -262,11 +263,11 @@ impl State {
                         self.open_session(Queue::Due, prompts);
                     }
                 }
-                Ok(Outcome::History(rows)) => {
+                Ok(Outcome::History { rows, reviews }) => {
                     if let Some((_, card)) = self.history_request.filter(|(id, _)| *id == event.id)
                     {
                         self.history_request = None;
-                        self.editor.history.set(card, rows);
+                        self.editor.history.set(card, rows, reviews);
                     }
                 }
                 Ok(Outcome::New(prompts)) if self.new_request == Some(event.id) => {
@@ -294,7 +295,7 @@ impl State {
                 }
             }
         }
-        if changed && let Some(store) = &self.store {
+        if wrote && let Some(store) = &self.store {
             self.library.set_snapshot(store.snapshot());
         }
         changed
@@ -304,8 +305,8 @@ impl State {
 fn view(s: &State, _: &mut Cx<State>) -> El {
     let screen = match s.screen {
         Screen::Library => library::view::<State>(s),
-        Screen::Editor { .. } => editor::view::<State>(s),
-        Screen::Session { .. } => study::view::<State>(s),
+        Screen::Editor => editor::view::<State>(s),
+        Screen::Session => study::view::<State>(s),
         Screen::Summary => study::summary::<State>(s),
     };
     match &s.failure {
@@ -346,7 +347,7 @@ fn poll(s: &mut State, _dt: f64, tx: &mut Tx) -> bool {
 
 fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
     match s.screen {
-        Screen::Session { .. } => study::key(s, event),
+        Screen::Session => study::key(s, event),
         Screen::Summary => {
             if event.key == rune::Key::Escape {
                 s.leave_session();
@@ -356,7 +357,7 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
             }
         }
         // Two ways into a session from the library, so the keyboard can start one.
-        Screen::Editor { .. } => match &event.key {
+        Screen::Editor => match &event.key {
             // `h` shows this card's review history beside the preview, or hides it again.
             rune::Key::Text(t) if t == "h" => {
                 s.editor.showing_history = !s.editor.showing_history;
@@ -398,7 +399,7 @@ fn main() {
             state.seeded = true;
         }),
         ("editor", |state: &mut State| {
-            state.screen = Screen::Editor { card: None };
+            state.screen = Screen::Editor;
             state.editor = Editor::new(
                 None,
                 "What is **mitosis**?\n---\nCell division.".to_string(),
@@ -408,9 +409,7 @@ fn main() {
             state.screen = Screen::Library;
         }),
         ("history", |state: &mut State| {
-            state.screen = Screen::Editor {
-                card: Some(typr::screen::CardId(1)),
-            };
+            state.screen = Screen::Editor;
             state.editor = Editor::new(
                 Some(1),
                 "What is **mitosis**?\n---\nCell division.".to_string(),
@@ -443,6 +442,7 @@ fn main() {
                         Some(3_600_000),
                     ),
                 ],
+                2,
             );
         }),
         ("session-new", |state: &mut State| {
@@ -454,7 +454,7 @@ fn main() {
                 ],
             }];
             state.session = Session::new(Queue::New, entries);
-            state.screen = Screen::Session { queue: Queue::New };
+            state.screen = Screen::Session;
         }),
         ("session", |state: &mut State| {
             let entries = vec![
@@ -475,7 +475,7 @@ fn main() {
             ];
             state.session = Session::new(Queue::Due, entries);
             state.session.reveal();
-            state.screen = Screen::Session { queue: Queue::Due };
+            state.screen = Screen::Session;
         }),
         ("summary", |state: &mut State| {
             state.session = Session::empty();
@@ -483,7 +483,7 @@ fn main() {
             state.screen = Screen::Summary;
         }),
         ("editor-leave", |state: &mut State| {
-            state.screen = Screen::Editor { card: None };
+            state.screen = Screen::Editor;
             state.editor = Editor::new(
                 None,
                 "What is **mitosis**?\n---\nCell division.".to_string(),
@@ -584,7 +584,7 @@ mod tests {
         let mut state = State {
             store: Some(store),
             session: session_on(1),
-            screen: Screen::Session { queue: Queue::Due },
+            screen: Screen::Session,
             ..State::default()
         };
         let grade = state.session.grade(Grade::Remembered).expect("graded").1;
@@ -611,7 +611,7 @@ mod tests {
         let mut state = State {
             store: Some(store),
             session: session_on(9),
-            screen: Screen::Session { queue: Queue::Due },
+            screen: Screen::Session,
             ..State::default()
         };
         let grade = state.session.grade(Grade::Remembered).expect("graded").1;

@@ -1,6 +1,7 @@
 use rune::{Cx, El, Env, Runtime};
 
 use super::*;
+use crate::store::Phase;
 
 fn record(phase: Phase, grade: Grade, at: i64) -> ReviewRow {
     ReviewRow {
@@ -28,7 +29,7 @@ fn shown(rt: &Runtime<History>, key: &str) -> Option<String> {
 }
 
 #[test]
-fn the_review_count_leaves_learning_cycles_out() {
+fn the_panel_shows_the_count_the_store_gave_it() {
     let mut history = History::default();
     history.set(
         1,
@@ -39,12 +40,10 @@ fn the_review_count_leaves_learning_cycles_out() {
             record(Phase::Review, Grade::Remembered, 4_000),
             record(Phase::Review, Grade::Forgot, 5_000),
         ],
+        2,
     );
-    assert_eq!(
-        history.count, 2,
-        "the three learning cycles are not reviews"
-    );
-    assert_eq!(history.rows.len(), 5, "but every record is listed");
+    assert_eq!(history.count, 2, "the store's count, not a recount here");
+    assert_eq!(history.rows.len(), 5, "every record is listed");
 }
 
 #[test]
@@ -56,6 +55,7 @@ fn every_record_is_drawn_with_its_phase_grade_and_due_date() {
             record(Phase::Review, Grade::Remembered, 0),
             record(Phase::Relearn, Grade::Forgot, 60_000),
         ],
+        2,
     );
     let mut rt = Runtime::new(history, draw, (960.0, 640.0), Env::new(true, 1.0));
     rt.frame(0.0);

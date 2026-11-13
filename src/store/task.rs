@@ -15,7 +15,7 @@ use rune::Waker;
 
 use crate::clock::{Clock, SystemClock};
 
-use super::{Command, Db, Event, Grade, Id, Snapshot, Store, StoreError};
+use super::{Command, Db, Event, Grade, Id, Outcome, Snapshot, Store, StoreError};
 
 /// Everything the worker publishes for the UI thread.
 struct Shared {
@@ -247,7 +247,9 @@ fn work(db: Db, rx: Receiver<Message>, shared: Arc<Shared>, clock: Box<dyn Clock
     while let Ok(message) = rx.recv() {
         let id = message.id;
         let result = db.apply(&message.command, clock.now_ms());
-        if result.is_ok() {
+        // Only a write makes the published snapshot stale; a query answering with rows of its own
+        // must not cost a full re-read of the library.
+        if result.as_ref().is_ok_and(Outcome::writes) {
             // A snapshot that cannot be read must not turn a committed command into a failure:
             // the caller would retry work the database has already done.
             match db.snapshot() {

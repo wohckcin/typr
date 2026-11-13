@@ -1398,6 +1398,54 @@ fn a_deck_moves_under_another_deck() {
 }
 
 #[test]
+fn a_read_only_command_leaves_the_revision_alone() {
+    let dir = TempDir::new().expect("temp dir");
+    let store = spawn_temp(&dir);
+    store.create_deck(None, "Biology");
+    wait_for(&store, 1);
+
+    let before = store.snapshot().revision;
+    store.stats(0, 1);
+    wait_for(&store, 1);
+    assert_eq!(
+        before,
+        store.snapshot().revision,
+        "a query answers with rows of its own, so the library was not republished"
+    );
+
+    store.create_deck(None, "Chemistry");
+    wait_for(&store, 1);
+    assert!(
+        store.snapshot().revision > before,
+        "a write does republish it"
+    );
+}
+
+#[test]
+fn a_new_card_cap_that_is_not_a_number_is_refused() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    let error = db
+        .apply(
+            &Command::SetSetting {
+                key: "new_per_day".to_string(),
+                value: "plenty".to_string(),
+            },
+            0,
+        )
+        .expect_err("refused");
+    assert!(
+        error.to_string().contains("not a valid value"),
+        "got {error}"
+    );
+    assert_eq!(
+        db.settings().expect("settings").new_per_day,
+        Settings::DEFAULT_NEW_PER_DAY,
+        "and nothing was stored"
+    );
+}
+
+#[test]
 fn a_failing_command_leaves_no_partial_write() {
     let dir = TempDir::new().expect("temp dir");
     let db = open_temp(&dir);

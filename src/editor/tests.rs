@@ -263,3 +263,13 @@ fn the_save_button_stores_the_buffer_without_leaving() {
     assert_eq!(runtime.state.saved, "card edited");
     assert!(!runtime.state.dirty());
 }
+
+#[test]
+fn an_attachment_that_fails_says_so_in_the_header() {
+    let mut editor = Editor::new(None, "card".to_string());
+    let missing = std::path::Path::new("/nonexistent/picture.png");
+    assert!(editor.attach_image(missing).is_err(), "refused");
+    let refusal = editor.refusal().expect("the header says why");
+    assert!(refusal.contains("not attached"), "got {refusal}");
+    assert_eq!(editor.buffer.text, "card", "and nothing was inserted");
+}
