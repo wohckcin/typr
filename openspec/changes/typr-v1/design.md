@@ -123,16 +123,16 @@ The limit is library-wide and per study day, not per deck: Mochi exposes a singl
 |  (frame loop)  |                                 | owns the Connection |
 |                | <------------------------------ | applies + logs      |
 |  never awaits  |   Event { id, result } + Waker  | publishes snapshot  |
-+----------------+   StoreEvent::Changed          +---------------------+
++----------------+   on writes only                +---------------------+
 ```
 
-Every command carries an id and gets exactly one event back, so "committed before the next card is shown" is a fact about the protocol rather than a hope: grading sends `Cmd::Grade`, and the session advances on that command's event, not on an optimistic local update. `AppSpec::poll` returns `true` only when an event arrived, so idle frames cost nothing. Views read the snapshot the store task publishes, not the database.
+Every command carries an id and gets exactly one event back, so "committed before the next card is shown" is a fact about the protocol rather than a hope: grading sends `Cmd::Grade`, and the session advances on that command's event, not on an optimistic local update. `AppSpec::poll` returns `true` only when an event arrived or a relearning step landed, and the snapshot is republished only when the command wrote (`Outcome::writes`), so a query costs no library re-read and idle frames cost nothing. Views read the snapshot the store task publishes, not the database.
 
-Quitting is the one case where the frame thread blocks: `App::on_quit` sends a final flush and joins the store task (`crates/rune/src/app.rs:431-449`), because a grade acknowledged but not yet written is a lost grade. Everything before that point is asynchronous; this join is bounded by the flush and cannot grow with the size of the log.
+Quitting is the one case where the frame thread blocks, and it does so without a hook: `AppSpec` carries no `on_quit` (that lives on the `App` builder, `crates/rune/src/app.rs:449`), a normal window close returns `Ok` from `App::run` and never calls `std::process::exit` (`crates/rune/src/tooling.rs:233-238`), so the state owning the handle is dropped and `Drop for Handle` closes it, which drains the queue and joins the store task. Everything before that point is asynchronous; this join is bounded by the flush and cannot grow with the size of the log.
 
 Alternatives: `redb` (pure Rust, but no SQL and no FTS5, which search will want), JSON/JSONL files (readable, but every due query and statistic becomes a full scan, and a crash mid-rewrite costs cards), SQLite on the UI thread (simplest, and rejected because one bulk write freezes the window).
 
-Search matches a `LIKE` pattern against `search_text` initially; FTS5 is available in the same file if that proves too slow. Long lists use a growth stack rather than building every row: `col().growth(GrowthSpec::default()).virtual_rows(count, row_height, key, build)` (`crates/rune/src/el/virtual_rows.rs:80-88`; `growth` is documented as required alongside the list, `crates/rune/src/el/growth.rs:7-9`), which mounts only the viewport's rows and builds them inside `build`. `rune_kit::List` builds all of its rows, so it is not used for the card list.
+Search filters the published snapshot: every card carries its `search_text` folded once at write time (NFD, combining marks dropped, lowercased), and the query is folded the same way, so matching is a substring test in memory with no round trip and no `LIKE` metacharacters to escape. FTS5 is in the same file if a library ever outgrows the snapshot. Long lists use a growth stack rather than building every row: `col().growth(GrowthSpec::default()).virtual_rows(count, row_height, key, build)` (`crates/rune/src/el/virtual_rows.rs:80-88`; `growth` is documented as required alongside the list, `crates/rune/src/el/growth.rs:7-9`), which mounts only the viewport's rows and builds them inside `build`. `rune_kit::List` builds all of its rows, so it is not used for the card list.
 
 ### One explicit state machine per screen
 
