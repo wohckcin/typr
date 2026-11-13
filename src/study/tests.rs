@@ -3,7 +3,7 @@ use rune::{Env, Key, KeyEvent, Mods, Runtime, Tx};
 use super::{Host, key, summary, view};
 use crate::screen::Queue;
 use crate::session::{Entry, Session};
-use crate::store::{Grade, Id};
+use crate::store::{Grade, Id, StoreError};
 
 const NOON: i64 = 1_760_000_000_000;
 
@@ -50,10 +50,10 @@ impl Host for App {
         &mut self.session
     }
 
-    fn submit_grade(&mut self, card: Id, grade: Grade) -> u64 {
+    fn submit_grade(&mut self, card: Id, grade: Grade) -> Result<u64, StoreError> {
         let id = self.sent.len() as u64 + 1;
         self.sent.push((id, card, grade));
-        id
+        Ok(id)
     }
 
     fn due_now(&self) -> usize {
@@ -166,7 +166,7 @@ fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
     for grade in [Grade::Remembered, Grade::Forgot, Grade::Remembered] {
         app.session.reveal();
         let (card, grade) = app.session.grade(grade).unwrap();
-        let id = app.submit_grade(card, grade);
+        let id = app.submit_grade(card, grade).expect("sent");
         app.session.sent(id);
         app.acknowledge();
     }
@@ -175,7 +175,7 @@ fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
         .advance_clock(NOON + crate::clock::LEARNING_STEP_MS);
     app.session.reveal();
     let (card, grade) = app.session.grade(Grade::Remembered).unwrap();
-    let id = app.submit_grade(card, grade);
+    let id = app.submit_grade(card, grade).expect("sent");
     app.session.sent(id);
     app.acknowledge();
     assert!(app.session.finished());

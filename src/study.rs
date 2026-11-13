@@ -6,14 +6,14 @@ use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Markdown, MarkdownStyle, root};
 
 use crate::session::Session;
-use crate::store::{Grade, Id};
+use crate::store::{Grade, Id, StoreError};
 
 /// What the study screen needs from the app.
 pub trait Host: 'static {
     fn session(&self) -> &Session;
     fn session_mut(&mut self) -> &mut Session;
     /// Send the grade to the store and answer the id it was sent under.
-    fn submit_grade(&mut self, card: Id, grade: Grade) -> u64;
+    fn submit_grade(&mut self, card: Id, grade: Grade) -> Result<u64, StoreError>;
     /// How many cards are due right now, for the summary.
     fn due_now(&self) -> usize;
     /// Leave the session and go back to the library.
@@ -34,11 +34,9 @@ fn answer<S: Host>(s: &mut S, grade: Grade) {
     let Some((card, grade)) = s.session_mut().grade(grade) else {
         return;
     };
-    let id = s.submit_grade(card, grade);
-    if id == 0 {
-        s.session_mut().refuse(0);
-    } else {
-        s.session_mut().sent(id);
+    match s.submit_grade(card, grade) {
+        Ok(id) => s.session_mut().sent(id),
+        Err(_) => s.session_mut().unsent(),
     }
 }
 

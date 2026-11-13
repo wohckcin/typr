@@ -8,7 +8,7 @@ fn each_command_produces_exactly_one_event() {
     let dir = TempDir::new().expect("temp dir");
     let store = spawn_temp(&dir);
 
-    let id = store.create_deck(None, "Japanese");
+    let id = store.create_deck(None, "Japanese").expect("sent");
     let events = wait_for(&store, 1);
     assert_eq!(events.len(), 1, "one command, one event");
     assert_eq!(events[0].id, id);
@@ -32,8 +32,8 @@ fn a_failing_command_answers_with_an_error_and_leaves_the_snapshot_alone() {
     let dir = TempDir::new().expect("temp dir");
     let store = spawn_temp(&dir);
 
-    store.create_deck(None, "Twice");
-    let duplicate = store.create_deck(None, "Twice");
+    store.create_deck(None, "Twice").expect("sent");
+    let duplicate = store.create_deck(None, "Twice").expect("sent");
     let events = wait_for(&store, 2);
 
     let failed = events
@@ -71,6 +71,7 @@ fn every_store_method_is_reachable_through_the_trait() {
         door.stats(0, i64::MAX),
     ];
 
+    let ids: Vec<u64> = ids.into_iter().map(|id| id.expect("sent")).collect();
     let mut sorted = ids.clone();
     sorted.sort_unstable();
     sorted.dedup();
@@ -103,10 +104,14 @@ fn a_command_sent_and_then_quit_is_on_disk() {
             noop_waker(),
         )
         .expect("spawn");
-        store.create_deck(None, "Biology");
+        store.create_deck(None, "Biology").expect("sent");
         // Sent, not acknowledged: quitting must still write all of it.
-        store.create_card(1, "mitochondria\n---\nthe powerhouse");
-        store.grade(1, "fwd", Grade::Remembered, Some(4_000));
+        store
+            .create_card(1, "mitochondria\n---\nthe powerhouse")
+            .expect("sent");
+        store
+            .grade(1, "fwd", Grade::Remembered, Some(4_000))
+            .expect("sent");
         store.close();
     }
 
@@ -136,8 +141,10 @@ fn dropping_the_handle_writes_what_was_sent() {
             noop_waker(),
         )
         .expect("spawn");
-        store.create_deck(None, "Biology");
-        store.create_card(1, "mitochondria\n---\nthe powerhouse");
+        store.create_deck(None, "Biology").expect("sent");
+        store
+            .create_card(1, "mitochondria\n---\nthe powerhouse")
+            .expect("sent");
         // No close(): the drop is the quit, and Rune's AppSpec has no quit hook to call one.
     }
 
@@ -153,11 +160,11 @@ fn dropping_the_handle_writes_what_was_sent() {
 fn a_read_only_command_leaves_the_revision_alone() {
     let dir = TempDir::new().expect("temp dir");
     let store = spawn_temp(&dir);
-    store.create_deck(None, "Biology");
+    store.create_deck(None, "Biology").expect("sent");
     wait_for(&store, 1);
 
     let before = store.snapshot().revision;
-    store.stats(0, 1);
+    store.stats(0, 1).expect("sent");
     wait_for(&store, 1);
     assert_eq!(
         before,
@@ -165,7 +172,7 @@ fn a_read_only_command_leaves_the_revision_alone() {
         "a query answers with rows of its own, so the library was not republished"
     );
 
-    store.create_deck(None, "Chemistry");
+    store.create_deck(None, "Chemistry").expect("sent");
     wait_for(&store, 1);
     assert!(
         store.snapshot().revision > before,
@@ -184,7 +191,7 @@ fn reading_the_snapshot_twice_shares_one_allocation() {
         "a read hands out the published library instead of copying it"
     );
 
-    store.create_deck(None, "Chemistry");
+    store.create_deck(None, "Chemistry").expect("sent");
     wait_for(&store, 1);
     assert!(
         !std::sync::Arc::ptr_eq(&first, &store.snapshot()),
@@ -211,5 +218,32 @@ fn a_failing_command_leaves_no_partial_write() {
     assert!(
         db.tag_names().expect("the tag table").is_empty(),
         "the tag written before the foreign key refused the card is gone"
+    );
+}
+
+#[test]
+fn a_command_sent_after_quitting_is_refused() {
+    let dir = TempDir::new().expect("temp dir");
+    let store = spawn_temp(&dir);
+    store.close();
+
+    let error = store.create_deck(None, "Late").expect_err("closed");
+
+    assert!(matches!(error, StoreError::Closed), "{error}");
+    assert_eq!(store.snapshot().decks.len(), 0, "nothing was written");
+}
+
+#[test]
+fn an_error_keeps_the_cause_that_produced_it() {
+    let io = StoreError::from(std::io::Error::new(
+        std::io::ErrorKind::PermissionDenied,
+        "denied",
+    ));
+    let cause = std::error::Error::source(&io).expect("a cause");
+
+    assert_eq!(cause.to_string(), "denied");
+    assert!(
+        std::error::Error::source(&StoreError::from(rusqlite::Error::InvalidQuery)).is_some(),
+        "the SQLite error is reachable through the chain"
     );
 }

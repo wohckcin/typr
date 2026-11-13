@@ -85,7 +85,7 @@ fn a_grade_that_lands_after_leaving_does_not_open_a_summary() {
         ..State::default()
     };
     let grade = state.session.grade(Grade::Remembered).expect("graded").1;
-    let id = state.submit_grade(1, grade);
+    let id = state.submit_grade(1, grade).expect("sent");
     state.session.sent(id);
 
     state.leave_session();
@@ -165,8 +165,18 @@ fn a_late_history_answer_for_another_card_is_ignored() {
     };
 
     // The user asks for one card's records, then another's, before either answer lands.
-    let first = state.store.as_ref().expect("store").history(reviewed);
-    let second = state.store.as_ref().expect("store").history(fresh);
+    let first = state
+        .store
+        .as_ref()
+        .expect("store")
+        .history(reviewed)
+        .expect("sent");
+    let second = state
+        .store
+        .as_ref()
+        .expect("store")
+        .history(fresh)
+        .expect("sent");
     state.editor.card = Some(fresh);
     state.history_request = Some((second, fresh));
 
@@ -201,7 +211,7 @@ fn a_refused_grade_says_why_and_leaves_the_card_up() {
         ..State::default()
     };
     let grade = state.session.grade(Grade::Remembered).expect("graded").1;
-    let id = state.submit_grade(9, grade);
+    let id = state.submit_grade(9, grade).expect("sent");
     state.session.sent(id);
 
     for _ in 0..100 {

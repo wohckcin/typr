@@ -398,91 +398,45 @@ pub struct Event {
 }
 
 /// What can go wrong opening or writing the store.
-#[derive(Debug)]
+///
+/// Every variant says what the caller can do about it and keeps its cause reachable through
+/// [`std::error::Error::source`], so the UI can show one line while a log or a debugger can still
+/// see the SQLite or `io` error underneath.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum StoreError {
-    Sqlite(rusqlite::Error),
+    /// The database refused a statement.
+    #[error("database error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
     /// No home folder, so there is nowhere to keep the library.
+    #[error("no home folder to keep the library in")]
     NoDataDir,
     /// A database written by a newer build: refused rather than downgraded.
-    TooNew {
-        found: i64,
-        supported: i64,
-    },
+    #[error(
+        "this library was written by a newer version of typr (schema {found}, this build knows {supported})"
+    )]
+    TooNew { found: i64, supported: i64 },
     /// A grade for a prompt that does not exist, e.g. for a card with one side.
-    NoPrompt {
-        card: Id,
-        key: String,
-    },
+    #[error("card {card} has no prompt {key}")]
+    NoPrompt { card: Id, key: String },
     /// A move that would put a deck inside itself.
-    Cycle {
-        deck: Id,
-    },
+    #[error("deck {deck} cannot be moved inside itself")]
+    Cycle { deck: Id },
     /// A schema version no build could have written: the file is not one of ours.
-    Corrupt {
-        version: i64,
-    },
+    #[error("this file records schema version {version}, which is not a typr library")]
+    Corrupt { version: i64 },
     /// A value in the database that no build of typr writes.
-    Text {
-        column: &'static str,
-        value: String,
-    },
+    #[error("the library holds {value} in {column}, which typr never wrote")]
+    Text { column: &'static str, value: String },
     /// A setting the store cannot honour.
-    Setting {
-        key: String,
-        value: String,
-    },
-    Io(std::io::Error),
-}
-
-impl std::fmt::Display for StoreError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            StoreError::Sqlite(e) => write!(f, "database error: {e}"),
-            StoreError::NoDataDir => write!(f, "no home folder to keep the library in"),
-            StoreError::TooNew { found, supported } => write!(
-                f,
-                "this library was written by a newer version of typr (schema {found}, this build knows {supported})"
-            ),
-            StoreError::NoPrompt { card, key } => write!(f, "card {card} has no prompt {key}"),
-            StoreError::Cycle { deck } => write!(f, "deck {deck} cannot be moved inside itself"),
-            StoreError::Corrupt { version } => write!(
-                f,
-                "this file records schema version {version}, which is not a typr library"
-            ),
-            StoreError::Text { column, value } => {
-                write!(
-                    f,
-                    "the library holds {value} in {column}, which typr never wrote"
-                )
-            }
-            StoreError::Setting { key, value } => {
-                write!(f, "{value} is not a valid value for {key}")
-            }
-            StoreError::Io(e) => write!(f, "a file operation on the library failed: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for StoreError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            StoreError::Sqlite(error) => Some(error),
-            StoreError::Io(error) => Some(error),
-            _ => None,
-        }
-    }
-}
-
-impl From<rusqlite::Error> for StoreError {
-    fn from(error: rusqlite::Error) -> Self {
-        StoreError::Sqlite(error)
-    }
-}
-
-impl From<std::io::Error> for StoreError {
-    fn from(error: std::io::Error) -> Self {
-        StoreError::Io(error)
-    }
+    #[error("{value} is not a valid value for {key}")]
+    Setting { key: String, value: String },
+    /// A file operation on the library failed.
+    #[error("a file operation on the library failed: {0}")]
+    Io(#[from] std::io::Error),
+    /// The worker thread is gone, so nothing was sent and no answer will come.
+    #[error("the library is closed")]
+    Closed,
 }
 
 /// The library file inside an app's data folder.
@@ -530,30 +484,36 @@ pub trait Store: Send + Sync {
     /// Take the events that arrived since the last call.
     fn poll(&self) -> Vec<Event>;
 
-    fn create_deck(&self, parent: Option<Id>, name: &str) -> u64;
-    fn rename_deck(&self, id: Id, name: &str) -> u64;
-    fn archive_deck(&self, id: Id, archived: bool) -> u64;
-    fn move_deck(&self, id: Id, parent: Option<Id>) -> u64;
-    fn create_card(&self, deck: Id, markdown: &str) -> u64;
-    fn save_card(&self, id: Id, markdown: &str) -> u64;
-    fn move_card(&self, id: Id, deck: Id) -> u64;
-    fn archive_card(&self, id: Id, archived: bool) -> u64;
-    fn set_tags(&self, card: Id, tags: &[String]) -> u64;
-    fn trash_card(&self, id: Id) -> u64;
-    fn restore_card(&self, id: Id) -> u64;
-    fn empty_trash(&self) -> u64;
-    fn set_draft(&self, card: Id, text: Option<&str>) -> u64;
-    fn draft(&self, card: Id) -> u64;
-    fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64;
-    fn reset_history(&self, card: Id, key: &str) -> u64;
+    fn create_deck(&self, parent: Option<Id>, name: &str) -> Result<u64, StoreError>;
+    fn rename_deck(&self, id: Id, name: &str) -> Result<u64, StoreError>;
+    fn archive_deck(&self, id: Id, archived: bool) -> Result<u64, StoreError>;
+    fn move_deck(&self, id: Id, parent: Option<Id>) -> Result<u64, StoreError>;
+    fn create_card(&self, deck: Id, markdown: &str) -> Result<u64, StoreError>;
+    fn save_card(&self, id: Id, markdown: &str) -> Result<u64, StoreError>;
+    fn move_card(&self, id: Id, deck: Id) -> Result<u64, StoreError>;
+    fn archive_card(&self, id: Id, archived: bool) -> Result<u64, StoreError>;
+    fn set_tags(&self, card: Id, tags: &[String]) -> Result<u64, StoreError>;
+    fn trash_card(&self, id: Id) -> Result<u64, StoreError>;
+    fn restore_card(&self, id: Id) -> Result<u64, StoreError>;
+    fn empty_trash(&self) -> Result<u64, StoreError>;
+    fn set_draft(&self, card: Id, text: Option<&str>) -> Result<u64, StoreError>;
+    fn draft(&self, card: Id) -> Result<u64, StoreError>;
+    fn grade(
+        &self,
+        card: Id,
+        key: &str,
+        grade: Grade,
+        duration_ms: Option<i64>,
+    ) -> Result<u64, StoreError>;
+    fn reset_history(&self, card: Id, key: &str) -> Result<u64, StoreError>;
 
     /// The due queue as the scheduler would serve it: most overdue first, ties shuffled.
-    fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64;
+    fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> Result<u64, StoreError>;
     /// The new-card queue, capped by what this study day still allows.
-    fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64;
-    fn set_setting(&self, key: &str, value: &str) -> u64;
-    fn history(&self, card: Id) -> u64;
-    fn stats(&self, from_ms: i64, to_ms: i64) -> u64;
+    fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> Result<u64, StoreError>;
+    fn set_setting(&self, key: &str, value: &str) -> Result<u64, StoreError>;
+    fn history(&self, card: Id) -> Result<u64, StoreError>;
+    fn stats(&self, from_ms: i64, to_ms: i64) -> Result<u64, StoreError>;
 }
 
 #[cfg(test)]

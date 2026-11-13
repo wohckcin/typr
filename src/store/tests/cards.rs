@@ -562,21 +562,21 @@ fn a_deck_moves_under_another_deck() {
 fn the_view_and_the_snapshot_agree_on_what_is_studyable() {
     let dir = TempDir::new().expect("temp dir");
     let store = spawn_temp(&dir);
-    store.create_deck(None, "Keep");
-    store.create_deck(None, "Gone");
-    store.create_deck(Some(2), "Under gone");
-    store.create_card(1, "front\n---\nback");
-    store.create_card(1, "a note with one side");
-    store.create_card(1, "front\n---\nback");
-    store.create_card(3, "front\n---\nback");
-    store.create_card(2, "front\n---\nback");
-    store.create_card(1, "front\n---\nback");
+    store.create_deck(None, "Keep").expect("sent");
+    store.create_deck(None, "Gone").expect("sent");
+    store.create_deck(Some(2), "Under gone").expect("sent");
+    store.create_card(1, "front\n---\nback").expect("sent");
+    store.create_card(1, "a note with one side").expect("sent");
+    store.create_card(1, "front\n---\nback").expect("sent");
+    store.create_card(3, "front\n---\nback").expect("sent");
+    store.create_card(2, "front\n---\nback").expect("sent");
+    store.create_card(1, "front\n---\nback").expect("sent");
     wait_for(&store, 9);
     let trashed = store.snapshot().cards[2].id;
     let archived = store.snapshot().cards[5].id;
-    store.trash_card(trashed);
-    store.archive_card(archived, true);
-    store.archive_deck(2, true);
+    store.trash_card(trashed).expect("sent");
+    store.archive_card(archived, true).expect("sent");
+    store.archive_deck(2, true).expect("sent");
     wait_for(&store, 3);
 
     let snapshot = store.snapshot();
@@ -589,7 +589,7 @@ fn the_view_and_the_snapshot_agree_on_what_is_studyable() {
     let mut expected = from_snapshot.clone();
     expected.sort_unstable();
 
-    store.new_prompts(0, 0, 7);
+    store.new_prompts(0, 0, 7).expect("sent");
     let events = wait_for(&store, 1);
     let from_sql = match events.last().map(|event| &event.result) {
         Some(Ok(Outcome::New(prompts))) => {

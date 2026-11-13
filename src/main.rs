@@ -9,7 +9,7 @@ use typr::history::{self, History};
 use typr::library::{self, Library};
 use typr::screen::{Queue, Screen};
 use typr::session::{Entry, Session};
-use typr::store::{self, Grade, Handle, Id, Outcome, Store};
+use typr::store::{self, Grade, Handle, Id, Outcome, Store, StoreError};
 use typr::study::{self, Host};
 use typr::{day, sides};
 
@@ -83,6 +83,18 @@ impl editor::Host for State {
     }
 }
 
+/// Remember the id of a command that went out, and say why when one could not.
+fn remember(
+    request: &mut Option<u64>,
+    failure: &mut Option<String>,
+    sent: Result<u64, StoreError>,
+) {
+    match sent {
+        Ok(id) => *request = Some(id),
+        Err(error) => *failure = Some(error.to_string()),
+    }
+}
+
 impl library::Host for State {
     fn library(&self) -> &Library {
         &self.library
@@ -112,11 +124,16 @@ impl study::Host for State {
         &mut self.session
     }
 
-    fn submit_grade(&mut self, card: Id, grade: Grade) -> u64 {
-        match &self.store {
-            Some(store) => store.grade(card, "fwd", grade, None),
-            None => 0,
+    fn submit_grade(&mut self, card: Id, grade: Grade) -> Result<u64, StoreError> {
+        let Some(store) = &self.store else {
+            self.failure = Some(StoreError::Closed.to_string());
+            return Err(StoreError::Closed);
+        };
+        let sent = store.grade(card, "fwd", grade, None);
+        if let Err(error) = &sent {
+            self.failure = Some(error.to_string());
         }
+        sent
     }
 
     fn due_now(&self) -> usize {
@@ -162,16 +179,21 @@ impl State {
         let text = self.editor.buffer.text.clone();
         match (self.editor.card, self.store.as_ref()) {
             (Some(card), Some(store)) => {
-                store.save_card(card, &text);
+                if let Err(error) = store.save_card(card, &text) {
+                    self.failure = Some(error.to_string());
+                }
             }
             (None, Some(store)) => match self.deck_for_new_card() {
                 Some(deck) => {
-                    self.card_request = Some(store.create_card(deck, &text));
+                    let sent = store.create_card(deck, &text);
+                    remember(&mut self.card_request, &mut self.failure, sent);
                 }
                 None => {
                     // A library with no deck yet: the first card brings one with it.
                     self.pending_new_card = Some(text.clone());
-                    store.create_deck(None, "Library");
+                    if let Err(error) = store.create_deck(None, "Library") {
+                        self.failure = Some(error.to_string());
+                    }
                 }
             },
             (_, None) => {
@@ -200,9 +222,11 @@ impl State {
         let now = typr::clock::SystemClock.now_ms();
         let offset = day::local_offset_ms();
         let seed = now as u64;
-        self.due_request = Some(store.due_prompts(now, offset, seed));
+        let due = store.due_prompts(now, offset, seed);
+        remember(&mut self.due_request, &mut self.failure, due);
         if queue == Queue::New {
-            self.new_request = Some(store.new_prompts(now, offset, seed));
+            let new = store.new_prompts(now, offset, seed);
+            remember(&mut self.new_request, &mut self.failure, new);
         }
         self.wanted = Some(queue);
     }
@@ -285,7 +309,8 @@ impl State {
                     if let Some(text) = self.pending_new_card.take()
                         && let Some(store) = &self.store
                     {
-                        self.card_request = Some(store.create_card(id, &text));
+                        let sent = store.create_card(id, &text);
+                        remember(&mut self.card_request, &mut self.failure, sent);
                     }
                 }
                 Ok(_) => {}
@@ -374,7 +399,10 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
                 if s.editor.showing_history
                     && let (Some(card), Some(store)) = (s.editor.card, &s.store)
                 {
-                    s.history_request = Some((store.history(card), card));
+                    match store.history(card) {
+                        Ok(id) => s.history_request = Some((id, card)),
+                        Err(error) => s.failure = Some(error.to_string()),
+                    }
                 }
                 true
             }

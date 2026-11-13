@@ -40,7 +40,7 @@ fn a_library_that_cannot_be_read_back_is_reported_not_swallowed() {
         .drop_card_table_for_test()
         .expect("break it");
 
-    store.create_deck(None, "Chemistry");
+    store.create_deck(None, "Chemistry").expect("sent");
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut events = Vec::new();
     while events.len() < 2 && Instant::now() < deadline {

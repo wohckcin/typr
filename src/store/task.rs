@@ -89,15 +89,17 @@ impl Handle {
         }
     }
 
-    fn submit(&self, command: Command) -> u64 {
+    /// Send a command and answer its id.
+    ///
+    /// A closed worker means a quit is in progress: the command cannot land, so the caller is told
+    /// rather than left waiting for an answer that will never come.
+    fn submit(&self, command: Command) -> Result<u64, StoreError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let sender = lock(&self.tx);
-        if let Some(tx) = sender.as_ref() {
-            // A closed worker means a quit in progress; the command is already lost either way,
-            // so an error here is not worth reporting.
-            let _ = tx.send(Message { id, command });
-        }
-        id
+        let tx = sender.as_ref().ok_or(StoreError::Closed)?;
+        tx.send(Message { id, command })
+            .map_err(|_| StoreError::Closed)?;
+        Ok(id)
     }
 }
 
@@ -119,7 +121,7 @@ impl Store for Handle {
         std::mem::take(&mut *lock(&self.shared.events))
     }
 
-    fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64 {
+    fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> Result<u64, StoreError> {
         self.submit(Command::DuePrompts {
             now_ms,
             offset_ms,
@@ -127,7 +129,7 @@ impl Store for Handle {
         })
     }
 
-    fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> u64 {
+    fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> Result<u64, StoreError> {
         self.submit(Command::NewPrompts {
             now_ms,
             offset_ms,
@@ -135,77 +137,83 @@ impl Store for Handle {
         })
     }
 
-    fn create_deck(&self, parent: Option<Id>, name: &str) -> u64 {
+    fn create_deck(&self, parent: Option<Id>, name: &str) -> Result<u64, StoreError> {
         self.submit(Command::CreateDeck {
             parent,
             name: name.to_string(),
         })
     }
 
-    fn rename_deck(&self, id: Id, name: &str) -> u64 {
+    fn rename_deck(&self, id: Id, name: &str) -> Result<u64, StoreError> {
         self.submit(Command::RenameDeck {
             id,
             name: name.to_string(),
         })
     }
 
-    fn archive_deck(&self, id: Id, archived: bool) -> u64 {
+    fn archive_deck(&self, id: Id, archived: bool) -> Result<u64, StoreError> {
         self.submit(Command::ArchiveDeck { id, archived })
     }
 
-    fn move_deck(&self, id: Id, parent: Option<Id>) -> u64 {
+    fn move_deck(&self, id: Id, parent: Option<Id>) -> Result<u64, StoreError> {
         self.submit(Command::MoveDeck { id, parent })
     }
 
-    fn create_card(&self, deck: Id, markdown: &str) -> u64 {
+    fn create_card(&self, deck: Id, markdown: &str) -> Result<u64, StoreError> {
         self.submit(Command::CreateCard {
             deck,
             markdown: markdown.to_string(),
         })
     }
 
-    fn save_card(&self, id: Id, markdown: &str) -> u64 {
+    fn save_card(&self, id: Id, markdown: &str) -> Result<u64, StoreError> {
         self.submit(Command::SaveCard {
             id,
             markdown: markdown.to_string(),
         })
     }
 
-    fn move_card(&self, id: Id, deck: Id) -> u64 {
+    fn move_card(&self, id: Id, deck: Id) -> Result<u64, StoreError> {
         self.submit(Command::MoveCard { id, deck })
     }
 
-    fn set_tags(&self, card: Id, tags: &[String]) -> u64 {
+    fn set_tags(&self, card: Id, tags: &[String]) -> Result<u64, StoreError> {
         self.submit(Command::SetTags {
             card,
             tags: tags.to_vec(),
         })
     }
 
-    fn archive_card(&self, id: Id, archived: bool) -> u64 {
+    fn archive_card(&self, id: Id, archived: bool) -> Result<u64, StoreError> {
         self.submit(Command::ArchiveCard { id, archived })
     }
 
-    fn trash_card(&self, id: Id) -> u64 {
+    fn trash_card(&self, id: Id) -> Result<u64, StoreError> {
         self.submit(Command::TrashCard { id })
     }
 
-    fn restore_card(&self, id: Id) -> u64 {
+    fn restore_card(&self, id: Id) -> Result<u64, StoreError> {
         self.submit(Command::RestoreCard { id })
     }
 
-    fn set_draft(&self, card: Id, text: Option<&str>) -> u64 {
+    fn set_draft(&self, card: Id, text: Option<&str>) -> Result<u64, StoreError> {
         self.submit(Command::SetDraft {
             card,
             text: text.map(str::to_string),
         })
     }
 
-    fn draft(&self, card: Id) -> u64 {
+    fn draft(&self, card: Id) -> Result<u64, StoreError> {
         self.submit(Command::Draft { card })
     }
 
-    fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64 {
+    fn grade(
+        &self,
+        card: Id,
+        key: &str,
+        grade: Grade,
+        duration_ms: Option<i64>,
+    ) -> Result<u64, StoreError> {
         self.submit(Command::Grade {
             card,
             key: key.to_string(),
@@ -214,29 +222,29 @@ impl Store for Handle {
         })
     }
 
-    fn reset_history(&self, card: Id, key: &str) -> u64 {
+    fn reset_history(&self, card: Id, key: &str) -> Result<u64, StoreError> {
         self.submit(Command::ResetHistory {
             card,
             key: key.to_string(),
         })
     }
 
-    fn empty_trash(&self) -> u64 {
+    fn empty_trash(&self) -> Result<u64, StoreError> {
         self.submit(Command::EmptyTrash)
     }
 
-    fn set_setting(&self, key: &str, value: &str) -> u64 {
+    fn set_setting(&self, key: &str, value: &str) -> Result<u64, StoreError> {
         self.submit(Command::SetSetting {
             key: key.to_string(),
             value: value.to_string(),
         })
     }
 
-    fn history(&self, card: Id) -> u64 {
+    fn history(&self, card: Id) -> Result<u64, StoreError> {
         self.submit(Command::History { card })
     }
 
-    fn stats(&self, from_ms: i64, to_ms: i64) -> u64 {
+    fn stats(&self, from_ms: i64, to_ms: i64) -> Result<u64, StoreError> {
         self.submit(Command::Stats { from_ms, to_ms })
     }
 }

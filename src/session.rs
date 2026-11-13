@@ -107,6 +107,12 @@ impl Session {
         }
     }
 
+    /// The grade never reached the store, so no answer is coming: drop it and leave the card
+    /// answerable instead of waiting for an ack that will not arrive.
+    pub fn unsent(&mut self) {
+        self.pending = None;
+    }
+
     /// The store did not take the grade: the card stays as it was, so it can be answered again.
     pub fn refuse(&mut self, id: u64) {
         if let Some((awaiting, _)) = self.awaiting {
