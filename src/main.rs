@@ -1,6 +1,7 @@
 //! `typr` — a local-first flashcard app on Rune.
 
-use rune::{AppSpec, Cx, El, Tx, Waker};
+use rune::tok::{self, type_};
+use rune::{AppSpec, Cx, El, Tx, Waker, col, row, text};
 use typr::attachments::Attachments;
 use typr::clock::Clock;
 use typr::editor::{self, Editor};
@@ -28,8 +29,16 @@ struct State {
     due_now: usize,
     /// The queue the user asked for, waiting on the store's answer.
     wanted: Option<Queue>,
-    /// The card whose history was asked for.
-    history_wanted: Option<Id>,
+    /// The due-queue request in flight, so its answer is not mistaken for another.
+    due_request: Option<u64>,
+    /// The new-queue request in flight.
+    new_request: Option<u64>,
+    /// The history request in flight, with the card it was made for.
+    history_request: Option<(u64, Id)>,
+    /// The create-card request in flight, whose answer carries the new id.
+    card_request: Option<u64>,
+    /// The last thing that went wrong, shown until something else replaces it.
+    failure: Option<String>,
     /// A scene brought its own library, so opening the real one must not replace it.
     seeded: bool,
     /// A new card waiting for the deck that has to be created for it.
@@ -46,7 +55,11 @@ impl Default for State {
             store: None,
             due_now: 0,
             wanted: None,
-            history_wanted: None,
+            due_request: None,
+            new_request: None,
+            history_request: None,
+            card_request: None,
+            failure: None,
             seeded: false,
             pending_new_card: None,
         }
@@ -135,7 +148,9 @@ impl State {
                 self.editor.attachments = Attachments::new(root, draw);
                 self.store = Some(handle);
             }
-            Err(error) => eprintln!("typr: the library could not be opened: {error}"),
+            Err(error) => {
+                self.failure = Some(format!("The library could not be opened: {error}"));
+            }
         }
     }
 
@@ -152,7 +167,7 @@ impl State {
             }
             (None, Some(store)) => match self.deck_for_new_card() {
                 Some(deck) => {
-                    store.create_card(deck, &text);
+                    self.card_request = Some(store.create_card(deck, &text));
                 }
                 None => {
                     // A library with no deck yet: the first card brings one with it.
@@ -160,7 +175,10 @@ impl State {
                     store.create_deck(None, "Library");
                 }
             },
-            (_, None) => {}
+            (_, None) => {
+                self.failure = Some("The library is not open, so nothing was saved.".to_string());
+                return false;
+            }
         }
         self.editor.save()
     }
@@ -183,9 +201,9 @@ impl State {
         let now = typr::clock::SystemClock.now_ms();
         let offset = day::local_offset_ms();
         let seed = now as u64;
-        store.due_prompts(now, offset, seed);
+        self.due_request = Some(store.due_prompts(now, offset, seed));
         if queue == Queue::New {
-            store.new_prompts(now, offset, seed);
+            self.new_request = Some(store.new_prompts(now, offset, seed));
         }
         self.wanted = Some(queue);
     }
@@ -226,12 +244,17 @@ impl State {
             changed = true;
             match event.result {
                 Ok(Outcome::Graded { .. }) => {
-                    self.session.acknowledge(event.id, now);
-                    if self.session.finished() {
+                    let acknowledged = self.session.acknowledge(event.id, now);
+                    // Leaving the session first must not be undone by a grade that lands after.
+                    if acknowledged
+                        && matches!(self.screen, Screen::Session { .. })
+                        && self.session.finished()
+                    {
                         self.screen = Screen::Summary;
                     }
                 }
-                Ok(Outcome::Due(prompts)) => {
+                Ok(Outcome::Due(prompts)) if self.due_request == Some(event.id) => {
+                    self.due_request = None;
                     self.due_now = prompts.iter().filter(|prompt| prompt.key == "fwd").count();
                     if self.wanted == Some(Queue::Due) {
                         self.wanted = None;
@@ -240,28 +263,35 @@ impl State {
                     }
                 }
                 Ok(Outcome::History(rows)) => {
-                    if let Some(card) = self.history_wanted.take() {
+                    if let Some((_, card)) = self.history_request.filter(|(id, _)| *id == event.id)
+                    {
+                        self.history_request = None;
                         self.editor.history.set(card, rows);
                     }
                 }
-                Ok(Outcome::New(prompts)) => {
+                Ok(Outcome::New(prompts)) if self.new_request == Some(event.id) => {
+                    self.new_request = None;
                     if self.wanted.take() == Some(Queue::New) {
                         let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
                         self.open_session(Queue::New, prompts);
                     }
                 }
-                Ok(Outcome::Card(id)) => {
+                Ok(Outcome::Card(id)) if self.card_request == Some(event.id) => {
+                    self.card_request = None;
                     self.editor.card = Some(id);
                 }
                 Ok(Outcome::Deck(id)) => {
                     if let Some(text) = self.pending_new_card.take()
                         && let Some(store) = &self.store
                     {
-                        store.create_card(id, &text);
+                        self.card_request = Some(store.create_card(id, &text));
                     }
                 }
                 Ok(_) => {}
-                Err(_) => self.session.refuse(event.id),
+                Err(error) => {
+                    self.session.refuse(event.id);
+                    self.failure = Some(error.to_string());
+                }
             }
         }
         if changed && let Some(store) = &self.store {
@@ -272,12 +302,32 @@ impl State {
 }
 
 fn view(s: &State, _: &mut Cx<State>) -> El {
-    match s.screen {
+    let screen = match s.screen {
         Screen::Library => library::view::<State>(s),
         Screen::Editor { .. } => editor::view::<State>(s),
         Screen::Session { .. } => study::view::<State>(s),
         Screen::Summary => study::summary::<State>(s),
+    };
+    match &s.failure {
+        None => screen,
+        Some(failure) => col()
+            .w_full()
+            .h_full()
+            .child(screen.grow(1.0))
+            .child(status_bar(failure)),
     }
+}
+
+/// The one line at the bottom that says what went wrong, so a failed command is not silent.
+fn status_bar(failure: &str) -> El {
+    let t = tok::theme(true);
+    row()
+        .key("failure")
+        .w_full()
+        .padding(12.0)
+        .center_y()
+        .fill(t.bg)
+        .child(text(failure).font(type_::LABEL).color(t.text_secondary))
 }
 
 /// Move the session's relearning steps on, and say how long until the next one lands.
@@ -313,8 +363,7 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
                 if s.editor.showing_history
                     && let (Some(card), Some(store)) = (s.editor.card, &s.store)
                 {
-                    s.history_wanted = Some(card);
-                    store.history(card);
+                    s.history_request = Some((store.history(card), card));
                 }
                 true
             }
@@ -476,6 +525,145 @@ mod tests {
             session,
             ..State::default()
         }
+    }
+
+    /// A library on disk holding one deck and one two-sided card, and a handle onto it.
+    fn library_with_one_card(dir: &tempfile::TempDir) -> Handle {
+        let path = dir.path().join("library.sqlite3");
+        {
+            let db = typr::store::Db::open(&path).expect("open");
+            let deck = match db
+                .apply(
+                    &typr::store::Command::CreateDeck {
+                        parent: None,
+                        name: "Biology".to_string(),
+                    },
+                    0,
+                )
+                .expect("deck")
+            {
+                Outcome::Deck(id) => id,
+                other => panic!("expected a deck, got {other:?}"),
+            };
+            db.apply(
+                &typr::store::Command::CreateCard {
+                    deck,
+                    markdown: "front\n---\nback".to_string(),
+                },
+                0,
+            )
+            .expect("card");
+        }
+        Handle::spawn(
+            typr::store::Db::open(&path).expect("open"),
+            Box::new(typr::clock::SystemClock),
+            std::sync::Arc::new(|| {}),
+        )
+        .expect("spawn")
+    }
+
+    /// A session showing the library's only card, revealed to its last side.
+    fn session_on(card: Id) -> Session {
+        let mut session = Session::new(
+            Queue::Due,
+            vec![Entry {
+                card,
+                sides: vec!["front".to_string(), "back".to_string()],
+            }],
+        );
+        while session.next_side().is_some() {
+            session.reveal();
+        }
+        session
+    }
+
+    #[test]
+    fn a_grade_that_lands_after_leaving_does_not_open_a_summary() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let store = library_with_one_card(&dir);
+        let mut state = State {
+            store: Some(store),
+            session: session_on(1),
+            screen: Screen::Session { queue: Queue::Due },
+            ..State::default()
+        };
+        let grade = state.session.grade(Grade::Remembered).expect("graded").1;
+        let id = state.submit_grade(1, grade);
+        state.session.sent(id);
+
+        state.leave_session();
+        for _ in 0..100 {
+            state.drain();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        assert!(
+            matches!(state.screen, Screen::Library),
+            "the answer arrived after the user left, and the summary is not shown"
+        );
+        assert!(state.failure.is_none(), "the grade itself was accepted");
+    }
+
+    #[test]
+    fn a_refused_grade_says_why_and_leaves_the_card_up() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let store = library_with_one_card(&dir);
+        let mut state = State {
+            store: Some(store),
+            session: session_on(9),
+            screen: Screen::Session { queue: Queue::Due },
+            ..State::default()
+        };
+        let grade = state.session.grade(Grade::Remembered).expect("graded").1;
+        let id = state.submit_grade(9, grade);
+        state.session.sent(id);
+
+        for _ in 0..100 {
+            state.drain();
+            if state.failure.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        let failure = state.failure.as_deref().expect("the refusal is reported");
+        assert!(failure.contains("has no prompt"), "got {failure}");
+        assert_eq!(
+            state.session.current().map(|entry| entry.card),
+            Some(9),
+            "the card stays up instead of wedging the session"
+        );
+    }
+
+    #[test]
+    fn a_failure_is_drawn_at_the_bottom_of_the_screen() {
+        let state = State {
+            failure: Some("The library could not be opened: no such file".to_string()),
+            ..State::default()
+        };
+        let mut runtime =
+            rune::Runtime::new(state, view, (900.0, 600.0), rune::Env::new(true, 1.0));
+        runtime.frame(0.0);
+        assert!(runtime.find("failure").is_some(), "the line is on screen");
+        let drawn = runtime
+            .elements()
+            .into_iter()
+            .any(|element| element.key.as_deref() == Some("failure"));
+        assert!(drawn, "the failure row is in the tree, not just a label");
+    }
+
+    #[test]
+    fn a_save_with_no_library_refuses_and_explains() {
+        let mut editor = Editor::new(None, "front\n---\nback".to_string());
+        editor.buffer.insert(" edited");
+        let mut state = State {
+            editor,
+            ..State::default()
+        };
+        assert!(!state.persist(), "nothing was stored");
+        let failure = state.failure.as_deref().expect("the refusal is reported");
+        assert!(failure.contains("not open"), "got {failure}");
+        assert!(state.editor.dirty(), "the buffer is still unsaved");
     }
 
     #[test]
