@@ -136,7 +136,7 @@ Search filters the published snapshot: every card carries its `search_text` fold
 
 ### One explicit state machine per screen
 
-Not a Rune requirement — a convention this project adopts because a `enum Screen` plus `fn step(state, event) -> Effects` is drivable from a script, assertable in a test without a window, and impossible to leave in an unreachable state.
+Not a Rune requirement — a convention this project adopts because an explicit `enum` plus a function that maps it to the next one is assertable in a test without a window and impossible to leave in an unreachable state. The screen enum is a plain four-way selector; the machine that has real rules is `session::Session`, whose `reveal`/`grade`/`forward`/`backward`/`advance_clock` methods are driven by the study screen's keyboard handler. An earlier `screen::step` with its own `Event`, `Effect` and `CardId` was written, never called by a view, and deleted rather than left as a second source of truth.
 
 ```
           +----------+  open card   +----------+
