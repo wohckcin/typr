@@ -604,6 +604,95 @@ mod tests {
         assert!(state.failure.is_none(), "the grade itself was accepted");
     }
 
+    /// A library with one card that has a record and one that has none.
+    fn library_with_a_reviewed_and_a_fresh_card(dir: &tempfile::TempDir) -> (Handle, Id, Id) {
+        let path = dir.path().join("library.sqlite3");
+        let (reviewed, fresh) = {
+            let db = typr::store::Db::open(&path).expect("open");
+            let deck = match db
+                .apply(
+                    &typr::store::Command::CreateDeck {
+                        parent: None,
+                        name: "Biology".to_string(),
+                    },
+                    0,
+                )
+                .expect("deck")
+            {
+                Outcome::Deck(id) => id,
+                other => panic!("expected a deck, got {other:?}"),
+            };
+            let mut card = |markdown: &str| match db
+                .apply(
+                    &typr::store::Command::CreateCard {
+                        deck,
+                        markdown: markdown.to_string(),
+                    },
+                    0,
+                )
+                .expect("card")
+            {
+                Outcome::Card(id) => id,
+                other => panic!("expected a card, got {other:?}"),
+            };
+            let reviewed = card("front\n---\nback");
+            card("other front\n---\nother back");
+            db.apply(
+                &typr::store::Command::Grade {
+                    card: reviewed,
+                    key: "fwd".to_string(),
+                    grade: typr::store::Grade::Remembered,
+                    duration_ms: None,
+                },
+                1_000,
+            )
+            .expect("grade");
+            (reviewed, db.snapshot().expect("snapshot").cards[1].id)
+        };
+        let handle = Handle::spawn(
+            typr::store::Db::open(&path).expect("open"),
+            Box::new(typr::clock::SystemClock),
+            std::sync::Arc::new(|| {}),
+        )
+        .expect("spawn");
+        (handle, reviewed, fresh)
+    }
+
+    #[test]
+    fn a_late_history_answer_for_another_card_is_ignored() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let (store, reviewed, fresh) = library_with_a_reviewed_and_a_fresh_card(&dir);
+        let mut state = State {
+            store: Some(store),
+            ..State::default()
+        };
+
+        // The user asks for one card's records, then another's, before either answer lands.
+        let first = state.store.as_ref().expect("store").history(reviewed);
+        let second = state.store.as_ref().expect("store").history(fresh);
+        state.editor.card = Some(fresh);
+        state.history_request = Some((second, fresh));
+
+        for _ in 0..200 {
+            state.drain();
+            if state.history_request.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        assert_eq!(
+            state.editor.history.card,
+            Some(fresh),
+            "the panel shows the card the user is on, not the one it asked about first"
+        );
+        assert_eq!(
+            state.editor.history.count, 0,
+            "the fresh card has no records"
+        );
+        assert!(first < second, "the older answer was really answered first");
+    }
+
     #[test]
     fn a_refused_grade_says_why_and_leaves_the_card_up() {
         let dir = tempfile::tempdir().expect("temp dir");
