@@ -7,10 +7,22 @@ use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
+use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
+
 use super::{
     CardSummary, Command, Deck, Grade, Id, Outcome, Phase, ReviewRow, Settings, Snapshot, Stats,
     StoreError, schema,
 };
+
+/// A prompt as its records describe it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Folded {
+    pub phase: Phase,
+    pub interval_ms: i64,
+    pub due_at: Option<i64>,
+    pub reps: i64,
+    pub lapses: i64,
+}
 
 /// A database file, owned by exactly one thread.
 #[derive(Debug)]
@@ -65,7 +77,7 @@ impl Db {
                 self.conn.execute(
                     "INSERT INTO card (deck_id, markdown, sides, search_text, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-                    params![deck, markdown, sides as i64, fold(markdown), now_ms],
+                    params![deck, markdown, sides as i64, searchable(markdown), now_ms],
                 )?;
                 let id = self.conn.last_insert_rowid();
                 self.sync_prompt(id, sides)?;
@@ -75,7 +87,7 @@ impl Db {
                 let sides = sides_of(markdown);
                 let changed = self.conn.execute(
                     "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
-                    params![id, markdown, sides as i64, fold(markdown), now_ms],
+                    params![id, markdown, sides as i64, searchable(markdown), now_ms],
                 )?;
                 self.sync_prompt(*id, sides)?;
                 Ok(Outcome::Changed(changed))
@@ -115,6 +127,9 @@ impl Db {
                     params![key, value],
                 )?;
                 Ok(Outcome::Ok)
+            }
+            Command::Grade { card, key, grade, duration_ms } => {
+                self.grade(*card, key, *grade, *duration_ms, now_ms)
             }
             Command::History { card } => Ok(Outcome::History(self.history(*card)?)),
             Command::Stats { from_ms, to_ms } => Ok(Outcome::Stats(self.stats(*from_ms, *to_ms)?)),
@@ -191,6 +206,107 @@ impl Db {
         Ok(())
     }
 
+    /// Append one grade and leave the prompt agreeing with it.
+    ///
+    /// The recorded phase is where the grade *put* the prompt: a first success graduates the card
+    /// and is recorded as `review`, a failure in the review phase is recorded as `relearn`.
+    pub fn grade(
+        &mut self,
+        card: Id,
+        key: &str,
+        grade: Grade,
+        duration_ms: Option<i64>,
+        now_ms: i64,
+    ) -> Result<Outcome, StoreError> {
+        let state = self.prompt_state(card, key)?;
+        let outcome = FixedMultiplier.grade(&state, grade, now_ms);
+        self.conn.execute(
+            "INSERT INTO review_log (card_id, key, phase, at, grade, interval_ms, due_at, duration_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                card,
+                key,
+                outcome.phase.as_str(),
+                now_ms,
+                grade.as_str(),
+                outcome.interval_ms,
+                outcome.due_at,
+                duration_ms
+            ],
+        )?;
+        self.refresh_prompt(card, key)?;
+        Ok(Outcome::Graded { phase: outcome.phase, due_at: outcome.due_at })
+    }
+
+    /// How many real reviews a card has had: learning cycles are not reviews.
+    pub fn review_count(&self, card: Id) -> Result<u32, StoreError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM review_log WHERE card_id = ?1 AND phase <> 'learn'",
+            params![card],
+            |row| row.get(0),
+        )?;
+        Ok(count as u32)
+    }
+
+    fn prompt_state(&self, card: Id, key: &str) -> Result<PromptState, StoreError> {
+        self.conn
+            .query_row(
+                "SELECT phase, interval_ms FROM prompt WHERE card_id = ?1 AND key = ?2",
+                params![card, key],
+                |row| {
+                    Ok(PromptState {
+                        phase: Phase::parse(&row.get::<_, String>(0)?),
+                        interval_ms: row.get(1)?,
+                    })
+                },
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    StoreError::NoPrompt { card, key: key.to_string() }
+                }
+                other => StoreError::Sqlite(other),
+            })
+    }
+
+    /// Recompute a prompt from its records, so the prompt row never says more than the history.
+    fn refresh_prompt(&mut self, card: Id, key: &str) -> Result<(), StoreError> {
+        let Some(folded) = self.fold_records(card, key)? else { return Ok(()) };
+        self.conn.execute(
+            "UPDATE prompt SET phase = ?3, due_at = ?4, interval_ms = ?5, reps = ?6, lapses = ?7
+             WHERE card_id = ?1 AND key = ?2",
+            params![
+                card,
+                key,
+                folded.phase.as_str(),
+                folded.due_at,
+                folded.interval_ms,
+                folded.reps,
+                folded.lapses
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// What a prompt's records say about it: the last record's decision and the counts above it.
+    ///
+    /// This is the fold every future algorithm agrees with — recomputing a prompt from history
+    /// must give back the row that history produced.
+    pub fn fold_records(&self, card: Id, key: &str) -> Result<Option<Folded>, StoreError> {
+        let rows = self.history(card)?;
+        let counted: Vec<&ReviewRow> = rows.iter().filter(|row| row.key == key).collect();
+        let Some(last) = counted.last() else { return Ok(None) };
+        Ok(Some(Folded {
+            phase: last.phase,
+            interval_ms: last.interval_ms,
+            due_at: last.due_at,
+            reps: counted.len() as i64,
+            lapses: counted
+                .iter()
+                .filter(|row| row.grade == Grade::Forgot && row.phase != Phase::Learn)
+                .count() as i64,
+        }))
+    }
+
     /// Grades recorded between two instants, counting real reviews only.
     pub fn stats(&self, from_ms: i64, to_ms: i64) -> Result<Stats, StoreError> {
         self.conn.query_row(
@@ -233,6 +349,6 @@ fn sides_of(markdown: &str) -> usize {
 }
 
 /// What search compares against: the text in the case a `LIKE` can fold.
-fn fold(text: &str) -> String {
+fn searchable(text: &str) -> String {
     text.to_lowercase()
 }

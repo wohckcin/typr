@@ -220,3 +220,50 @@ fn a_prompt_appears_with_the_second_side_and_survives_edits() {
     db.apply(&Command::SaveCard { id: two_sided, markdown: "front\n---\nback".to_string() }, 0).expect("save");
     assert_eq!(db.prompt_keys(two_sided).expect("keys").len(), 1);
 }
+
+#[test]
+fn three_learning_cycles_then_two_reviews_report_a_count_of_two() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Counting");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    let mut at = 1_700_000_000_000;
+    for _ in 0..3 {
+        db.apply(
+            &Command::Grade { card, key: "fwd".to_string(), grade: Grade::Forgot, duration_ms: None },
+            at,
+        )
+        .expect("grade");
+        at += 10 * 60_000;
+    }
+    for _ in 0..2 {
+        db.apply(
+            &Command::Grade { card, key: "fwd".to_string(), grade: Grade::Remembered, duration_ms: None },
+            at,
+        )
+        .expect("grade");
+        at += 24 * 60 * 60_000;
+    }
+
+    let history = db.history(card).expect("history");
+    assert_eq!(history.len(), 5);
+    assert_eq!(
+        history.iter().map(|row| row.phase).collect::<Vec<_>>(),
+        vec![Phase::Learn, Phase::Learn, Phase::Learn, Phase::Review, Phase::Review]
+    );
+    assert_eq!(db.review_count(card).expect("count"), 2);
+}
+
+#[test]
+fn grading_a_note_is_refused() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Notes");
+    let note = card(&mut db, deck, "nothing to recall");
+
+    let error = db
+        .apply(&Command::Grade { card: note, key: "fwd".to_string(), grade: Grade::Remembered, duration_ms: None }, 0)
+        .expect_err("no prompt");
+    assert!(matches!(error, StoreError::NoPrompt { .. }), "{error}");
+}

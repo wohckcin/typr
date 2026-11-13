@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use rune::dirs::AppDirs;
 
-pub use db::Db;
+pub use db::{Db, Folded};
 pub use schema::CURRENT_VERSION;
 pub use task::Handle;
 
@@ -153,6 +153,7 @@ pub enum Command {
     TrashCard { id: Id },
     RestoreCard { id: Id },
     SetDraft { card: Id, text: Option<String> },
+    Grade { card: Id, key: String, grade: Grade, duration_ms: Option<i64> },
     SetSetting { key: String, value: String },
     History { card: Id },
     Stats { from_ms: i64, to_ms: i64 },
@@ -165,6 +166,8 @@ pub enum Outcome {
     Card(Id),
     /// How many rows changed; zero means the id did not exist.
     Changed(usize),
+    /// Where the grade left the prompt.
+    Graded { phase: Phase, due_at: Option<i64> },
     History(Vec<ReviewRow>),
     Stats(Stats),
     Ok,
@@ -185,6 +188,8 @@ pub enum StoreError {
     NoDataDir,
     /// A database written by a newer build: refused rather than downgraded.
     TooNew { found: i64, supported: i64 },
+    /// A grade for a prompt that does not exist, e.g. for a card with one side.
+    NoPrompt { card: Id, key: String },
     Io(std::io::Error),
 }
 
@@ -197,6 +202,7 @@ impl std::fmt::Display for StoreError {
                 f,
                 "this library was written by a newer version of typr (schema {found}, this build knows {supported})"
             ),
+            StoreError::NoPrompt { card, key } => write!(f, "card {card} has no prompt {key}"),
             StoreError::Io(e) => write!(f, "could not create the library folder: {e}"),
         }
     }
@@ -252,6 +258,7 @@ pub trait Store: Send + Sync {
     fn trash_card(&self, id: Id) -> u64;
     fn restore_card(&self, id: Id) -> u64;
     fn set_draft(&self, card: Id, text: Option<&str>) -> u64;
+    fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64;
     fn set_setting(&self, key: &str, value: &str) -> u64;
     fn history(&self, card: Id) -> u64;
     fn stats(&self, from_ms: i64, to_ms: i64) -> u64;

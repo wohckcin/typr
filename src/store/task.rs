@@ -15,7 +15,7 @@ use rune::Waker;
 
 use crate::clock::{Clock, SystemClock};
 
-use super::{Command, Db, Event, Id, Snapshot, Store, StoreError};
+use super::{Command, Db, Event, Grade, Id, Snapshot, Store, StoreError};
 
 /// Everything the worker publishes for the UI thread.
 struct Shared {
@@ -132,6 +132,10 @@ impl Store for Handle {
 
     fn set_draft(&self, card: Id, text: Option<&str>) -> u64 {
         self.submit(Command::SetDraft { card, text: text.map(str::to_string) })
+    }
+
+    fn grade(&self, card: Id, key: &str, grade: Grade, duration_ms: Option<i64>) -> u64 {
+        self.submit(Command::Grade { card, key: key.to_string(), grade, duration_ms })
     }
 
     fn set_setting(&self, key: &str, value: &str) -> u64 {
