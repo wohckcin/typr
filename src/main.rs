@@ -2,6 +2,7 @@
 
 use rune::machine::Seq;
 use rune::{AppSpec, Cx, El, col, text};
+use typr::editor::{self, Editor};
 use typr::library::{self, Library};
 use typr::screen::{Queue, Screen};
 
@@ -12,11 +13,17 @@ struct State {
     seq: Seq,
     screen: Screen,
     library: Library,
+    editor: Editor,
 }
 
 impl Default for State {
     fn default() -> Self {
-        Self { seq: Seq::default(), screen: Screen::Library, library: Library::default() }
+        Self {
+            seq: Seq::default(),
+            screen: Screen::Library,
+            library: Library::default(),
+            editor: Editor::default(),
+        }
     }
 }
 
@@ -30,17 +37,26 @@ impl library::Host for State {
     }
 }
 
+impl editor::Host for State {
+    fn editor(&self) -> &Editor {
+        &self.editor
+    }
+
+    fn editor_mut(&mut self) -> &mut Editor {
+        &mut self.editor
+    }
+}
+
 fn view(s: &State, _: &mut Cx<State>) -> El {
     match s.screen {
         Screen::Library => library::view::<State>(s),
+        Screen::Editor { .. } => editor::view::<State>(s),
         other => {
             let label = match other {
-                Screen::Editor { card: Some(_) } => "Editor",
-                Screen::Editor { card: None } => "Editor (new card)",
                 Screen::Session { queue: Queue::New } => "Session — new cards",
                 Screen::Session { queue: Queue::Due } => "Session — due",
                 Screen::Summary => "Summary",
-                Screen::Library => unreachable!("handled above"),
+                Screen::Library | Screen::Editor { .. } => unreachable!("handled above"),
             };
             col().w_full().h_full().padding(24.0).child(text(label))
         }
@@ -51,7 +67,12 @@ fn main() {
     // The study day needs the machine's zone, and `time` only answers on the main thread, so read
     // it before any worker starts.
     let _ = typr::day::local_offset_ms();
-    let scenes: &'static [(&'static str, fn(&mut State))] =
-        &[("library-5000", |state: &mut State| state.library = Library::seeded(5000))];
+    let scenes: &'static [(&'static str, fn(&mut State))] = &[
+        ("library-5000", |state: &mut State| state.library = Library::seeded(5000)),
+        ("editor", |state: &mut State| {
+            state.screen = Screen::Editor { card: None };
+            state.editor = Editor::new(None, "What is **mitosis**?\n---\nCell division.".to_string());
+        }),
+    ];
     rune::run(AppSpec { scenes, ..AppSpec::new("typr", (960.0, 640.0), State::default, view) });
 }
