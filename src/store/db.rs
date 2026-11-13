@@ -3,6 +3,7 @@
 //! Every method here runs on the store task's thread and is exercised by tests directly, which is
 //! what keeps the threaded part (`task.rs`) down to plumbing.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
@@ -240,10 +241,14 @@ impl Db {
             let pairs = stmt.query_map([], |row| {
                 Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?))
             })?;
+            let mut by_card: HashMap<Id, Vec<String>> = HashMap::new();
             for pair in pairs {
                 let (card, name) = pair?;
-                if let Some(summary) = cards.iter_mut().find(|summary| summary.id == card) {
-                    summary.tags.push(name);
+                by_card.entry(card).or_default().push(name);
+            }
+            for summary in &mut cards {
+                if let Some(names) = by_card.remove(&summary.id) {
+                    summary.tags = names;
                 }
             }
             cards
@@ -272,8 +277,6 @@ impl Db {
         })
     }
 
-    /// The prompt keys a card holds. A card that became a note keeps them: its schedule, due date
-    /// and history stay intact and come back when it has two sides again.
     /// The text as it was left, if it was left unsaved.
     pub fn draft(&self, card: Id) -> Result<Option<String>, StoreError> {
         let mut stmt = self
@@ -286,6 +289,8 @@ impl Db {
         }
     }
 
+    /// The prompt keys a card holds. A card that became a note keeps them: its schedule, due date
+    /// and history stay intact and come back when it has two sides again.
     pub fn prompt_keys(&self, card: Id) -> Result<Vec<String>, StoreError> {
         let mut stmt = self
             .conn

@@ -115,7 +115,7 @@ impl State {
         }
         let draw = waker.clone();
         let opened = store::attachments_root_from_environment()
-            .and_then(|root| Ok((root, Handle::open_system(waker)?)));
+            .and_then(|root| Handle::open_system(waker).map(|handle| (root, handle)));
         match opened {
             Ok((root, handle)) => {
                 if !self.seeded {
