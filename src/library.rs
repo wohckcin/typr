@@ -10,7 +10,9 @@ use rune::{El, GrowthSpec, ScrollSpec, TextEdit, col, row, text, text_input};
 use crate::store::{CardMode, CardSummary, Deck, Id, Snapshot};
 
 /// How tall one card row is, which the list needs before it has laid anything out.
-pub const ROW_HEIGHT: f32 = 44.0;
+/// The height of one card row, in pixels.
+pub const ROW_HEIGHT_PX: u32 = 44;
+pub const ROW_HEIGHT: f32 = ROW_HEIGHT_PX as f32;
 
 /// The app state a library screen draws from. Rune binds every callback to the app's own state
 /// type, so the screen cannot name one implementation.

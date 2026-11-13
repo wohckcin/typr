@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use super::{Library, ROW_HEIGHT, view};
+use super::{Library, ROW_HEIGHT_PX, view};
 use crate::store::CardMode;
 
 #[test]
@@ -14,7 +14,7 @@ fn a_long_library_builds_only_the_rows_on_screen() {
     runtime.frame(0.0);
 
     let built = runtime.state.built_rows.load(Ordering::Relaxed);
-    let on_screen = (640.0 / ROW_HEIGHT).ceil() as usize;
+    let on_screen = (640usize).div_ceil(ROW_HEIGHT_PX as usize);
     assert!(built > 0, "nothing was built at all");
     assert!(
         built < on_screen * 4,

@@ -241,7 +241,7 @@ impl Db {
                 Ok(CardSummary {
                     id: row.get(0)?,
                     deck: row.get(1)?,
-                    sides: row.get::<_, i64>(2)?.max(0) as u32,
+                    sides: count_of(row.get(2)?),
                     tags: Vec::new(),
                     archived: row.get::<_, i64>(3)? != 0,
                     trashed_at: row.get(4)?,
@@ -480,7 +480,7 @@ impl Db {
             params![card],
             |row| row.get(0),
         )?;
-        Ok(count as u32)
+        Ok(count_of(count))
     }
 
     fn prompt_state(&self, card: Id, key: &str) -> Result<PromptState, StoreError> {
@@ -608,7 +608,7 @@ impl Db {
             .into_iter()
             .filter(|at| crate::day::study_day(*at, offset_ms) == day)
             .count();
-        Ok(count as u32)
+        Ok(u32::try_from(count).unwrap_or(u32::MAX))
     }
 
     /// The new-card queue: studyable cards whose prompt has never been graded, capped by the
@@ -739,8 +739,8 @@ impl Db {
                 params![from_ms, to_ms],
                 |row| {
                     Ok(Stats {
-                        reviews: row.get::<_, i64>(0)?.max(0) as u32,
-                        lapses: row.get::<_, i64>(1)?.max(0) as u32,
+                        reviews: count_of(row.get(0)?),
+                        lapses: count_of(row.get(1)?),
                     })
                 },
             )
@@ -812,6 +812,12 @@ fn preview(markdown: &str) -> String {
         cut.push('…');
     }
     cut
+}
+
+/// A stored count as the `u32` the API reports. More than four billion records cannot be held in
+/// a `Snapshot` on any machine typr runs on, so the count saturates instead of wrapping.
+fn count_of(value: i64) -> u32 {
+    u32::try_from(value.max(0)).unwrap_or(u32::MAX)
 }
 
 fn is_combining_mark(character: char) -> bool {

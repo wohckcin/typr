@@ -23,7 +23,8 @@ impl Shuffle {
         if n == 0 {
             0
         } else {
-            (self.next() % n as u64) as usize
+            // The remainder is below `n`, which is a `usize`, so the conversion cannot fail.
+            usize::try_from(self.next() % u64::try_from(n).unwrap_or(u64::MAX)).unwrap_or(0)
         }
     }
 
