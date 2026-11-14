@@ -97,20 +97,44 @@ impl Db {
         Ok(outcome)
     }
 
+    /// Write a deck name, turning SQLite's unique refusal into something the reader understands.
+    ///
+    /// Only the extended code for a unique violation is translated: a foreign key or a check
+    /// failure stays a database error, because it means the caller asked for something else.
+    fn deck_write(
+        &self,
+        sql: &str,
+        params: impl rusqlite::Params,
+        name: &str,
+    ) -> Result<usize, StoreError> {
+        self.conn.execute(sql, params).map_err(|error| {
+            if error.sqlite_extended_error_code() == Some(rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE) {
+                StoreError::DuplicateName {
+                    name: name.to_string(),
+                }
+            } else {
+                StoreError::Sqlite(error)
+            }
+        })
+    }
+
     /// The body of one command, run inside the transaction [`Db::apply`] opens.
     fn dispatch(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
         match command {
             Command::CreateDeck { parent, name } => {
-                self.conn.execute(
+                self.deck_write(
                     "INSERT INTO deck (parent_id, name) VALUES (?1, ?2)",
                     params![parent, name],
+                    name,
                 )?;
                 Ok(Outcome::Deck(self.conn.last_insert_rowid()))
             }
             Command::RenameDeck { id, name } => {
-                let changed = self
-                    .conn
-                    .execute("UPDATE deck SET name = ?2 WHERE id = ?1", params![id, name])?;
+                let changed = self.deck_write(
+                    "UPDATE deck SET name = ?2 WHERE id = ?1",
+                    params![id, name],
+                    name,
+                )?;
                 Ok(Outcome::Changed(changed))
             }
             Command::ArchiveDeck { id, archived } => {

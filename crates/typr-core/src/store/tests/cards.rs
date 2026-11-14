@@ -169,7 +169,10 @@ fn deck_names_are_unique_under_one_parent_and_free_elsewhere() {
             0,
         )
         .expect_err("duplicate");
-    assert!(chain(&error).contains("UNIQUE"), "{}", chain(&error));
+    assert!(
+        matches!(&error, StoreError::DuplicateName { name } if name == "JAPANESE"),
+        "{error:?}"
+    );
 
     db.apply(
         &Command::CreateDeck {

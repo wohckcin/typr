@@ -414,6 +414,9 @@ pub enum StoreError {
     /// A grade for a prompt that does not exist, e.g. for a card with one side.
     #[error("card {card} has no prompt {key}")]
     NoPrompt { card: Id, key: String },
+    /// A deck name another deck under the same parent already uses.
+    #[error("a deck called {name:?} is already under that parent")]
+    DuplicateName { name: String },
     /// A move that would put a deck inside itself.
     #[error("deck {deck} cannot be moved inside itself")]
     Cycle { deck: Id },
