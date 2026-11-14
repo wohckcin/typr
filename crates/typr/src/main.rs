@@ -21,7 +21,8 @@ use typr_core::keymap::{Command, Surface};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{
-    CardMode, Grade, Handle, Id, MaskRect, Outcome, Store, StoreError, WorkerStatus,
+    CardKind, CardMode, Grade, Handle, Id, MaskRect, MaskRow, Outcome, Store, StoreError,
+    WorkerStatus,
 };
 use typr_core::{day, hidden};
 
@@ -1429,6 +1430,43 @@ fn main() {
                     0,
                 )],
             );
+        }),
+        ("review-diagram", |state: &mut State| {
+            // Two groups on one picture: the first is masked, so the review covers both of its
+            // rectangles and leaves the other group's in sight.
+            state.screen = Screen::Session;
+            state.session = Session::new(
+                Queue::New,
+                vec![Entry::mask_group(
+                    1,
+                    "mask:1",
+                    "plate.png",
+                    Some("The plate: name the shaded regions".to_string()),
+                    vec![
+                        MaskRect::new(0.08, 0.12, 0.3, 0.28),
+                        MaskRect::new(0.62, 0.12, 0.3, 0.28),
+                    ],
+                    0,
+                )],
+            );
+        }),
+        ("editor-diagram", |state: &mut State| {
+            state.screen = Screen::Editor;
+            state.editor = Editor::new(None, String::new());
+            state.editor.set_kind(CardKind::Diagram);
+            state.editor.image = Some("plate.png".to_string());
+            state.editor.caption.replace_text("The plate".to_string());
+            state.editor.masks = vec![
+                MaskRow {
+                    group: 1,
+                    rect: MaskRect::new(0.08, 0.12, 0.3, 0.28),
+                },
+                MaskRow {
+                    group: 2,
+                    rect: MaskRect::new(0.6, 0.5, 0.3, 0.28),
+                },
+            ];
+            state.editor.next_group = 3;
         }),
         ("editor-leave", |state: &mut State| {
             state.screen = Screen::Editor;

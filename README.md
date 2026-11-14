@@ -74,6 +74,20 @@ While you type, the preview masks every answer and names the group it belongs to
 numbered span, `[ … ]` for the plain form — and the caption counts prompts rather than sides — so a card with two numbered groups reports two prompts, not two
 sides.
 
+## Diagram cards
+
+A card can also be a diagram: switch the editor to **Diagram**, choose a picture, and draw
+rectangles on it. Each rectangle belongs to a group, and each group is one prompt with its own
+schedule, so a single picture can hold several questions. During a review the rectangles of the
+group being asked are covered, the rest of the picture stays in sight, and one reveal lifts the
+covers.
+
+Draw with the pointer by dragging across the picture, or from the keyboard: `Alt+N` places a
+rectangle in the middle and the `Alt` arrow chords size it. **Merge** puts a rectangle in the
+previous one's group, **Remove** takes it off the picture, and the caption under the picture says
+what it shows. A group with no rectangles left is retired, and the reviews already answered on it
+stay on disk.
+
 ## Reverse reviews
 
 A two-sided card can be asked from either end. Reverse is off until you turn it on, and it is

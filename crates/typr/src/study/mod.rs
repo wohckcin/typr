@@ -165,11 +165,21 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
             pane = pane.child(drawn.pixels(picture.pixels()));
         }
         None => {
+            // A picture that cannot be read still gets its pane, so the cover has somewhere to sit
+            // and the card says what it wanted to show.
             pane = pane.child(
-                text(format!("The picture {image} is missing"))
-                    .key("diagram-missing")
-                    .color(t.text_secondary)
-                    .font(type_::LABEL),
+                col()
+                    .w_full()
+                    .h(160.0)
+                    .radius(4.0)
+                    .fill(t.text_secondary.alpha(0.08))
+                    .center()
+                    .child(
+                        text(format!("The picture {image} is missing"))
+                            .key("diagram-missing")
+                            .color(t.text_secondary)
+                            .font(type_::LABEL),
+                    ),
             );
         }
     }

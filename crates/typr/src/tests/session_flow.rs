@@ -661,3 +661,87 @@ fn a_reverse_review_says_so() {
         "and a forward one does not: {drawn:?}"
     );
 }
+
+/// A diagram card is masked one group at a time: the covers sit over the rectangles of the group
+/// being asked and nowhere else, so the other group stays in sight while the question is open.
+#[test]
+fn a_diagram_prompt_covers_only_the_group_it_asks() {
+    let mut state = State {
+        screen: Screen::Session,
+        session: Session::new(
+            Queue::New,
+            vec![Entry::mask_group(
+                1,
+                "mask:1",
+                "plate.png",
+                Some("The plate".to_string()),
+                vec![
+                    MaskRect::new(0.1, 0.1, 0.2, 0.2),
+                    MaskRect::new(0.6, 0.1, 0.2, 0.2),
+                ],
+                0,
+            )],
+        ),
+        ..State::default()
+    };
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+
+    let covers: Vec<[f32; 4]> = runtime
+        .elements()
+        .into_iter()
+        .filter(|element| {
+            element
+                .key
+                .as_deref()
+                .is_some_and(|key| key.starts_with("cover-"))
+        })
+        .map(|element| element.rect)
+        .collect();
+    assert_eq!(
+        covers.len(),
+        2,
+        "one cover per rectangle of the asked group, and none for the other"
+    );
+    let pane = runtime
+        .elements()
+        .into_iter()
+        .find(|element| element.key.as_deref() == Some("diagram-face"))
+        .map(|element| element.rect)
+        .expect("the picture pane");
+    assert!(
+        covers.iter().all(|cover| cover[2] > 1.0 && cover[3] > 1.0),
+        "every cover has an area: {covers:?}"
+    );
+    assert!(
+        covers
+            .iter()
+            .all(|cover| cover[0] >= pane[0] - 1.0 && cover[2] <= pane[2] + 1.0),
+        "the covers stay inside the pane"
+    );
+
+    // Revealing lifts them, so the group's answer is what the card shows.
+    // The view only re-runs when the runtime is told the state changed, which an event would do.
+    assert!(runtime.state.session.reveal(), "revealing is taken");
+    runtime.settle_all();
+    runtime.frame(0.2);
+    let after = runtime
+        .elements()
+        .into_iter()
+        .filter(|element| {
+            // A cover on its way out is still listed, so only the drawn ones count.
+            !element.exiting
+                && element
+                    .key
+                    .as_deref()
+                    .is_some_and(|key| key.starts_with("cover-"))
+        })
+        .count();
+    assert_eq!(after, 0, "a revealed diagram has nothing covered");
+}

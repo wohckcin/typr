@@ -32,7 +32,7 @@ turns into an enum.
 
 ## 4. Close out
 
-- [ ] 4.1 README gains the diagram card type, and a scene `review-diagram` renders a card with two masked groups.
+- [x] 4.1 README gains the diagram card type, and a scene `review-diagram` renders a card with two masked groups.
   - **Verification**: `--list-scenes` lists it and its `--snap` is non-blank.
 - [ ] 4.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.
