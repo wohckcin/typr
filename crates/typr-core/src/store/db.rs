@@ -497,6 +497,9 @@ impl Db {
                     reverse: flag(row.get(11)?),
                     trashed_at: row.get(4)?,
                     updated_at: row.get(5)?,
+                    created_at: 0,
+                    reviews: 0,
+                    pinned: false,
                     preview: preview(&row.get::<_, String>(6)?),
                     markdown: row.get(6)?,
                     search_text: row.get(7)?,
@@ -608,6 +611,7 @@ impl Db {
         Ok(Snapshot {
             decks,
             cards,
+            views: Vec::new(),
             settings: self.settings()?,
             revision: 0,
         })

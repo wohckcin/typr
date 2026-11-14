@@ -590,7 +590,10 @@ fn the_view_and_the_snapshot_agree_on_what_is_studyable() {
 
     let snapshot = store.snapshot();
     let from_snapshot: Vec<Id> = snapshot
-        .cards_matching("", None, None, CardMode::Active)
+        .cards_matching(&ViewSpec {
+            mode: CardMode::Active,
+            ..ViewSpec::default()
+        })
         .into_iter()
         .filter(|card| card.sides >= 2)
         .map(|card| card.id)

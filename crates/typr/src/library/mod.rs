@@ -11,7 +11,7 @@ use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root
 
 use typr_core::keymap::{Command, Surface};
 
-use typr_core::store::{CardMode, CardSummary, Deck, Id, Snapshot};
+use typr_core::store::{CardMode, CardSummary, Deck, Id, Snapshot, Sort, SortDir, ViewSpec};
 
 /// Kept for the lifetime of the app: a Kit rebuilds its palette and type ramp.
 static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));
@@ -200,6 +200,13 @@ pub struct Library {
     pub selected_card: Option<Id>,
     pub query: TextEdit,
     pub tag: Option<String>,
+    /// How the list is ordered, which a shuffle replaces for as long as it is showing.
+    pub sort: Sort,
+    pub dir: SortDir,
+    /// The seed of a shuffle, or `None` for the saved order. A shuffle is never written to a view.
+    pub shuffle: Option<u64>,
+    /// Whether only pinned cards are listed.
+    pub pinned_only: bool,
     /// The rows the filters keep, rebuilt whenever a filter changes.
     /// The cards the current deck, tag, search and mode select, in list order.
     visible: Vec<CardSummary>,
@@ -237,6 +244,10 @@ impl Default for Library {
             selected_card: None,
             query: TextEdit::default(),
             tag: None,
+            sort: Sort::default(),
+            dir: SortDir::default(),
+            shuffle: None,
+            pinned_only: false,
             visible: Vec::new(),
             built_rows: AtomicUsize::new(0),
             confirming_empty: false,
@@ -366,15 +377,23 @@ impl Library {
     fn refresh(&mut self) {
         self.visible = self
             .snapshot
-            .cards_matching(
-                &self.query.text,
-                self.tag.as_deref(),
-                self.selected_deck,
-                self.mode,
-            )
+            .cards_matching(&self.spec())
             .into_iter()
             .cloned()
             .collect();
+    }
+
+    /// The filter the list is showing, built from what the controls and the selected view set.
+    pub fn spec(&self) -> ViewSpec {
+        ViewSpec {
+            deck: self.selected_deck,
+            query: self.query.text.clone(),
+            tags: self.tag.iter().cloned().collect(),
+            mode: self.mode,
+            pinned_only: self.pinned_only,
+            sort: self.sort,
+            dir: self.dir,
+        }
     }
 
     /// A snapshot with `count` cards in one deck, for scenes and for the virtualised-list check.
@@ -408,6 +427,9 @@ impl Library {
                 reverse: None,
                 trashed_at: None,
                 updated_at: 0,
+                created_at: 0,
+                reviews: 0,
+                pinned: false,
                 preview: format!("Card {id}"),
                 markdown: format!("Card {id}\n---\nCard {id}"),
                 search_text: format!("card {id}"),

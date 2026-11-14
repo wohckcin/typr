@@ -7,12 +7,14 @@
 mod db;
 mod schema;
 mod task;
+mod view;
 
 use std::sync::Arc;
 
 pub use db::{Db, Folded, folded};
 pub use schema::{CURRENT_VERSION, SchemaFacts};
 pub use task::{Handle, Waker, WorkerStatus};
+pub use view::{SavedView, Sort, SortDir, ViewSpec, shuffled};
 
 /// A deck, card, prompt or log row.
 pub type Id = i64;
@@ -136,6 +138,11 @@ pub struct CardSummary {
     pub reverse: Option<bool>,
     pub trashed_at: Option<i64>,
     pub updated_at: i64,
+    pub created_at: i64,
+    /// How many real reviews the card has had, which one of the list's orders ranks by.
+    pub reviews: u32,
+    /// Whether the card is pinned, which a view can ask to list alone.
+    pub pinned: bool,
     /// The first side's first line, cut short: what a list row shows.
     pub preview: String,
     /// The card's text, so a session can split it into sides without another round trip.
@@ -155,6 +162,24 @@ pub struct CardSummary {
     pub template: Option<String>,
     /// The deck the template is inherited from; `None` means the card carries its own.
     pub template_from: Option<Id>,
+}
+
+impl CardSummary {
+    /// Whether a mode's slice of the library holds this card.
+    ///
+    /// A card is in the archive either because it was archived itself or because the deck holding
+    /// it was, which is the only place it can be reached from; the trash is its own slice.
+    pub(crate) fn mode_matches(&self, mode: CardMode, visible_decks: &[Id]) -> bool {
+        match mode {
+            CardMode::Active => {
+                !self.archived && self.trashed_at.is_none() && visible_decks.contains(&self.deck)
+            }
+            CardMode::Archived => {
+                self.trashed_at.is_none() && (self.archived || !visible_decks.contains(&self.deck))
+            }
+            CardMode::Trash => self.trashed_at.is_some(),
+        }
+    }
 }
 
 /// Settings the user can change. Only the new-card cap exists in v1.
@@ -183,6 +208,8 @@ impl Default for Settings {
 pub struct Snapshot {
     pub decks: Vec<Deck>,
     pub cards: Vec<CardSummary>,
+    /// The views the user saved, by name.
+    pub views: Vec<SavedView>,
     pub settings: Settings,
     /// Bumped once per applied command, so a view can tell a re-publish from a change.
     pub revision: u64,
@@ -219,7 +246,7 @@ impl Snapshot {
     }
 
     /// Decks whose cards the study queues may touch: no archived deck in the chain.
-    fn studyable_decks(&self) -> Vec<Id> {
+    pub(crate) fn studyable_decks(&self) -> Vec<Id> {
         let archived = |id: Id| self.decks.iter().any(|deck| deck.id == id && deck.archived);
         self.decks
             .iter()
@@ -241,46 +268,9 @@ impl Snapshot {
             .collect()
     }
 
-    /// The cards a library list shows for a filter.
-    pub fn cards_matching(
-        &self,
-        query: &str,
-        tag: Option<&str>,
-        deck: Option<Id>,
-        mode: CardMode,
-    ) -> Vec<&CardSummary> {
-        let needle = folded(query);
-        let scope = self.subtree(deck);
-        let visible_decks = self.studyable_decks();
-        let wanted_tag = tag.map(folded);
-        self.cards
-            .iter()
-            .filter(|card| match mode {
-                CardMode::Active => {
-                    !card.archived
-                        && card.trashed_at.is_none()
-                        && visible_decks.contains(&card.deck)
-                }
-                // A card is in the archived view either because it was archived itself or
-                // because the deck holding it was, which is the only place it can be reached.
-                CardMode::Archived => {
-                    card.trashed_at.is_none()
-                        && (card.archived || !visible_decks.contains(&card.deck))
-                }
-                CardMode::Trash => card.trashed_at.is_some(),
-            })
-            .filter(|card| deck.is_none() || scope.contains(&card.deck))
-            .filter(|card| {
-                wanted_tag
-                    .as_ref()
-                    .is_none_or(|tag| card.tags.iter().any(|own| folded(own) == *tag))
-            })
-            .filter(|card| {
-                needle.is_empty()
-                    || card.search_text.contains(&needle)
-                    || card.tags.iter().any(|own| folded(own).contains(&needle))
-            })
-            .collect()
+    /// The cards a library list shows for a filter: those `spec` keeps, in its order.
+    pub fn cards_matching(&self, spec: &ViewSpec) -> Vec<&CardSummary> {
+        spec.cards(self)
     }
 }
 

@@ -5,7 +5,7 @@ if the user prefers.
 
 ## 1. Filter type
 
-- [ ] 1.1 New `ViewSpec`, `Sort` and `SortDir` in `crates/typr-core/src/store/view.rs`; `Snapshot::cards_matching(&self, spec: &ViewSpec) -> Vec<&CardSummary>`; `Sort::order(&self, cards, spec)` for the transient shuffle.
+- [x] 1.1 New `ViewSpec`, `Sort` and `SortDir` in `crates/typr-core/src/store/view.rs`; `Snapshot::cards_matching(&self, spec: &ViewSpec) -> Vec<&CardSummary>`; `Sort::order(&self, cards, spec)` for the transient shuffle.
   - **Verification**: `cargo test -p typr-core --lib view` sorts by each key in both directions with cards that have no prompt last, and proves the shuffle only reorders.
 - [ ] 1.2 Migration V8: `card.pinned INTEGER NOT NULL DEFAULT 0` and `view(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, deck INTEGER, query TEXT NOT NULL, tags TEXT NOT NULL, mode TEXT NOT NULL, pinned_only INTEGER NOT NULL, sort_key TEXT NOT NULL, sort_dir TEXT NOT NULL)`.
   - **Verification**: `a_library_from_before_views_keeps_its_list` rewinds a real file to `user_version = 7` and reopens; `opening_reports_what_the_schema_did` counts the step.

@@ -40,7 +40,12 @@ fn spawn_temp(dir: &TempDir) -> Handle {
 fn matching(db: &Db, query: &str, deck: Option<Id>, mode: CardMode) -> Vec<Id> {
     let snapshot = db.snapshot().expect("snapshot");
     snapshot
-        .cards_matching(query, None, deck, mode)
+        .cards_matching(&ViewSpec {
+            query: query.to_string(),
+            deck,
+            mode,
+            ..ViewSpec::default()
+        })
         .into_iter()
         .map(|card| card.id)
         .collect()
