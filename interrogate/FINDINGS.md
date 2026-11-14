@@ -5,6 +5,10 @@ running it before the fix, and each one now has a permanent test in the suite, n
 column. The throwaway reproducers were deleted once that coverage landed; they are still in git at
 `643f652` (`git show 643f652:interrogate/core-audit.rs`).
 
+No requirement changed to accommodate any of them. Every break contradicted text the live spec already
+carried, so the fixes restored the spec rather than amending it, which is why no OpenSpec change was
+opened for this work.
+
 Severity means: **high** = a live spec requirement broken, or data lost/duplicated; **medium** =
 reachable wrong answer or unhelpful failure; **low** = a diagnostic gap.
 
