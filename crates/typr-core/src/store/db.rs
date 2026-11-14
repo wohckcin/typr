@@ -238,7 +238,14 @@ impl Db {
             },
             Command::Draft { card } => Ok(Outcome::Draft(self.draft(*card)?)),
             Command::SetSetting { key, value } => {
-                if key == "new_per_day" && value.parse::<u32>().is_err() {
+                let known = match key.as_str() {
+                    "new_per_day" => value.parse::<u32>().is_ok(),
+                    // The two levels that override it are columns, not settings; this one is the
+                    // value every card without an override inherits.
+                    "reverse_default" => matches!(value.as_str(), "0" | "1"),
+                    _ => true,
+                };
+                if !known {
                     return Err(StoreError::Setting {
                         key: key.clone(),
                         value: value.clone(),
@@ -250,6 +257,21 @@ impl Db {
                     params![key, value],
                 )?;
                 Ok(Outcome::Ok)
+            }
+            Command::SetCardReverse { card, reverse } => {
+                // NULL is "inherit", so the nearest deck's value applies again.
+                let changed = self.conn.execute(
+                    "UPDATE card SET reverse = ?2 WHERE id = ?1",
+                    params![card, reverse.map(i64::from)],
+                )?;
+                Ok(Outcome::Changed(changed))
+            }
+            Command::SetDeckReverse { deck, reverse } => {
+                let changed = self.conn.execute(
+                    "UPDATE deck SET reverse = ?2 WHERE id = ?1",
+                    params![deck, reverse.map(i64::from)],
+                )?;
+                Ok(Outcome::Changed(changed))
             }
             Command::Grade {
                 card,
@@ -369,7 +391,28 @@ impl Db {
                 value,
             })?,
         };
-        Ok(Settings { new_per_day })
+        let default: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'reverse_default'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let reverse_default = match default.as_deref() {
+            None | Some("0") => false,
+            Some("1") => true,
+            Some(value) => {
+                return Err(StoreError::Setting {
+                    key: "reverse_default".to_string(),
+                    value: value.to_string(),
+                });
+            }
+        };
+        Ok(Settings {
+            new_per_day,
+            reverse_default,
+        })
     }
 
     /// The text as it was left, if it was left unsaved.

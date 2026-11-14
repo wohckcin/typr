@@ -278,6 +278,14 @@ impl Store for Handle {
         })
     }
 
+    fn set_card_reverse(&self, card: Id, reverse: Option<bool>) -> Result<u64, StoreError> {
+        self.submit(Command::SetCardReverse { card, reverse })
+    }
+
+    fn set_deck_reverse(&self, deck: Id, reverse: Option<bool>) -> Result<u64, StoreError> {
+        self.submit(Command::SetDeckReverse { deck, reverse })
+    }
+
     fn history(&self, card: Id) -> Result<u64, StoreError> {
         self.submit(Command::History { card })
     }

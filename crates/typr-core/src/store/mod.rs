@@ -113,6 +113,8 @@ pub struct CardSummary {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub new_per_day: u32,
+    /// Whether a card is reviewed from its last side unless a deck or the card says otherwise.
+    pub reverse_default: bool,
 }
 
 impl Settings {
@@ -123,6 +125,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             new_per_day: Self::DEFAULT_NEW_PER_DAY,
+            reverse_default: false,
         }
     }
 }
@@ -349,6 +352,16 @@ pub enum Command {
         key: String,
         value: String,
     },
+    /// `None` takes the card back to inheriting its deck.
+    SetCardReverse {
+        card: Id,
+        reverse: Option<bool>,
+    },
+    /// `None` takes the deck back to inheriting its parent.
+    SetDeckReverse {
+        deck: Id,
+        reverse: Option<bool>,
+    },
     History {
         card: Id,
     },
@@ -520,6 +533,8 @@ pub trait Store: Send + Sync {
         deck: Option<Id>,
     ) -> Result<u64, StoreError>;
     fn set_setting(&self, key: &str, value: &str) -> Result<u64, StoreError>;
+    fn set_card_reverse(&self, card: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
+    fn set_deck_reverse(&self, deck: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
     fn history(&self, card: Id) -> Result<u64, StoreError>;
     fn stats(&self, from_ms: i64, to_ms: i64) -> Result<u64, StoreError>;
 }

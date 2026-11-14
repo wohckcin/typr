@@ -789,3 +789,165 @@ fn retired(db: &Db, card: Id, key: &str) -> i64 {
         )
         .expect("the retirement flag")
 }
+
+#[test]
+fn a_card_setting_beats_its_deck() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let root = deck(&mut db, "Languages");
+    let child = subdeck(&mut db, root, "Japanese");
+    let quiet = card(&mut db, child, "front\n---\nback");
+    let loud = card(&mut db, child, "front\n---\nback");
+
+    db.apply(
+        &Command::SetDeckReverse {
+            deck: root,
+            reverse: Some(true),
+        },
+        NOON,
+    )
+    .expect("deck on");
+    assert_eq!(
+        reverse_queue(&db),
+        vec![quiet, loud],
+        "the deck setting reaches its child"
+    );
+
+    db.apply(
+        &Command::SetCardReverse {
+            card: quiet,
+            reverse: Some(false),
+        },
+        NOON,
+    )
+    .expect("card off");
+    assert_eq!(
+        reverse_queue(&db),
+        vec![loud],
+        "the card's own setting wins"
+    );
+
+    db.apply(
+        &Command::SetCardReverse {
+            card: quiet,
+            reverse: None,
+        },
+        NOON,
+    )
+    .expect("card inherits");
+    assert_eq!(
+        reverse_queue(&db),
+        vec![quiet, loud],
+        "clearing the card's value lets the deck speak again"
+    );
+}
+
+#[test]
+fn a_deck_setting_reaches_nested_decks() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let root = deck(&mut db, "Languages");
+    let middle = subdeck(&mut db, root, "Japanese");
+    let leaf = subdeck(&mut db, middle, "Verbs");
+    let card = card(&mut db, leaf, "front\n---\nback");
+
+    db.apply(
+        &Command::SetDeckReverse {
+            deck: root,
+            reverse: Some(true),
+        },
+        NOON,
+    )
+    .expect("root on");
+    assert_eq!(
+        reverse_queue(&db),
+        vec![card],
+        "two levels down still inherits"
+    );
+
+    db.apply(
+        &Command::SetDeckReverse {
+            deck: middle,
+            reverse: Some(false),
+        },
+        NOON,
+    )
+    .expect("middle off");
+    assert!(reverse_queue(&db).is_empty(), "the nearer deck wins");
+
+    db.apply(
+        &Command::SetDeckReverse {
+            deck: middle,
+            reverse: None,
+        },
+        NOON,
+    )
+    .expect("middle inherits");
+    assert_eq!(
+        reverse_queue(&db),
+        vec![card],
+        "and clearing it hands back to the root"
+    );
+}
+
+#[test]
+fn the_library_default_is_the_last_word() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let root = deck(&mut db, "Languages");
+    let card = card(&mut db, root, "front\n---\nback");
+
+    assert!(reverse_queue(&db).is_empty(), "reverse starts off");
+    db.apply(
+        &Command::SetSetting {
+            key: "reverse_default".to_string(),
+            value: "1".to_string(),
+        },
+        NOON,
+    )
+    .expect("default on");
+    assert!(
+        db.settings().expect("settings").reverse_default,
+        "the snapshot reads the default back"
+    );
+    assert_eq!(reverse_queue(&db), vec![card]);
+
+    let refused = db.apply(
+        &Command::SetSetting {
+            key: "reverse_default".to_string(),
+            value: "yes".to_string(),
+        },
+        NOON,
+    );
+    assert!(
+        matches!(refused, Err(StoreError::Setting { ref key, .. }) if key == "reverse_default"),
+        "a value that is neither on nor off is refused: {refused:?}"
+    );
+}
+
+/// A deck inside another deck.
+fn subdeck(db: &mut Db, parent: Id, name: &str) -> Id {
+    match db.apply(
+        &Command::CreateDeck {
+            parent: Some(parent),
+            name: name.to_string(),
+        },
+        0,
+    ) {
+        Ok(Outcome::Deck(id)) => id,
+        other => panic!("creating a subdeck: {other:?}"),
+    }
+}
+
+/// The cards whose reverse prompt the new queue would offer, in id order.
+fn reverse_queue(db: &Db) -> Vec<Id> {
+    let mut cards: Vec<Id> = db
+        .new_prompts(0, 0, 1, None)
+        .expect("new")
+        .into_iter()
+        .filter(|prompt| prompt.key == "rev")
+        .map(|prompt| prompt.card)
+        .collect();
+    cards.sort_unstable();
+    cards
+}

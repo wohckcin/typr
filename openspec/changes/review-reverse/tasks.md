@@ -17,7 +17,7 @@
     sees neither; `saving_a_two_sided_card_leaves_its_reverse_prompt_unretired` reads `retired = 0` for
     `rev` after a plain save; `a_card_that_stops_being_two_sided_retires_its_reverse_prompt` turns the card
     into a note and finds `rev` marked retired.
-- [ ] 1.3 Commands `SetCardReverse { card, reverse: Option<bool> }`, `SetDeckReverse { deck, reverse: Option<bool> }` and `SetSetting { key: "reverse_default", … }` write the three levels.
+- [x] 1.3 Commands `SetCardReverse { card, reverse: Option<bool> }`, `SetDeckReverse { deck, reverse: Option<bool> }` and `SetSetting { key: "reverse_default", … }` write the three levels.
   - **Verification**: `a_card_setting_beats_its_deck` and `a_deck_setting_reaches_nested_decks` create the tree, flip flags and read the queue back.
 
 ## 2. Scheduling independence
