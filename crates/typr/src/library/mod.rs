@@ -319,6 +319,7 @@ impl Library {
             name: "Seeded".to_string(),
             archived: false,
             reverse: None,
+            template: None,
         };
         let mut library = Library {
             snapshot: Arc::new(Snapshot {
@@ -347,6 +348,9 @@ impl Library {
                 prompts: u32::from(id % 3 != 0),
                 unscheduled: u32::from(id % 3 == 1),
                 due_at: (id % 3 == 2).then_some(-1),
+                fields: Vec::new(),
+                template: None,
+                template_from: None,
             })
             .collect();
         library.refresh();
@@ -417,6 +421,7 @@ impl Library {
                     name: "Biology".to_string(),
                     archived: false,
                     reverse: None,
+                    template: None,
                 },
                 Deck {
                     id: 2,
@@ -424,6 +429,7 @@ impl Library {
                     name: "Cell biology".to_string(),
                     archived: false,
                     reverse: None,
+                    template: None,
                 },
                 Deck {
                     id: 3,
@@ -431,6 +437,7 @@ impl Library {
                     name: "Mitosis".to_string(),
                     archived: false,
                     reverse: None,
+                    template: None,
                 },
             ];
         }

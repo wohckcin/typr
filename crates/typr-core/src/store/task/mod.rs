@@ -294,6 +294,27 @@ impl Store for Handle {
         })
     }
 
+    fn set_fields(&self, card: Id, fields: &[(String, String)]) -> Result<u64, StoreError> {
+        self.submit(Command::SetFields {
+            card,
+            fields: fields.to_vec(),
+        })
+    }
+
+    fn set_card_template(&self, card: Id, template: Option<&str>) -> Result<u64, StoreError> {
+        self.submit(Command::SetCardTemplate {
+            card,
+            template: template.map(str::to_string),
+        })
+    }
+
+    fn set_deck_template(&self, deck: Id, template: Option<&str>) -> Result<u64, StoreError> {
+        self.submit(Command::SetDeckTemplate {
+            deck,
+            template: template.map(str::to_string),
+        })
+    }
+
     fn set_diagram(&self, card: Id, image: &str, caption: &str) -> Result<u64, StoreError> {
         self.submit(Command::SetDiagram {
             card,

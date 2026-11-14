@@ -101,6 +101,7 @@ fn a_tag_filter_and_a_deck_filter_compose() {
         name: "Other".to_string(),
         archived: false,
         reverse: None,
+        template: None,
     };
     let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
     snapshot.decks.push(second);
@@ -148,6 +149,7 @@ fn named(id: i64, parent: Option<i64>, name: &str) -> Deck {
         name: name.to_string(),
         archived: false,
         reverse: None,
+        template: None,
     }
 }
 

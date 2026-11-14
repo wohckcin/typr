@@ -10,6 +10,8 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::hidden::{self, Shape};
 use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
+use crate::sides;
+use crate::template::{self, Context, Fields};
 
 use super::{
     CardKind, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow, NewPrompt,
@@ -159,7 +161,7 @@ impl Db {
                 )?;
                 Ok(Outcome::Changed(changed))
             }
-            Command::MoveDeck { id, parent } => self.move_deck(*id, *parent),
+            Command::MoveDeck { id, parent } => self.move_deck(*id, *parent, now_ms),
             Command::CreateCard { deck, markdown } => {
                 let shape = hidden::shape(markdown);
                 self.conn.execute(
@@ -303,7 +305,16 @@ impl Db {
                     "UPDATE card SET deck_id = ?2, updated_at = ?3 WHERE id = ?1",
                     params![id, deck, now_ms],
                 )?;
+                // The card may have landed under a deck that sets a template, or left one behind.
+                self.rerender(*id, now_ms)?;
                 Ok(Outcome::Changed(changed))
+            }
+            Command::SetFields { card, fields } => self.set_fields(*card, fields, now_ms),
+            Command::SetCardTemplate { card, template } => {
+                self.set_card_template(*card, template.as_deref(), now_ms)
+            }
+            Command::SetDeckTemplate { deck, template } => {
+                self.set_deck_template(*deck, template.as_deref(), now_ms)
             }
             Command::SetTags { card, tags } => self.set_tags(*card, tags),
             Command::ArchiveCard { id, archived } => {
@@ -432,7 +443,7 @@ impl Db {
     pub fn snapshot(&self) -> Result<Snapshot, StoreError> {
         let decks = {
             let mut stmt = self.conn.prepare(
-                "SELECT id, parent_id, name, archived, reverse FROM deck
+                "SELECT id, parent_id, name, archived, reverse, template FROM deck
                  ORDER BY name COLLATE NOCASE, id",
             )?;
             let rows = stmt.query_map([], |row| {
@@ -442,6 +453,7 @@ impl Db {
                     name: row.get(2)?,
                     archived: row.get::<_, i64>(3)? != 0,
                     reverse: flag(row.get(4)?),
+                    template: row.get(5)?,
                 })
             })?;
             rows.collect::<Result<Vec<_>, _>>()?
@@ -450,7 +462,7 @@ impl Db {
             let mut stmt = self.conn.prepare(
                 "SELECT c.id, c.deck_id, c.sides, c.archived, c.trashed_at, c.updated_at, c.markdown,
                         c.search_text, COUNT(sp.card_id), SUM(sp.card_id IS NOT NULL AND sp.due_at IS NULL), MIN(sp.due_at),
-                        c.reverse, c.kind, c.image, c.caption
+                        c.reverse, c.kind, c.image, c.caption, c.template
                  FROM card c
                  LEFT JOIN studyable_prompt sp ON sp.card_id = c.id
                  GROUP BY c.id
@@ -476,6 +488,11 @@ impl Db {
                     prompts: count_of(row.get(8)?),
                     unscheduled: count_of(row.get(9)?),
                     due_at: row.get(10)?,
+                    fields: Vec::new(),
+                    // A card's own template, if it has one; the cards that inherit are filled in
+                    // below, once every deck is in hand.
+                    template: row.get(15)?,
+                    template_from: None,
                 })
             })?;
             let mut cards = rows.collect::<Result<Vec<_>, _>>()?;
@@ -520,6 +537,55 @@ impl Db {
             for summary in &mut cards {
                 if let Some(masks) = by_card.remove(&summary.id) {
                     summary.masks = masks;
+                }
+            }
+
+            let mut stmt = self
+                .conn
+                .prepare("SELECT card_id, name, value FROM field ORDER BY card_id, name")?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, Id>(0)?,
+                    (row.get::<_, String>(1)?, row.get::<_, String>(2)?),
+                ))
+            })?;
+            let mut by_card: HashMap<Id, Vec<(String, String)>> = HashMap::new();
+            for row in rows {
+                let (card, field) = row?;
+                by_card.entry(card).or_default().push(field);
+            }
+            for summary in &mut cards {
+                if let Some(fields) = by_card.remove(&summary.id) {
+                    summary.fields = fields;
+                }
+            }
+
+            // The template a card without one of its own inherits: the nearest deck above it that
+            // sets one, resolved here rather than by a query per card.
+            let chains: HashMap<Id, (Option<Id>, Option<String>)> = decks
+                .iter()
+                .map(|deck| (deck.id, (deck.parent, deck.template.clone())))
+                .collect();
+            for summary in &mut cards {
+                if summary.template.is_some() {
+                    continue;
+                }
+                let mut cursor = Some(summary.deck);
+                let mut hops = 0;
+                while let Some(id) = cursor {
+                    hops += 1;
+                    if hops > 64 {
+                        break;
+                    }
+                    let Some((parent, template)) = chains.get(&id) else {
+                        break;
+                    };
+                    if let Some(template) = template {
+                        summary.template = Some(template.clone());
+                        summary.template_from = Some(id);
+                        break;
+                    }
+                    cursor = *parent;
                 }
             }
             cards
@@ -615,7 +681,229 @@ impl Db {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// Which card kind the row records: `text` for markdown, `diagram` for a picture.
+    /// The fields a card fills its template from, ordered by name.
+    fn fields_of(&self, card: Id) -> Result<Vec<(String, String)>, StoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name, value FROM field WHERE card_id = ?1 ORDER BY name")?;
+        let rows = stmt.query_map(params![card], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// The template a card's text comes from, and the deck it is inherited from when it is not the
+    /// card's own: `None` in the second place means the card carries it.
+    ///
+    /// Inheritance walks up the deck tree the way reverse does, so the nearest deck that sets a
+    /// template wins. A card with no template anywhere answers `None`, which is what makes a
+    /// library without templates behave exactly as it did before them.
+    fn template_of(&self, card: Id) -> Result<Option<(String, Option<Id>)>, StoreError> {
+        let row: Option<(Option<String>, Id)> = self
+            .conn
+            .query_row(
+                "SELECT template, deck_id FROM card WHERE id = ?1",
+                params![card],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((own, deck)) = row else {
+            return Ok(None);
+        };
+        if let Some(template) = own {
+            return Ok(Some((template, None)));
+        }
+        let mut cursor = Some(deck);
+        let mut hops = 0;
+        while let Some(id) = cursor {
+            // A cycle the schema does not allow still cannot be allowed to hang a render.
+            hops += 1;
+            if hops > 64 {
+                return Ok(None);
+            }
+            let (template, parent): (Option<String>, Option<Id>) = self.conn.query_row(
+                "SELECT template, parent_id FROM deck WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            if let Some(template) = template {
+                return Ok(Some((template, Some(id))));
+            }
+            cursor = parent;
+        }
+        Ok(None)
+    }
+
+    /// The name of the deck a card sits in, which `<<Deck>>` renders.
+    fn deck_name_of(&self, card: Id) -> Result<Option<String>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT d.name FROM card c JOIN deck d ON d.id = c.deck_id WHERE c.id = ?1",
+                params![card],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Write a card's text from its template and fields.
+    ///
+    /// `card.markdown` is a cache of `render(template, fields)`: every mutation that can change
+    /// either calls this, so `sides`, `search_text` and the review can go on reading one plain
+    /// string. A card with no template in force is left alone — the text it holds is its own, which
+    /// is what makes clearing a template leave the cards readable.
+    fn rerender(&self, card: Id, now_ms: i64) -> Result<(), StoreError> {
+        let Some((template, _from)) = self.template_of(card)? else {
+            return Ok(());
+        };
+        let pairs = self.fields_of(card)?;
+        let deck = self.deck_name_of(card)?.unwrap_or_default();
+        let fields = Fields::new(&pairs);
+        // `<<Name>>` is the card's first side, and a first side can be computed, so the name comes
+        // from a render with nothing computed in it. One extra pass, and no chase after a fixed
+        // point: a template whose first side reads `<<Name>>` renders it empty, as any other
+        // unfilled field.
+        let without_name = template::render(
+            &template,
+            &fields,
+            &Context {
+                name: None,
+                deck: Some(&deck),
+            },
+        );
+        let name = sides::split(&without_name)
+            .first()
+            .map(|side| side.trim())
+            .unwrap_or_default();
+        let text = template::render(
+            &template,
+            &fields,
+            &Context {
+                name: Some(name),
+                deck: Some(&deck),
+            },
+        );
+        let shape = hidden::shape(&text);
+        // A value the template does not use is still part of what the card says, so search has to
+        // reach it.
+        let mut search = folded(&text);
+        for (_, value) in &pairs {
+            search.push(' ');
+            search.push_str(&folded(value));
+        }
+        self.conn.execute(
+            "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
+            params![card, text, faces_of(&shape), search, now_ms],
+        )?;
+        self.sync_prompts(card, &shape)?;
+        Ok(())
+    }
+
+    /// Replace a card's fields and its rendered text with them.
+    fn set_fields(
+        &self,
+        card: Id,
+        fields: &[(String, String)],
+        now_ms: i64,
+    ) -> Result<Outcome, StoreError> {
+        self.require_card(card)?;
+        self.conn
+            .execute("DELETE FROM field WHERE card_id = ?1", params![card])?;
+        let mut changed = 0;
+        for (name, value) in fields {
+            let name = name.trim();
+            if name.is_empty() {
+                continue;
+            }
+            changed += self.conn.execute(
+                "INSERT INTO field (card_id, name, value) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (card_id, name) DO UPDATE SET value = excluded.value",
+                params![card, name, value],
+            )?;
+        }
+        self.rerender(card, now_ms)?;
+        Ok(Outcome::Changed(changed))
+    }
+
+    /// Give a card its own template, or `None` to inherit its deck's again.
+    fn set_card_template(
+        &self,
+        card: Id,
+        template: Option<&str>,
+        now_ms: i64,
+    ) -> Result<Outcome, StoreError> {
+        let changed = self.conn.execute(
+            "UPDATE card SET template = ?2, updated_at = ?3 WHERE id = ?1",
+            params![card, template, now_ms],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::Missing {
+                what: "card",
+                id: card,
+            });
+        }
+        self.rerender(card, now_ms)?;
+        Ok(Outcome::Changed(changed))
+    }
+
+    /// Give a deck a template its cards inherit, then re-render every card under it.
+    ///
+    /// One command, one transaction: a deck template change rewrites every card in that deck, and a
+    /// failure halfway would otherwise leave some rendered against the new template and some
+    /// against the old.
+    fn set_deck_template(
+        &self,
+        deck: Id,
+        template: Option<&str>,
+        now_ms: i64,
+    ) -> Result<Outcome, StoreError> {
+        let changed = self.conn.execute(
+            "UPDATE deck SET template = ?2 WHERE id = ?1",
+            params![deck, template],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::Missing {
+                what: "deck",
+                id: deck,
+            });
+        }
+        let cards = self.subtree_cards(deck)?;
+        for card in &cards {
+            // A card's own template still wins: `rerender` reads the template in force, not this
+            // deck's.
+            self.rerender(*card, now_ms)?;
+        }
+        Ok(Outcome::Changed(cards.len()))
+    }
+
+    /// Every card in a deck and the decks under it.
+    fn subtree_cards(&self, deck: Id) -> Result<Vec<Id>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "WITH RECURSIVE under(id) AS (
+                 SELECT ?1
+                 UNION ALL
+                 SELECT d.id FROM deck d JOIN under u ON d.parent_id = u.id
+             )
+             SELECT c.id FROM card c JOIN under u ON u.id = c.deck_id ORDER BY c.id",
+        )?;
+        let rows = stmt.query_map(params![deck], |row| row.get::<_, Id>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Refuse a card id that is not there, so a command never reports a write it did not make.
+    fn require_card(&self, card: Id) -> Result<(), StoreError> {
+        let found = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM card WHERE id = ?1",
+                params![card],
+                |_| Ok(()),
+            )
+            .optional()?;
+        found.ok_or(StoreError::Missing {
+            what: "card",
+            id: card,
+        })
+    }
+
     /// The card's kind, or `text` for a card that is no longer there: a missing card is reported by
     /// the command that asked, not by this read.
     fn kind_of(&self, card: Id) -> Result<String, StoreError> {
@@ -755,7 +1043,12 @@ impl Db {
     }
 
     /// Move a deck under another, refusing a move that would put it inside its own subtree.
-    pub fn move_deck(&self, id: Id, parent: Option<Id>) -> Result<Outcome, StoreError> {
+    pub fn move_deck(
+        &self,
+        id: Id,
+        parent: Option<Id>,
+        now_ms: i64,
+    ) -> Result<Outcome, StoreError> {
         if let Some(parent) = parent {
             let mut cursor = Some(parent);
             while let Some(deck) = cursor {
@@ -777,6 +1070,12 @@ impl Db {
             "UPDATE deck SET parent_id = ?2 WHERE id = ?1",
             params![id, parent],
         )?;
+        if changed > 0 {
+            // Every card under the moved deck may now inherit a different template, or none.
+            for card in self.subtree_cards(id)? {
+                self.rerender(card, now_ms)?;
+            }
+        }
         Ok(Outcome::Changed(changed))
     }
 

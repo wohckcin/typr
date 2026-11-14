@@ -1205,3 +1205,294 @@ fn a_diagram_is_not_overwritten_by_text() {
         .expect("the markdown");
     assert_eq!(markdown, "", "the diagram still holds no text");
 }
+
+/// One card as the library lists it.
+fn summary(db: &Db, id: Id) -> CardSummary {
+    db.snapshot()
+        .expect("snapshot")
+        .cards
+        .into_iter()
+        .find(|card| card.id == id)
+        .expect("the card is in the snapshot")
+}
+
+/// Set a deck's template, or clear it with `None`.
+fn deck_template(db: &mut Db, deck: Id, template: Option<&str>) {
+    db.apply(
+        &Command::SetDeckTemplate {
+            deck,
+            template: template.map(str::to_string),
+        },
+        0,
+    )
+    .expect("deck template");
+}
+
+/// Set a card's own template, or clear it with `None`.
+fn card_template(db: &mut Db, card: Id, template: Option<&str>) {
+    db.apply(
+        &Command::SetCardTemplate {
+            card,
+            template: template.map(str::to_string),
+        },
+        0,
+    )
+    .expect("card template");
+}
+
+/// Replace a card's fields.
+fn fields(db: &mut Db, card: Id, pairs: &[(&str, &str)]) {
+    let pairs: Vec<(String, String)> = pairs
+        .iter()
+        .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
+        .collect();
+    db.apply(
+        &Command::SetFields {
+            card,
+            fields: pairs,
+        },
+        0,
+    )
+    .expect("fields");
+}
+
+#[test]
+fn a_card_reports_the_template_it_inherits() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let inherited = "<<Word>>\n---\n<<Meaning>>";
+    deck_template(&mut db, deck, Some(inherited));
+
+    let id = card(&mut db, deck, "");
+    fields(&mut db, id, &[("Word", "gato"), ("Meaning", "cat")]);
+
+    let listed = summary(&db, id);
+    assert_eq!(listed.template.as_deref(), Some(inherited));
+    assert_eq!(listed.template_from, Some(deck), "it comes from the deck");
+    assert_eq!(
+        listed.fields,
+        vec![
+            ("Meaning".to_string(), "cat".to_string()),
+            ("Word".to_string(), "gato".to_string()),
+        ],
+        "fields come back ordered by name"
+    );
+
+    let own = card(&mut db, deck, "");
+    card_template(&mut db, own, Some("<<Word>>"));
+    let listed = summary(&db, own);
+    assert_eq!(listed.template.as_deref(), Some("<<Word>>"));
+    assert_eq!(listed.template_from, None, "the card carries this one");
+
+    // A deck of its own also wins over the one above it.
+    let child = match db
+        .apply(
+            &Command::CreateDeck {
+                parent: Some(deck),
+                name: "Verbs".to_string(),
+            },
+            0,
+        )
+        .expect("child deck")
+    {
+        Outcome::Deck(id) => id,
+        other => panic!("creating a deck: {other:?}"),
+    };
+    deck_template(&mut db, child, Some("<<Word>>\n---\n<<Tense>>"));
+    let nested = card(&mut db, child, "");
+    let listed = summary(&db, nested);
+    assert_eq!(listed.template_from, Some(child), "the nearest deck wins");
+}
+
+#[test]
+fn the_stored_text_is_what_the_template_renders() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let id = card(&mut db, deck, "");
+    card_template(
+        &mut db,
+        id,
+        Some("<<Word>>\n---\n<<Meaning>>\n\n{{#Example}}e.g. <<Example>>{{/Example}}"),
+    );
+
+    fields(&mut db, id, &[("Word", "gato"), ("Meaning", "cat")]);
+    let listed = summary(&db, id);
+    assert_eq!(listed.markdown, "gato\n---\ncat\n\n");
+    assert_eq!(listed.sides, 2, "one separator makes the two sides");
+    assert_eq!(
+        db.prompt_keys(id).expect("keys"),
+        vec!["fwd".to_string(), "rev".to_string()],
+        "a rendered card is a card like any other"
+    );
+
+    fields(
+        &mut db,
+        id,
+        &[
+            ("Word", "gato"),
+            ("Meaning", "cat"),
+            ("Example", "el gato duerme"),
+        ],
+    );
+    let listed = summary(&db, id);
+    assert_eq!(listed.markdown, "gato\n---\ncat\n\ne.g. el gato duerme");
+    assert!(
+        listed.search_text.contains("duerme"),
+        "search reaches what the card now says: {}",
+        listed.search_text
+    );
+}
+
+#[test]
+fn a_deck_template_change_rewrites_its_cards() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let first = card(&mut db, deck, "written by hand");
+    let second = card(&mut db, deck, "also by hand");
+    let own = card(&mut db, deck, "keeps its own");
+    card_template(&mut db, own, Some("<<Word>>"));
+    for id in [first, second, own] {
+        fields(&mut db, id, &[("Word", "gato"), ("Meaning", "cat")]);
+    }
+
+    deck_template(&mut db, deck, Some("<<Word>>\n---\n<<Meaning>>"));
+
+    for id in [first, second] {
+        assert_eq!(
+            summary(&db, id).markdown,
+            "gato\n---\ncat",
+            "card {id} follows the deck"
+        );
+        assert_eq!(summary(&db, id).sides, 2);
+    }
+    assert_eq!(
+        summary(&db, own).markdown,
+        "gato",
+        "a card with its own template does not follow the deck's"
+    );
+
+    // Cleared: every card keeps the text it has, and the fields stay for the next template.
+    deck_template(&mut db, deck, None);
+    let listed = summary(&db, first);
+    assert_eq!(listed.markdown, "gato\n---\ncat");
+    assert_eq!(listed.template, None);
+    assert_eq!(listed.fields.len(), 2, "the values are still there");
+}
+
+#[test]
+fn a_deck_move_rerenders_against_the_new_template() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let plain = deck(&mut db, "Unsorted");
+    let spanish = deck(&mut db, "Spanish");
+    deck_template(&mut db, spanish, Some("<<Word>>\n---\n<<Meaning>>"));
+
+    let id = card(&mut db, plain, "typed by hand");
+    fields(&mut db, id, &[("Word", "gato"), ("Meaning", "cat")]);
+    assert_eq!(
+        summary(&db, id).markdown,
+        "typed by hand",
+        "no template above it, so its text is its own"
+    );
+
+    db.apply(&Command::MoveCard { id, deck: spanish }, 0)
+        .expect("move");
+    assert_eq!(summary(&db, id).markdown, "gato\n---\ncat");
+
+    db.apply(&Command::MoveCard { id, deck: plain }, 0)
+        .expect("move back");
+    assert_eq!(
+        summary(&db, id).markdown,
+        "gato\n---\ncat",
+        "leaving the deck leaves the text it was rendered to"
+    );
+}
+
+#[test]
+fn a_fifty_card_deck_renders_in_one_pass() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Five hundred");
+    let ids: Vec<Id> = (0..50)
+        .map(|index| {
+            let id = card(&mut db, deck, "");
+            fields(
+                &mut db,
+                id,
+                &[("Word", &format!("word {index}")), ("Meaning", "meaning")],
+            );
+            id
+        })
+        .collect();
+
+    deck_template(&mut db, deck, Some("<<Word>>\n---\n<<Meaning>>"));
+
+    let snapshot = db.snapshot().expect("snapshot");
+    for id in &ids {
+        let listed = snapshot
+            .cards
+            .iter()
+            .find(|card| card.id == *id)
+            .expect("card");
+        assert_eq!(listed.sides, 2, "card {id} renders two sides");
+        assert!(
+            listed.markdown.starts_with("word "),
+            "card {id} has its own value: {}",
+            listed.markdown
+        );
+        assert_eq!(listed.prompts, 1, "card {id} holds exactly one fwd prompt");
+    }
+}
+
+#[test]
+fn emptying_a_field_can_make_a_card_a_note() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    deck_template(&mut db, deck, Some("<<Word>>\n---\n<<Answer>>"));
+    let id = card(&mut db, deck, "");
+    fields(&mut db, id, &[("Word", "gato"), ("Answer", "cat")]);
+    assert_eq!(summary(&db, id).prompts, 1);
+
+    fields(&mut db, id, &[("Word", "gato")]);
+
+    let listed = summary(&db, id);
+    assert_eq!(
+        listed.markdown, "gato\n---\n",
+        "the placeholder renders empty and the separator stays"
+    );
+    assert_eq!(listed.sides, 1);
+    assert_eq!(
+        db.prompt_keys(id).expect("keys"),
+        vec!["fwd".to_string(), "rev".to_string()],
+        "the prompt rows stay, the card just stops queueing"
+    );
+    assert_eq!(
+        db.due_prompts(1_000, 0, 0, None).expect("due").len(),
+        0,
+        "a note does not queue"
+    );
+}
+
+#[test]
+fn search_reaches_a_field_the_template_does_not_use() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    deck_template(&mut db, deck, Some("<<Word>>"));
+    let id = card(&mut db, deck, "");
+    fields(&mut db, id, &[("Word", "gato"), ("Note", "duerme de día")]);
+
+    let found: Vec<Id> = db
+        .snapshot()
+        .expect("snapshot")
+        .cards
+        .iter()
+        .filter(|card| card.search_text.contains("duerme"))
+        .map(|card| card.id)
+        .collect();
+    assert_eq!(found, vec![id], "a value search reaches the value alone");
+}

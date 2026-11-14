@@ -25,6 +25,9 @@ fn card(sides: u32, markdown: &str) -> CardSummary {
         prompts: u32::from(sides >= 2),
         unscheduled: 0,
         due_at: None,
+        fields: Vec::new(),
+        template: None,
+        template_from: None,
     }
 }
 

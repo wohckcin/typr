@@ -82,6 +82,8 @@ pub struct Deck {
     pub archived: bool,
     /// `None` inherits the parent's value, which is what makes the nearest setting win.
     pub reverse: Option<bool>,
+    /// The markdown its cards are rendered from, or `None` to inherit the parent deck's.
+    pub template: Option<String>,
 }
 
 /// Which of the two things a card asks: text, or a picture with rectangles on it.
@@ -147,6 +149,12 @@ pub struct CardSummary {
     pub unscheduled: u32,
     /// The earliest due time among them; what a tile's badge reads.
     pub due_at: Option<i64>,
+    /// The values a template fills from, ordered by name.
+    pub fields: Vec<(String, String)>,
+    /// The template this card's text is rendered from, whether its own or a deck's.
+    pub template: Option<String>,
+    /// The deck the template is inherited from; `None` means the card carries its own.
+    pub template_from: Option<Id>,
 }
 
 /// Settings the user can change. Only the new-card cap exists in v1.
@@ -415,6 +423,22 @@ pub enum Command {
         id: Id,
         markdown: String,
     },
+    /// Replace a card's fields wholesale; the card's text is re-rendered from its template.
+    SetFields {
+        card: Id,
+        fields: Vec<(String, String)>,
+    },
+    /// `None` takes the card back to inheriting its deck's template.
+    SetCardTemplate {
+        card: Id,
+        template: Option<String>,
+    },
+    /// `None` takes the deck, and every card under it without a template of its own, back to
+    /// rendering the text each already holds.
+    SetDeckTemplate {
+        deck: Id,
+        template: Option<String>,
+    },
     MoveCard {
         id: Id,
         deck: Id,
@@ -628,6 +652,13 @@ pub trait Store: Send + Sync {
     fn move_card(&self, id: Id, deck: Id) -> Result<u64, StoreError>;
     fn archive_card(&self, id: Id, archived: bool) -> Result<u64, StoreError>;
     fn set_tags(&self, card: Id, tags: &[String]) -> Result<u64, StoreError>;
+    /// Replace a card's fields; its text is re-rendered from whatever template is in force.
+    fn set_fields(&self, card: Id, fields: &[(String, String)]) -> Result<u64, StoreError>;
+    /// `None` takes the card back to inheriting its deck's template.
+    fn set_card_template(&self, card: Id, template: Option<&str>) -> Result<u64, StoreError>;
+    /// `None` takes the deck, and the cards under it without one of their own, back to the text
+    /// each already holds.
+    fn set_deck_template(&self, deck: Id, template: Option<&str>) -> Result<u64, StoreError>;
     fn trash_card(&self, id: Id) -> Result<u64, StoreError>;
     fn restore_card(&self, id: Id) -> Result<u64, StoreError>;
     fn empty_trash(&self) -> Result<u64, StoreError>;
