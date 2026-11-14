@@ -2148,3 +2148,34 @@ fn a_hidden_text_prompt_shows_a_masked_sentence() {
     );
     assert!(runtime.find("forgot").is_some());
 }
+
+#[test]
+fn a_prompt_left_over_from_a_two_sided_card_does_not_open_a_session() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_markdown(&dir, "front\n---\nback");
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    settle(&mut state, 0);
+    let card = state.library.cards()[0].id;
+
+    // Saving it down to one side keeps the `fwd` prompt, because a prompt is never deleted; the
+    // card is a note now, so the queue answer must not put it in front of anyone.
+    let saved = state
+        .store
+        .as_ref()
+        .expect("store")
+        .save_card(card, "```\n{{x}}\n```\nonly a note")
+        .expect("saved");
+    settle(&mut state, saved);
+    refresh_library(&mut state);
+
+    let entries = state.session_entries(vec![(card, "fwd".to_string(), None)]);
+    assert!(
+        entries.is_empty(),
+        "a one-sided card is a note even with a prompt left over: {} entries",
+        entries.len()
+    );
+}

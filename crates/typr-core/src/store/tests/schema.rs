@@ -270,7 +270,9 @@ fn a_library_from_before_hidden_text_gains_the_column() {
         .apply(
             &Command::CreateCard {
                 deck,
-                markdown: "The {{hormone}} is made by the {{pancreas}}.".to_string(),
+                // A card a library from before hidden text could actually hold: two sides and
+                // nothing that looks like a hidden span.
+                markdown: "Which gland makes insulin?\n---\nThe pancreas.".to_string(),
             },
             0,
         )
@@ -310,7 +312,16 @@ fn a_library_from_before_hidden_text_gains_the_column() {
             row.get(0)
         })
         .expect("the card's flag");
-    assert_eq!(cloze, 1, "a card that holds hidden text is marked");
+    assert_eq!(
+        cloze, 0,
+        "the flag starts clear: only a save can mark hidden text, because a plain `{{` search \
+         would also match a fence"
+    );
+    assert_eq!(
+        db.prompt_keys(card).expect("keys"),
+        vec!["fwd".to_string()],
+        "an older library holds one prompt per two-sided card"
+    );
     assert_eq!(
         studyable(&db),
         before,
@@ -362,5 +373,47 @@ fn the_widened_view_still_hides_archived_and_trashed_cards() {
         studyable,
         [1],
         "only the live one-sided hidden-text card is studyable"
+    );
+}
+
+#[test]
+fn a_stale_prompt_on_a_one_sided_card_is_not_studyable() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    // A card that was two-sided, then edited down to one side whose only `{{` sits inside a
+    // fence: the parser reads one side, while the text still matches a plain `{{` search. Its
+    // `fwd` prompt survives, because syncing prompts never deletes one.
+    {
+        let db = Db::open(&path).expect("open");
+        db.apply(
+            &Command::CreateDeck {
+                parent: None,
+                name: "Deck".to_string(),
+            },
+            0,
+        )
+        .expect("deck");
+        db.connection_for_test()
+            .execute_batch(
+                "INSERT INTO card
+                    (id, deck_id, markdown, search_text, sides, has_cloze, created_at, updated_at)
+                 VALUES (1, 1, '```\n{{x}}\n```\nand a note line', '', 1, 0, 0, 0);
+                 INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+                 VALUES (1, 'fwd', 'learn', NULL, 0, 0, 0);",
+            )
+            .expect("rows");
+        rewind_for_test(db.connection_for_test(), 3);
+    }
+
+    let db = Db::open(&path).expect("reopen");
+    assert_eq!(schema_version_at(&path), 4, "the migration ran");
+
+    assert!(
+        db.new_prompts(0, 0, 1, None).expect("new").is_empty(),
+        "a one-sided card is a note, whatever its text contains"
+    );
+    assert!(
+        db.due_prompts(0, 0, 1, None).expect("due").is_empty(),
+        "and it is never due either"
     );
 }

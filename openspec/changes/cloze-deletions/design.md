@@ -42,10 +42,17 @@ at once, so one prompt hides them together; numbering is how a card asks for sep
 numbers come from the text and map straight to `cloze:<n>`, which keeps the key stable: inserting a
 new group does not renumber the others, and deleting one leaves its history as history.
 
-**Studyability becomes `sides >= 2 OR has_cloze`.** Migration V4 adds `card.has_cloze INTEGER NOT NULL
-DEFAULT 0`, kept in step by `sync_prompts`, and recreates the view with
-`AND (c.sides >= 2 OR c.has_cloze = 1)`. The alternative, "a prompt row exists", would resurrect the
-old bug where a card turned into a note kept queueing.
+**Studyability keys off the prompt, not the card alone.** Migration V4 adds `card.has_cloze INTEGER
+NOT NULL DEFAULT 0`, kept in step by `sync_prompts`, and recreates the view with
+`(p.key = 'fwd' AND c.sides >= 2) OR (p.key LIKE 'cloze:%' AND c.has_cloze = 1)`. The alternative, "a
+prompt row exists", would resurrect the old bug where a card turned into a note kept queueing.
+
+The predicate names the key because `has_cloze` cannot be trusted on its own across the migration:
+backfilling it from `markdown LIKE '%{{%'` also fires on a span inside a fence or a backtick run,
+which the parser reads as text, and a stale `fwd` prompt would then put a one-sided note back in a
+session. V4 therefore applies no backfill — every library that reaches it holds only `fwd` prompts,
+which the `sides >= 2` half gates — and the app adds a second guard in `session_entries`: a card
+whose shape is `Sides` with fewer than two sides yields no entry, whatever the queue answered.
 
 **A face carries `hidden` and `shown`.** `Entry` becomes `{ card, prompt, faces: Vec<Face>, overdue }`
 with `Face { hidden: String, shown: String }`. For sides the two strings are equal; for a group they

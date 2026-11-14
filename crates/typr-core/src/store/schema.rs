@@ -23,8 +23,11 @@ pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4];
 /// archived deck stay out of the queues, and `DROP VIEW IF EXISTS` keeps a file whose view is already
 /// gone opening cleanly.
 const V4: &str = r#"
+-- No backfill: a card's hidden-text flag is only meaningful for prompts this schema introduced,
+-- and a plain `{{` search would also match a fence or a code span, which the parser reads as
+-- text. Every library that reaches this step holds only `fwd` prompts, which the view gates on
+-- sides below.
 ALTER TABLE card ADD COLUMN has_cloze INTEGER NOT NULL DEFAULT 0;
-UPDATE card SET has_cloze = 1 WHERE markdown LIKE '%{{%';
 DROP VIEW IF EXISTS studyable_prompt;
 CREATE VIEW studyable_prompt AS
 WITH RECURSIVE archived_deck(id) AS (
@@ -37,7 +40,10 @@ FROM prompt p
 JOIN card c ON c.id = p.card_id
 WHERE c.trashed_at IS NULL
   AND c.archived = 0
-  AND (c.sides >= 2 OR c.has_cloze = 1)
+  AND (
+        (p.key = 'fwd' AND c.sides >= 2)
+        OR (p.key LIKE 'cloze:%' AND c.has_cloze = 1)
+    )
   AND c.deck_id NOT IN (SELECT id FROM archived_deck);
 "#;
 
