@@ -6,8 +6,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rune::tok::{self, type_};
 use rune::{El, GrowthSpec, ScrollSpec, TextEdit, col, row, text, text_input};
+use rune_kit::{Button, ButtonVariant, Dialog, Kit, root};
 
 use crate::store::{CardMode, CardSummary, Deck, Id, Snapshot};
+
+/// Kept for the lifetime of the app: a Kit rebuilds its palette and type ramp.
+static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));
 
 /// How tall one card row is, which the list needs before it has laid anything out.
 /// The height of one card row, in pixels.
@@ -19,6 +23,18 @@ pub const ROW_HEIGHT: f32 = ROW_HEIGHT_PX as f32;
 pub trait Host: 'static {
     fn library(&self) -> &Library;
     fn library_mut(&mut self) -> &mut Library;
+
+    /// Switch the list to another view. The default needs no store: it only changes what is drawn.
+    fn set_mode(&mut self, mode: CardMode) {
+        self.library_mut().set_mode(mode);
+    }
+
+    /// Bring a card out of the archive or the trash. A host with no store cannot, and says so by
+    /// doing nothing.
+    fn restore_card(&mut self, _card: Id) {}
+
+    /// Destroy everything in the trash. A host with no store leaves it alone.
+    fn empty_trash(&mut self) {}
 }
 
 impl Host for Library {
@@ -46,6 +62,8 @@ pub struct Library {
     /// Every index the list has built. A virtualised list builds only what is on screen, so a
     /// large library must leave this far below the row count.
     pub built_rows: AtomicUsize,
+    /// Whether the empty-trash question is on screen. Emptying destroys history, so it asks.
+    pub confirming_empty: bool,
 }
 
 impl Default for Library {
@@ -59,6 +77,7 @@ impl Default for Library {
             tag: None,
             visible: Vec::new(),
             built_rows: AtomicUsize::new(0),
+            confirming_empty: false,
         }
     }
 }
@@ -73,6 +92,14 @@ impl Library {
     /// The cards on screen, in the order they are drawn.
     pub fn cards(&self) -> &[CardSummary] {
         &self.visible
+    }
+
+    /// Show another slice of the library: active cards, the archive, or the trash.
+    pub fn set_mode(&mut self, mode: CardMode) {
+        if self.mode != mode {
+            self.mode = mode;
+            self.refresh();
+        }
     }
 
     /// Take a newly published library and rebuild the list from it. The only way in, so the two
@@ -129,6 +156,56 @@ impl Library {
         library.refresh();
         library
     }
+
+    /// A library holding active, archived and trashed cards, so the views have something to show.
+    pub fn seeded_mixed() -> Library {
+        let mut library = Library::seeded(6);
+        {
+            let snapshot = Arc::make_mut(&mut library.snapshot);
+            snapshot.cards[1].archived = true;
+            snapshot.cards[2].archived = true;
+            snapshot.cards[3].trashed_at = Some(1);
+            snapshot.cards[4].trashed_at = Some(1);
+        }
+        library.refresh();
+        library
+    }
+}
+
+/// One view switch: active cards, the archive, or the trash.
+fn mode_tab<S: Host>(label: &'static str, mode: CardMode, current: CardMode) -> El {
+    let t = tok::theme(true);
+    let selected = mode == current;
+    row()
+        .key(match mode {
+            CardMode::Active => "mode-active",
+            CardMode::Archived => "mode-archived",
+            CardMode::Trash => "mode-trash",
+        })
+        .h(28.0)
+        .px(10.0)
+        .radius(6.0)
+        .center_y()
+        .fill(if selected {
+            t.control_off
+        } else {
+            t.control_off.alpha(0.0)
+        })
+        .child(text(label).font(type_::LABEL).color(if selected {
+            t.text
+        } else {
+            t.text_secondary
+        }))
+        .on_press(move |s: &mut S| s.set_mode(mode))
+}
+
+/// The button that asks before the trash is destroyed.
+fn empty_trash_button<S: Host>() -> El {
+    Button::new("Empty trash")
+        .variant(ButtonVariant::Ghost)
+        .on_press(|s: &mut S| s.library_mut().confirming_empty = true)
+        .build(&KIT)
+        .key("empty-trash")
 }
 
 fn deck_row<S: Host>(deck: &Deck, selected: bool) -> El {
@@ -201,12 +278,15 @@ fn filter_bar<S: Host>(s: &S) -> El {
         .placeholder("Search cards", t.text_secondary)
         .on_edit(|s: &mut S| &mut s.library_mut().query)
         .on_input_change(|s: &mut S, _| s.library_mut().refresh());
-    row()
+    let mut bar = row()
         .key("filters")
         .h(44.0)
         .px(12.0)
         .center_y()
         .gap(8.0)
+        .child(mode_tab::<S>("Active", CardMode::Active, library.mode))
+        .child(mode_tab::<S>("Archived", CardMode::Archived, library.mode))
+        .child(mode_tab::<S>("Trash", CardMode::Trash, library.mode))
         .child(search)
         .child(
             text(
@@ -217,11 +297,15 @@ fn filter_bar<S: Host>(s: &S) -> El {
             )
             .font(type_::LABEL)
             .color(t.text_secondary),
-        )
+        );
+    if library.mode == CardMode::Trash {
+        bar = bar.child(empty_trash_button::<S>());
+    }
+    bar
 }
 
 /// One row of the card list.
-fn card_row<S: Host>(card: &CardSummary, selected: bool) -> El {
+fn card_row<S: Host>(card: &CardSummary, selected: bool, mode: CardMode) -> El {
     let t = tok::theme(true);
     let id = card.id;
     let mut tags = String::new();
@@ -233,7 +317,7 @@ fn card_row<S: Host>(card: &CardSummary, selected: bool) -> El {
         tags.push_str(tag);
     }
     let note = if card.sides < 2 { "note" } else { "" };
-    row()
+    let mut line = row()
         .key(format!("card-{}", card.id))
         .h(ROW_HEIGHT)
         .px(12.0)
@@ -255,8 +339,17 @@ fn card_row<S: Host>(card: &CardSummary, selected: bool) -> El {
             .color(t.text),
         )
         .child(text(tags).font(type_::LABEL).color(t.text_secondary))
-        .child(text(note).font(type_::LABEL).color(t.text_secondary))
-        .on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
+        .child(text(note).font(type_::LABEL).color(t.text_secondary));
+    if mode != CardMode::Active {
+        line = line.child(
+            Button::new("Restore")
+                .variant(ButtonVariant::Ghost)
+                .on_press(move |s: &mut S| s.restore_card(id))
+                .build(&KIT)
+                .key(format!("restore-{id}")),
+        );
+    }
+    line.on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
 }
 
 /// The library screen.
@@ -283,11 +376,11 @@ pub fn view<S: Host>(s: &S) -> El {
                         let library = s.library();
                         library.built_rows.fetch_add(1, Ordering::Relaxed);
                         let card = &library.visible[index];
-                        card_row::<S>(card, library.selected_card == Some(card.id))
+                        card_row::<S>(card, library.selected_card == Some(card.id), library.mode)
                     },
                 ),
         );
-    row()
+    let body = row()
         .w_full()
         .h_full()
         .fill(tok::theme(true).bg)
@@ -298,7 +391,44 @@ pub fn view<S: Host>(s: &S) -> El {
                 .h_full()
                 .child(filter_bar::<S>(s))
                 .child(list),
+        );
+    let mut layer = Vec::new();
+    confirmation::<S>(s, &mut layer);
+    root(body, layer)
+}
+
+/// The question shown before the trash is destroyed, because its history goes with it.
+fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
+    let buttons = row()
+        .key("empty-buttons")
+        .w_full()
+        .padding(16.0)
+        .gap(8.0)
+        .justify_end()
+        .child(
+            Button::new("Cancel")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| s.library_mut().confirming_empty = false)
+                .build(&KIT)
+                .key("cancel-empty"),
         )
+        .child(
+            Button::new("Empty trash")
+                .variant(ButtonVariant::Submit)
+                .on_press(|s: &mut S| {
+                    s.library_mut().confirming_empty = false;
+                    s.empty_trash();
+                })
+                .build(&KIT)
+                .key("confirm-empty"),
+        );
+    Dialog::new("empty-trash", "Empty the trash?")
+        .description("Every card in the trash and its review history is destroyed.")
+        .fit()
+        .open(s.library().confirming_empty)
+        .on_close(|s: &mut S| s.library_mut().confirming_empty = false)
+        .child(buttons)
+        .build(&KIT, layer);
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use typr::history::{self, History};
 use typr::library::{self, Library};
 use typr::screen::{Queue, Screen};
 use typr::session::{Entry, Session};
-use typr::store::{self, Grade, Handle, Id, Outcome, Store, StoreError};
+use typr::store::{self, CardMode, Grade, Handle, Id, Outcome, Store, StoreError};
 use typr::study::{self, Host};
 use typr::{day, sides};
 
@@ -102,6 +102,30 @@ impl library::Host for State {
 
     fn library_mut(&mut self) -> &mut Library {
         &mut self.library
+    }
+
+    fn restore_card(&mut self, card: Id) {
+        // The archive is undone by un-archiving; the trash by restoring. Which one depends on the
+        // view the button sits in, and that is the list's mode.
+        let from_trash = self.library.mode == CardMode::Trash;
+        let sent = match self.store.as_ref() {
+            Some(store) if from_trash => store.restore_card(card),
+            Some(store) => store.archive_card(card, false),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
+    }
+
+    fn empty_trash(&mut self) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.empty_trash(),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
     }
 }
 
@@ -445,6 +469,16 @@ fn main() {
         }),
         ("library-empty", |state: &mut State| {
             state.screen = Screen::Library;
+        }),
+        ("library-archived", |state: &mut State| {
+            state.library = Library::seeded_mixed();
+            state.library.set_mode(CardMode::Archived);
+            state.seeded = true;
+        }),
+        ("library-trash", |state: &mut State| {
+            state.library = Library::seeded_mixed();
+            state.library.set_mode(CardMode::Trash);
+            state.seeded = true;
         }),
         ("history", |state: &mut State| {
             state.screen = Screen::Editor;

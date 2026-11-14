@@ -331,3 +331,133 @@ fn a_forgotten_due_card_returns_when_its_step_lands() {
     assert_eq!(state.session.current().map(|entry| entry.card), Some(7));
     assert!(!state.session.finished(), "the session is not over");
 }
+
+/// Draw the library screen from whatever the store has published.
+fn refresh_library(state: &mut State) {
+    let snapshot = state.store.as_ref().expect("store").snapshot();
+    state.library.set_snapshot(snapshot);
+}
+
+/// Wait for one command's answer, then draw what the store now holds.
+fn settle(state: &mut State, id: u64) {
+    for _ in 0..200 {
+        let answered = state
+            .store
+            .as_ref()
+            .expect("store")
+            .poll()
+            .iter()
+            .any(|event| event.id == id);
+        if answered {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    refresh_library(state);
+}
+
+#[test]
+fn the_archived_and_trash_views_restore_and_destroy() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    assert_eq!(state.library.cards().len(), 1, "the card starts active");
+
+    let archived = state
+        .store
+        .as_ref()
+        .expect("store")
+        .archive_card(1, true)
+        .expect("sent");
+    settle(&mut state, archived);
+    assert!(
+        state.library.cards().is_empty(),
+        "an archived card leaves the active view"
+    );
+    state.library.set_mode(CardMode::Archived);
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "the archived view shows what the active view hides"
+    );
+
+    // The restore button in that view goes through this host method.
+    library::Host::restore_card(&mut state, 1);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        state.library.cards().is_empty(),
+        "a restored card leaves the archive"
+    );
+    state.library.set_mode(CardMode::Active);
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "the restored card is active again"
+    );
+
+    let trashed = state
+        .store
+        .as_ref()
+        .expect("store")
+        .trash_card(1)
+        .expect("sent");
+    settle(&mut state, trashed);
+    state.library.set_mode(CardMode::Trash);
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "the trash view shows what was deleted"
+    );
+
+    // Emptying is irreversible, so it is asked for through a dialog.
+    let mut preview = State {
+        library: Library::seeded_mixed(),
+        ..State::default()
+    };
+    preview.library.set_mode(CardMode::Trash);
+    preview.library.confirming_empty = true;
+    let mut runtime = rune::Runtime::new(preview, view, (900.0, 600.0), rune::Env::new(true, 1.0));
+    runtime.frame(0.0);
+    assert!(
+        runtime.find("confirm-empty").is_some(),
+        "the question offers the irreversible action"
+    );
+    assert!(
+        runtime.find("cancel-empty").is_some(),
+        "and a way to refuse it"
+    );
+
+    library::Host::empty_trash(&mut state);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        state.library.cards().is_empty(),
+        "emptying the trash destroys what it held"
+    );
+    assert!(
+        state
+            .store
+            .as_ref()
+            .expect("store")
+            .snapshot()
+            .cards
+            .is_empty(),
+        "and the library holds no trace of it"
+    );
+}

@@ -43,7 +43,7 @@
 
   **Open**: `trash_card`, `restore_card` and `empty_trash` exist and are tested, but no screen calls them, so deletion, restore and emptying are unreachable.
 - [x] 4.8 Build the library view: sidebar of decks, virtualised card list as a growth stack — `col().growth(GrowthSpec::default()).virtual_rows(count, row_height, key, build)` — tag filter and search box, and verify its scene renders with 5000 seeded cards while building only the mounted rows (assert the build closure ran for far fewer than 5000 indices)
-- [ ] 4.9 Add the archived and trash views: a control that switches `Library::mode` between active, archived and trash, a restore action in each, and an empty-trash action behind a confirmation dialog, with a headless scene per view
+- [x] 4.9 Add the archived and trash views: a control that switches `Library::mode` between active, archived and trash, a restore action in each, and an empty-trash action behind a confirmation dialog, with a headless scene per view
 
   **Verification**: a scripted run archives a card, switches to the archived view, restores it, and finds it active again; a second run trashes a card, switches to trash, empties it behind the dialog, and asserts the card and its `review_log` rows are gone; a scene per mode snaps non-blank
 - [ ] 4.10 Add deck actions to the sidebar: create, rename, archive and reparent, using the store commands that already exist, with the deck name editable in place and the archive action behind a confirmation when the deck holds cards
