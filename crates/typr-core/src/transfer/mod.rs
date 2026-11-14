@@ -17,6 +17,16 @@ use crate::store::StoreError;
 
 pub mod mochi;
 
+/// What an import wrote, in the units the archive itself counts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ImportReport {
+    pub decks: usize,
+    pub cards: usize,
+    pub reviews: usize,
+    pub images: usize,
+    pub masks: usize,
+}
+
 /// Copy the library at `db_path` into `target` without opening it for writing.
 ///
 /// `VACUUM INTO` reads the source in one statement and writes a consistent database with no WAL

@@ -261,3 +261,191 @@ fn a_truncated_archive_is_refused_before_any_write() {
         "reading the manifest wrote nothing"
     );
 }
+
+/// Write an archive whose manifest counts are given by the caller, so a test can also claim
+/// something the archive does not hold.
+fn write_mochi(
+    dir: &Path,
+    name: &str,
+    decks: &serde_json::Value,
+    cards: &serde_json::Value,
+    counts: serde_json::Value,
+) -> std::path::PathBuf {
+    let archive = dir.join(name);
+    let manifest = serde_json::json!({
+        "format": "mochi",
+        "version": 1,
+        "tables": ["decks", "cards"],
+        "counts": counts,
+    });
+    write_archive(
+        &archive,
+        &manifest.to_string(),
+        &decks.to_string(),
+        &cards.to_string(),
+        &[],
+    );
+    archive
+}
+
+#[test]
+fn three_nested_decks_and_forty_cards_import_whole() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([
+        {"id": 1, "name": "Spanish", "parent": null},
+        {"id": 2, "name": "Verbs", "parent": 1},
+        {"id": 3, "name": "Irregular", "parent": 2},
+    ]);
+    let cards: Vec<_> = (0..40)
+        .map(|i| {
+            serde_json::json!({
+                "id": 100 + i,
+                "deck": if i % 2 == 0 { 2 } else { 3 },
+                "text": format!("front {i}\n---\nback {i}"),
+            })
+        })
+        .collect();
+    let archive = write_mochi(
+        dir.path(),
+        "nested.mochi",
+        &decks,
+        &serde_json::json!(cards),
+        serde_json::json!({"decks": 3, "cards": 40}),
+    );
+
+    let db_path = dir.path().join("typr.sqlite3");
+    let db = open(&db_path);
+    let outcome = db
+        .apply(
+            &Command::ImportArchive {
+                archive,
+                attachments: dir.path().join("media"),
+            },
+            NOW,
+        )
+        .expect("the import");
+    assert_eq!(
+        outcome,
+        Outcome::Imported(typr_core::transfer::ImportReport {
+            decks: 3,
+            cards: 40,
+            ..Default::default()
+        })
+    );
+
+    let snapshot = db.snapshot().expect("the library");
+    assert_eq!(snapshot.decks.len(), 3);
+    assert_eq!(snapshot.cards.len(), 40);
+    let named = |name: &str| {
+        snapshot
+            .decks
+            .iter()
+            .find(|deck| deck.name == name)
+            .unwrap_or_else(|| panic!("deck {name} imported"))
+    };
+    let spanish = named("Spanish");
+    let verbs = named("Verbs");
+    let irregular = named("Irregular");
+    assert_eq!(spanish.parent, None);
+    assert_eq!(verbs.parent, Some(spanish.id));
+    assert_eq!(irregular.parent, Some(verbs.id), "nesting is parent-first");
+    assert!(
+        snapshot
+            .cards
+            .iter()
+            .all(|card| card.markdown.contains("front "))
+    );
+}
+
+#[test]
+fn an_imported_card_renders_through_its_template() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let template = "<<Word>>\n---\n<<Meaning>>";
+    let decks = serde_json::json!([{"id": 1, "name": "Spanish", "parent": null}]);
+    let cards = serde_json::json!([{
+        "id": 7,
+        "deck": 1,
+        "text": "gato\n---\ncat",
+        "template": template,
+        "fields": [
+            {"name": "Word", "value": "gato"},
+            {"name": "Meaning", "value": "cat"},
+        ],
+        "tags": ["animal"],
+    }]);
+    let archive = write_mochi(
+        dir.path(),
+        "template.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 1, "cards": 1}),
+    );
+
+    let db_path = dir.path().join("typr.sqlite3");
+    let db = open(&db_path);
+    db.apply(
+        &Command::ImportArchive {
+            archive,
+            attachments: dir.path().join("media"),
+        },
+        NOW,
+    )
+    .expect("the import");
+
+    let snapshot = db.snapshot().expect("the library");
+    let card = &snapshot.cards[0];
+    assert_eq!(
+        card.markdown, "gato\n---\ncat",
+        "the template rendered the text"
+    );
+    assert_eq!(card.sides, 2);
+    assert_eq!(card.template.as_deref(), Some(template));
+    assert_eq!(
+        card.fields,
+        [
+            ("Meaning".to_string(), "cat".to_string()),
+            ("Word".to_string(), "gato".to_string())
+        ],
+        "fields are read back in name order"
+    );
+    assert_eq!(card.tags, ["animal"]);
+    assert_eq!(db.prompt_keys(card.id).expect("prompts"), ["fwd", "rev"]);
+}
+
+#[test]
+fn duplicate_deck_names_are_refused_rather_than_merged() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([
+        {"id": 1, "name": "Spanish", "parent": null},
+        {"id": 2, "name": "Spanish", "parent": null},
+    ]);
+    let archive = write_mochi(
+        dir.path(),
+        "duplicate.mochi",
+        &decks,
+        &serde_json::json!([]),
+        serde_json::json!({"decks": 2, "cards": 0}),
+    );
+
+    let db_path = dir.path().join("typr.sqlite3");
+    let db = open(&db_path);
+    let error = db
+        .apply(
+            &Command::ImportArchive {
+                archive,
+                attachments: dir.path().join("media"),
+            },
+            NOW,
+        )
+        .expect_err("the refusal");
+    assert!(
+        matches!(&error, StoreError::DuplicateName { what, name } if *what == "deck under that parent" && name == "Spanish"),
+        "the duplicate is named: {error}"
+    );
+    let snapshot = db.snapshot().expect("the library");
+    assert!(
+        snapshot.decks.is_empty(),
+        "the first deck rolled back with the second"
+    );
+    assert!(snapshot.cards.is_empty());
+}

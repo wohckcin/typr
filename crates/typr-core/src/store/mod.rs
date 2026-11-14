@@ -541,6 +541,15 @@ pub enum Command {
         card: Id,
         pinned: bool,
     },
+    /// Import a Mochi archive into this library, copying its pictures under `attachments`.
+    ImportArchive {
+        archive: std::path::PathBuf,
+        attachments: std::path::PathBuf,
+    },
+    /// Copy the whole library to `target`, which must not exist.
+    ExportLibrary {
+        target: std::path::PathBuf,
+    },
     History {
         card: Id,
     },
@@ -582,6 +591,10 @@ pub enum Outcome {
     Stats(Stats),
     /// The cards a filter selects, ready to be walked without regard for their schedules.
     Cards(Vec<CardSummary>),
+    /// What a Mochi import created, counted as it went.
+    Imported(crate::transfer::ImportReport),
+    /// The whole library was written to the requested file.
+    Exported,
     Ok,
 }
 
@@ -595,6 +608,8 @@ impl Outcome {
             | Outcome::View(_)
             | Outcome::Changed(_)
             | Outcome::Graded { .. }
+            | Outcome::Imported(_)
+            | Outcome::Exported
             | Outcome::Ok => true,
             Outcome::MaskGroups(_) | Outcome::Masks(_) => false,
             Outcome::History { .. }

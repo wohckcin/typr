@@ -9,6 +9,7 @@
 //! same way, and a card's reviews name the variant they graded — this is the shape the importer
 //! reads, documented in the README so another tool can write one.
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -17,7 +18,9 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use zip::ZipArchive;
 
-use crate::store::StoreError;
+use crate::store::{Command, Db, Id, Outcome, StoreError};
+
+use super::ImportReport;
 
 /// The `format` field every Mochi manifest this build reads must name.
 pub const FORMAT: &str = "mochi";
@@ -141,4 +144,173 @@ fn read_json<T: DeserializeOwned>(
         path: archive.to_path_buf(),
         reason: format!("{name} is not valid JSON: {error}"),
     })
+}
+
+/// One deck as the archive names it: its own id, a name, and the id of its parent.
+#[derive(Deserialize)]
+struct ArchiveDeck {
+    id: i64,
+    name: String,
+    #[serde(default)]
+    parent: Option<i64>,
+}
+
+/// One card. Everything but `id`, `deck` and `text` may be absent, so a hand-written archive can
+/// leave out what it does not use.
+#[derive(Deserialize)]
+struct ArchiveCard {
+    id: i64,
+    deck: i64,
+    #[serde(default)]
+    text: String,
+    /// A `<<Field>>` template, stored on the card so the import does not change the deck every
+    /// card inherits it from.
+    #[serde(default)]
+    template: Option<String>,
+    #[serde(default)]
+    fields: Vec<ArchiveField>,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ArchiveField {
+    name: String,
+    value: String,
+}
+
+/// Write every deck and card in `archive` through `db`'s command bodies, inside the transaction
+/// `Db::apply` already holds, and report how many of each were written.
+///
+/// Decks are placed parent-first, so nesting survives even though the archive lists a child before
+/// its parent. A record that names something the archive does not hold fails the whole import:
+/// the transaction rolls back and no deck, card or picture is left behind.
+pub(crate) fn import(
+    db: &Db,
+    archive: &Path,
+    _attachments: &Path,
+    now_ms: i64,
+) -> Result<ImportReport, StoreError> {
+    let declared = manifest(archive)?;
+    let mut zip = open(archive)?;
+    let decks: Vec<ArchiveDeck> = read_json(&mut zip, "decks.json", archive)?;
+    let cards: Vec<ArchiveCard> = read_json(&mut zip, "cards.json", archive)?;
+    drop(zip);
+
+    let mut report = ImportReport::default();
+    let mut deck_ids: HashMap<i64, Id> = HashMap::new();
+    let mut pending = decks;
+    while !pending.is_empty() {
+        let mut waiting = Vec::new();
+        let mut placed = 0;
+        for deck in pending.drain(..) {
+            let parent = match deck.parent {
+                None => None,
+                Some(parent) => match deck_ids.get(&parent) {
+                    Some(id) => Some(*id),
+                    None => {
+                        waiting.push(deck);
+                        continue;
+                    }
+                },
+            };
+            let Outcome::Deck(id) = db.staged(
+                &Command::CreateDeck {
+                    parent,
+                    name: deck.name,
+                },
+                now_ms,
+            )?
+            else {
+                return Err(StoreError::Archive {
+                    path: archive.to_path_buf(),
+                    reason: "a deck command did not return a deck".to_string(),
+                });
+            };
+            deck_ids.insert(deck.id, id);
+            placed += 1;
+        }
+        if placed == 0 {
+            return Err(StoreError::Archive {
+                path: archive.to_path_buf(),
+                reason: format!(
+                    "deck {} names a parent the archive does not hold, or the deck nest loops",
+                    waiting[0].id
+                ),
+            });
+        }
+        report.decks += placed;
+        pending = waiting;
+    }
+
+    for card in cards {
+        let Some(&deck) = deck_ids.get(&card.deck) else {
+            return Err(StoreError::Archive {
+                path: archive.to_path_buf(),
+                reason: format!("card {} names deck {}", card.id, card.deck),
+            });
+        };
+        let Outcome::Card(id) = db.staged(
+            &Command::CreateCard {
+                deck,
+                markdown: card.text,
+            },
+            now_ms,
+        )?
+        else {
+            return Err(StoreError::Archive {
+                path: archive.to_path_buf(),
+                reason: "a card command did not return a card".to_string(),
+            });
+        };
+        if !card.fields.is_empty() {
+            db.staged(
+                &Command::SetFields {
+                    card: id,
+                    fields: card
+                        .fields
+                        .into_iter()
+                        .map(|field| (field.name, field.value))
+                        .collect(),
+                },
+                now_ms,
+            )?;
+        }
+        if let Some(template) = card.template {
+            db.staged(
+                &Command::SetCardTemplate {
+                    card: id,
+                    template: Some(template),
+                },
+                now_ms,
+            )?;
+        }
+        if !card.tags.is_empty() {
+            db.staged(
+                &Command::SetTags {
+                    card: id,
+                    tags: card.tags,
+                },
+                now_ms,
+            )?;
+        }
+        report.cards += 1;
+    }
+
+    let written = Counts {
+        decks: report.decks,
+        cards: report.cards,
+        reviews: report.reviews,
+        images: report.images,
+        masks: report.masks,
+    };
+    if written != declared.counts {
+        return Err(StoreError::Archive {
+            path: archive.to_path_buf(),
+            reason: format!(
+                "the manifest declares {declared:?}, but the archive holds {written:?}"
+            ),
+        });
+    }
+    Ok(report)
 }

@@ -11,6 +11,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use crate::hidden::{self, Shape};
 use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
 use crate::template;
+use crate::transfer::{self, mochi};
 
 use super::{
     CardKind, CardMode, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow,
@@ -108,10 +109,22 @@ impl Db {
     /// The whole command is one transaction: a command that fails halfway leaves nothing behind,
     /// and a command that writes several rows pays one fsync.
     pub fn apply(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
+        // `VACUUM INTO` refuses to run inside a transaction, so the whole-library export is the
+        // one command that does its work before the transaction rather than in it.
+        if let Command::ExportLibrary { target } = command {
+            transfer::export_library(&self.path, target)?;
+            return Ok(Outcome::Exported);
+        }
         let tx = self.conn.unchecked_transaction()?;
         let outcome = self.dispatch(command, now_ms)?;
         tx.commit()?;
         Ok(outcome)
+    }
+
+    /// Run one command inside the transaction the caller already holds. The import uses this so a
+    /// forty-card archive pays one commit, and a failure halfway leaves no deck behind.
+    pub(crate) fn staged(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
+        self.dispatch(command, now_ms)
     }
 
     /// Write a row whose name is unique, turning SQLite's refusal into something the reader
@@ -512,6 +525,21 @@ impl Db {
                 reviews: self.review_count(*card)?,
             }),
             Command::Stats { from_ms, to_ms } => Ok(Outcome::Stats(self.stats(*from_ms, *to_ms)?)),
+            Command::ImportArchive {
+                archive,
+                attachments,
+            } => Ok(Outcome::Imported(mochi::import(
+                self,
+                archive,
+                attachments,
+                now_ms,
+            )?)),
+            // Export normally never reaches here: `apply` runs it before opening a transaction.
+            // The arm keeps the match total and gives a clear failure if it is ever staged.
+            Command::ExportLibrary { target } => {
+                transfer::export_library(&self.path, target)?;
+                Ok(Outcome::Exported)
+            }
         }
     }
 
@@ -1175,8 +1203,21 @@ impl Db {
         duration_ms: Option<i64>,
         now_ms: i64,
     ) -> Result<Outcome, StoreError> {
+        self.record_review(card, key, grade, duration_ms, now_ms)
+    }
+
+    /// Append one review at `at` and leave the prompt agreeing with it. `at` is a parameter
+    /// because an import replays records at the time each happened, not at the time of the import.
+    pub(crate) fn record_review(
+        &self,
+        card: Id,
+        key: &str,
+        grade: Grade,
+        duration_ms: Option<i64>,
+        at: i64,
+    ) -> Result<Outcome, StoreError> {
         let state = self.prompt_state(card, key)?;
-        let outcome = FixedMultiplier.grade(&state, grade, now_ms);
+        let outcome = FixedMultiplier.grade(&state, grade, at);
         self.conn.execute(
             "INSERT INTO review_log (card_id, key, phase, at, grade, interval_ms, due_at, duration_ms)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -1184,7 +1225,7 @@ impl Db {
                 card,
                 key,
                 outcome.phase.as_str(),
-                now_ms,
+                at,
                 grade.as_str(),
                 outcome.interval_ms,
                 outcome.due_at,
