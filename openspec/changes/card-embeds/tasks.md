@@ -30,7 +30,7 @@
       *Verification*: the prompt rows and due dates are identical, and the embedding card's
       side count is unchanged.
 
-- [ ] 3.2 Run `cargo test --workspace --locked`, `cargo fmt --check` and
+- [x] 3.2 Run `cargo test --workspace --locked`, `cargo fmt --check` and
       `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
       *Verification*: all three exit zero.
 
