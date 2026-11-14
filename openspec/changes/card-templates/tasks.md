@@ -4,7 +4,7 @@ Depends on `cloze-deletions` for the second sigil's meaning and on nothing else.
 
 ## 1. Render
 
-- [ ] 1.1 New `crates/typr-core/src/template.rs`: `pub struct Fields<'a>(…)` over `&[(String, String)]`, `pub struct Context<'a> { pub name: Option<&'a str>, pub deck: Option<&'a str> }`, and `pub fn render(template: &str, fields: &Fields<'_>, context: &Context<'_>) -> String` replacing `<<Field>>`, skipping empty sections, keeping an unclosed section as text, and leaving `{{…}}` alone so hidden text survives.
+- [x] 1.1 New `crates/typr-core/src/template.rs`: `pub struct Fields<'a>(…)` over `&[(String, String)]`, `pub struct Context<'a> { pub name: Option<&'a str>, pub deck: Option<&'a str> }`, and `pub fn render(template: &str, fields: &Fields<'_>, context: &Context<'_>) -> String` replacing `<<Field>>`, skipping empty sections, keeping an unclosed section as text, and leaving `{{…}}` alone so hidden text survives.
   - **Verification**: `cargo test -p typr-core --lib template` covers each filled and unfilled placeholder, a section with and without a value, an unclosed section, a dynamic field, a field named like a dynamic one, and a template containing `{{1::x}}` unchanged.
 - [ ] 1.2 Recompute on write: a store helper `fn rerender(&self, card: Id) -> Result<(), StoreError>` sets `markdown`, `sides` (through `sides::split`) and `search_text` (folded markdown plus folded field values), called from every mutation that can change them.
   - **Verification**: `the_stored_text_is_what_the_template_renders` asserts the invariant after a field edit; `a_deck_template_change_rewrites_its_cards` and `a_deck_move_rerenders_against_the_new_template`.

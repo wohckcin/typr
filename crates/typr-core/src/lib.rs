@@ -10,3 +10,4 @@ pub mod session;
 pub mod shuffle;
 pub mod sides;
 pub mod store;
+pub mod template;
