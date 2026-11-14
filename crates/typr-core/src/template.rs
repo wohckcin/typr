@@ -62,6 +62,41 @@ pub fn render(template: &str, fields: &Fields<'_>, context: &Context<'_>) -> Str
     out
 }
 
+/// The field names a template asks the user to fill, in the order they first appear.
+///
+/// A computed name is left out: `Name` and `Deck` are rendered from the card, so a table that let
+/// someone type over them would be lying. A name repeated in the template appears once.
+pub fn placeholders(template: &str) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let mut cursor = 0;
+    while let Some((at, token)) = next_token(template, cursor) {
+        let rest = &template[at..];
+        match token {
+            Token::Placeholder => {
+                let Some(end) = rest.find(">>") else {
+                    break;
+                };
+                let name = rest[2..end].trim();
+                if !name.is_empty() && !is_dynamic(name) && !names.iter().any(|own| own == name) {
+                    names.push(name.to_string());
+                }
+                cursor = at + end + 2;
+            }
+            Token::SectionOpen => {
+                let Some((name, body)) = section_name(rest, 3) else {
+                    break;
+                };
+                if !is_dynamic(&name) && !names.contains(&name) {
+                    names.push(name);
+                }
+                cursor = at + body;
+            }
+            _ => cursor = at + 2,
+        }
+    }
+    names
+}
+
 /// What a marker at a position is.
 enum Token {
     Placeholder,
@@ -335,5 +370,29 @@ mod tests {
     fn an_unknown_marker_is_copied_as_text() {
         assert_eq!(plain("{{unclosed", &pairs(&[])), "{{unclosed");
         assert_eq!(plain("stray {{/End}}", &pairs(&[])), "stray {{/End}}");
+    }
+}
+
+#[cfg(test)]
+mod placeholder_tests {
+    use super::placeholders;
+
+    #[test]
+    fn the_table_lists_the_fields_the_template_asks_for() {
+        assert_eq!(
+            placeholders("<<Word>>\n---\n<<Meaning>>\n\n{{#Example}}e.g. <<Example>>{{/Example}}"),
+            vec!["Word", "Meaning", "Example"],
+            "each name once, in the order the template uses it"
+        );
+        assert_eq!(
+            placeholders("<< Word >> and <<Word>> and {{# Word }}x{{/Word}}"),
+            vec!["Word"],
+            "trimmed and de-duplicated"
+        );
+        assert!(
+            placeholders("<<Name>> on <<Deck>> with <<Word>>") == vec!["Word"],
+            "a computed name cannot be typed into"
+        );
+        assert!(placeholders("{{1::hidden}} and <<").is_empty());
     }
 }

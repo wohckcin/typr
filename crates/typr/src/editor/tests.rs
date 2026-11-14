@@ -627,3 +627,80 @@ fn a_rectangle_can_be_placed_and_resized_in_steps() {
         "a second rectangle asks in its own group"
     );
 }
+
+/// An editor on a card whose deck carries a template, with one field already filled.
+fn templated_editor() -> Editor {
+    let mut editor = Editor::new(Some(7), String::new());
+    let summary = typr_core::store::CardSummary {
+        id: 7,
+        deck: 2,
+        template: Some("<<Word>>\n---\n<<Meaning>>".to_string()),
+        template_from: Some(2),
+        fields: vec![("Word".to_string(), "gato".to_string())],
+        ..typr_core::store::CardSummary::default()
+    };
+    editor.load(&summary, Some("Spanish"));
+    editor
+}
+
+fn render(editor: Editor) -> rune::Runtime<Editor> {
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (1200.0, 800.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    runtime
+}
+
+#[test]
+fn the_field_table_renders_the_card_live() {
+    let mut runtime = render(templated_editor());
+    assert_eq!(
+        runtime.state.rendered, "gato\n---\n",
+        "the stored value fills its own side, the empty one leaves nothing"
+    );
+
+    let (x, y) = runtime.find("field-1").expect("the Meaning field");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+    for letter in ["c", "a", "t"] {
+        runtime.key(rune::KeyEvent {
+            key: rune::Key::Text(letter.to_string()),
+            mods: rune::Mods::default(),
+        });
+        runtime.frame(0.1);
+    }
+
+    assert_eq!(runtime.state.rendered, "gato\n---\ncat");
+    let elements = runtime.elements();
+    let shown: Vec<&str> = elements
+        .iter()
+        .filter_map(|element| element.text.as_deref())
+        .collect();
+    assert!(
+        shown.iter().any(|text| text.contains("cat")),
+        "the preview draws what the field now says: {shown:?}"
+    );
+    assert!(runtime.state.dirty(), "a typed field is unsaved work");
+}
+
+#[test]
+fn a_card_under_a_template_does_not_offer_a_raw_markdown_pane() {
+    let runtime = render(templated_editor());
+    assert!(
+        runtime.find("sides").is_none(),
+        "the text is the template's, not the pane's"
+    );
+    assert!(
+        runtime.find("field-table").is_some(),
+        "the fields are there"
+    );
+    assert!(
+        runtime.find("template-note").is_some(),
+        "and a note says why"
+    );
+}

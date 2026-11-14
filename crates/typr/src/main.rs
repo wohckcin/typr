@@ -367,8 +367,15 @@ impl library::Host for State {
         let Some(summary) = summary else {
             return;
         };
+        let deck_name = self
+            .library
+            .snapshot()
+            .decks
+            .iter()
+            .find(|deck| deck.id == summary.deck)
+            .map(|deck| deck.name.clone());
         self.editor = Editor::new(Some(card), summary.markdown.clone());
-        self.editor.load(&summary);
+        self.editor.load(&summary, deck_name.as_deref());
         self.editor.load_tags(&summary.tags);
         self.editor.set_reverse(summary.reverse);
         self.last_draft = summary.markdown.clone();
@@ -685,6 +692,26 @@ impl State {
             self.last_draft.clear();
             self.editor.save();
             return true;
+        }
+
+        // A templated card's text is not typed: its fields are stored, and the store renders the
+        // text from them. Only a stored card can be templated, since a new one starts plain.
+        if self.editor.templated()
+            && let (Some(card), Some(store)) = (self.editor.card, &self.store)
+        {
+            let fields = self.editor.field_pairs();
+            let sent = store
+                .set_fields(card, &fields)
+                .and_then(|_| store.set_tags(card, &tags));
+            if let Err(error) = &sent {
+                self.fail(error);
+                return false;
+            }
+            if let Err(error) = store.set_draft(card, None) {
+                self.fail(&error);
+            }
+            self.last_draft.clear();
+            return self.editor.save();
         }
 
         let stored = match (self.editor.card, &self.store) {

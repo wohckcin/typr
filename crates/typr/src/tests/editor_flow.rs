@@ -440,3 +440,104 @@ fn rectangles_drawn_before_the_card_exists_are_stored_with_it() {
     );
     assert_eq!(masks[0].group, 1);
 }
+
+#[test]
+fn a_field_typed_into_a_templated_card_is_stored_and_rendered() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let db = typr_core::store::Db::open(&path).expect("open");
+    let deck = match db
+        .apply(
+            &typr_core::store::Command::CreateDeck {
+                parent: None,
+                name: "Spanish".to_string(),
+            },
+            0,
+        )
+        .expect("deck")
+    {
+        typr_core::store::Outcome::Deck(id) => id,
+        other => panic!("creating a deck: {other:?}"),
+    };
+    db.apply(
+        &typr_core::store::Command::SetDeckTemplate {
+            deck,
+            template: Some("<<Word>>\n---\n<<Meaning>>".to_string()),
+        },
+        0,
+    )
+    .expect("template");
+    let card = match db
+        .apply(
+            &typr_core::store::Command::CreateCard {
+                deck,
+                markdown: String::new(),
+            },
+            0,
+        )
+        .expect("card")
+    {
+        typr_core::store::Outcome::Card(id) => id,
+        other => panic!("creating a card: {other:?}"),
+    };
+    db.apply(
+        &typr_core::store::Command::SetFields {
+            card,
+            fields: vec![("Word".to_string(), "gato".to_string())],
+        },
+        0,
+    )
+    .expect("fields");
+
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(db, Box::new(typr_core::clock::SystemClock), waker).expect("spawn");
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+
+    // Nothing has been written yet, so the library has to be handed the store's first snapshot.
+    let snapshot = state.store.as_ref().expect("store").snapshot();
+    state.library.set_snapshot(snapshot);
+    state.open_card(card);
+    assert!(state.editor.templated(), "the deck's template is in force");
+    let meaning = state
+        .editor
+        .fields
+        .iter()
+        .position(|field| field.name == "Meaning")
+        .expect("the template's second field");
+    state.editor.fields[meaning]
+        .value
+        .replace_text("cat".to_string());
+    state.editor.refresh();
+    assert_eq!(state.editor.text(), "gato\n---\ncat");
+
+    assert!(state.persist(), "the fields were sent");
+    for _ in 0..200 {
+        state.drain();
+        if !state.editor.dirty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(!state.editor.dirty(), "the fields are stored");
+
+    drop(state.store.take());
+    let reopened = typr_core::store::Db::open(&path).expect("reopen");
+    let snapshot = reopened.snapshot().expect("snapshot");
+    let stored = snapshot
+        .cards
+        .iter()
+        .find(|found| found.id == card)
+        .expect("the card");
+    assert_eq!(
+        stored.markdown, "gato\n---\ncat",
+        "the text follows the fields"
+    );
+    assert_eq!(stored.sides, 2);
+    assert_eq!(
+        reopened.due_prompts(1_000, 0, 0, None).expect("due").len(),
+        0
+    );
+}

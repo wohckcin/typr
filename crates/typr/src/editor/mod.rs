@@ -13,6 +13,7 @@ static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(
 use crate::attachments::{self, Attachments};
 use typr_core::hidden::{self, Shape};
 use typr_core::store::{CardKind, CardSummary, Id, MaskRect, MaskRow};
+use typr_core::template;
 
 /// The app state an editor screen draws from.
 pub trait Host: 'static {
@@ -38,6 +39,11 @@ pub trait Host: 'static {
 
     /// Store a change to a diagram card's rectangles. A host with no store cannot.
     fn send_masks(&mut self, _card: Id, _change: &MaskChange) -> bool {
+        false
+    }
+
+    /// Write a card's fields, which re-renders its text. A host with no store cannot.
+    fn set_fields(&mut self, _card: Id, _fields: &[(String, String)]) -> bool {
         false
     }
 }
@@ -104,6 +110,24 @@ pub struct Editor {
     pub selected: usize,
     /// The size the picture pane was laid out at, in points.
     pub pane: (f32, f32),
+    /// The template this card's text comes from, when one is in force.
+    pub template: Option<String>,
+    /// The deck that template is inherited from: `None` when the card carries it.
+    pub template_from: Option<Id>,
+    /// The fields the template is filled from, one row each.
+    pub fields: Vec<FieldRow>,
+    /// The field values as stored, so a change to one counts as unsaved.
+    pub saved_fields: Vec<(String, String)>,
+    /// The name of the deck this card sits in, which `<<Deck>>` renders.
+    pub deck_name: Option<String>,
+    /// The card's text as the template renders it, kept up to date as fields are typed into.
+    pub rendered: String,
+}
+
+/// One row of the field table: the name the template uses, and the value typed for it.
+pub struct FieldRow {
+    pub name: String,
+    pub value: TextEdit,
 }
 
 /// A change to the rectangles on a diagram card, sent to the store.
@@ -180,11 +204,52 @@ impl Editor {
             next_group: 1,
             selected: 0,
             pane: (0.0, 0.0),
+            template: None,
+            template_from: None,
+            fields: Vec::new(),
+            saved_fields: Vec::new(),
+            deck_name: None,
+            rendered: String::new(),
         }
     }
 
     /// Take everything a card summary holds that this screen shows.
-    pub fn load(&mut self, card: &CardSummary) {
+    ///
+    /// `deck_name` fills `<<Deck>>`; a caller that does not know it passes `None` and the field
+    /// renders empty.
+    pub fn load(&mut self, card: &CardSummary, deck_name: Option<&str>) {
+        self.template = card.template.clone();
+        self.template_from = card.template_from;
+        self.deck_name = deck_name.map(str::to_string);
+        // The table is the template's field list first, in the order the template asks for them,
+        // so a card that has never been filled still has somewhere to type. A stored field the
+        // template no longer names keeps its row after those, so its value is not lost.
+        let mut names: Vec<String> = card
+            .template
+            .as_deref()
+            .map(template::placeholders)
+            .unwrap_or_default();
+        for (name, _) in &card.fields {
+            if !names.iter().any(|own| own == name) {
+                names.push(name.clone());
+            }
+        }
+        self.fields = names
+            .into_iter()
+            .map(|name| {
+                let stored = card
+                    .fields
+                    .iter()
+                    .find(|(own, _)| *own == name)
+                    .map(|(_, value)| value.as_str())
+                    .unwrap_or_default();
+                let mut edit = TextEdit::default();
+                edit.replace_text(stored.to_string());
+                FieldRow { name, value: edit }
+            })
+            .collect();
+        self.saved_fields = self.field_pairs();
+        self.refresh();
         self.kind = card.kind;
         self.image = card.image.clone();
         self.saved_image = card.image.clone();
@@ -194,6 +259,58 @@ impl Editor {
         self.masks = card.masks.clone();
         self.next_group = self.masks.iter().map(|mask| mask.group).max().unwrap_or(0) + 1;
         self.selected = 0;
+    }
+
+    /// Whether this card's text comes from a template rather than from the markdown pane.
+    pub fn templated(&self) -> bool {
+        self.template.is_some()
+    }
+
+    /// The fields as they stand, in the order the table shows them.
+    pub fn field_pairs(&self) -> Vec<(String, String)> {
+        self.fields
+            .iter()
+            .map(|row| (row.name.clone(), row.value.text.trim().to_string()))
+            .collect()
+    }
+
+    /// Re-render the card from its template and fields, and re-key the preview's parse.
+    ///
+    /// `<<Name>>` is the first side, and the first side can itself hold a field, so the name is
+    /// taken from a render that computes nothing: one extra pass, and no fixed-point chase.
+    pub fn refresh(&mut self) {
+        let Some(template) = self.template.clone() else {
+            self.rendered = self.buffer.text.clone();
+            self.memo = preview_key(self.card, &self.rendered);
+            return;
+        };
+        let pairs = self.field_pairs();
+        let fields = template::Fields::new(&pairs);
+        let deck = self.deck_name.as_deref();
+        let without_name =
+            template::render(&template, &fields, &template::Context { name: None, deck });
+        let name = typr_core::sides::split(&without_name)
+            .first()
+            .map(|side| side.trim())
+            .unwrap_or_default();
+        self.rendered = template::render(
+            &template,
+            &fields,
+            &template::Context {
+                name: Some(name),
+                deck,
+            },
+        );
+        self.memo = preview_key(self.card, &self.rendered);
+    }
+
+    /// The text this card says: what the template renders, or the pane's own markdown.
+    pub fn text(&self) -> &str {
+        if self.templated() {
+            &self.rendered
+        } else {
+            &self.buffer.text
+        }
     }
 
     /// Whether this card asks over a picture.
@@ -375,6 +492,11 @@ impl Editor {
 
     /// Whether the buffer or the tag line holds something the card does not.
     pub fn dirty(&self) -> bool {
+        if self.templated() {
+            return self.field_pairs() != self.saved_fields
+                || self.tags.text != self.saved_tags
+                || self.image != self.saved_image;
+        }
         self.buffer.text != self.saved
             || self.tags.text != self.saved_tags
             || self.image != self.saved_image
@@ -383,7 +505,7 @@ impl Editor {
 
     /// The sides the buffer splits into right now, so the preview and the save agree.
     pub fn sides(&self) -> Vec<String> {
-        typr_core::sides::split(&self.buffer.text)
+        typr_core::sides::split(self.text())
             .into_iter()
             .map(str::to_string)
             .collect()
@@ -392,7 +514,7 @@ impl Editor {
     /// How many prompts the card will have once it is stored: numbered hidden-text groups
     /// count one each, two or more sides count one, and a note counts none.
     pub fn prompts(&self) -> usize {
-        hidden::shape(&self.buffer.text).prompt_count()
+        hidden::shape(self.text()).prompt_count()
     }
 
     /// Keep the preview's parse only as long as its source, so editing another card cannot
@@ -406,6 +528,11 @@ impl Editor {
         // A diagram card is asked over its picture, so it needs no text to be worth keeping.
         if self.diagram() {
             return self.image.is_some();
+        }
+        // A templated card is worth keeping with nothing typed: the fields are what its text is
+        // made of, and a first render with none of them filled is still a card the user made.
+        if self.templated() {
+            return true;
         }
         self.sides().iter().any(|side| !side.trim().is_empty())
     }
@@ -457,6 +584,7 @@ impl Editor {
         }
         self.refused = false;
         self.saved = self.buffer.text.clone();
+        self.saved_fields = self.field_pairs();
         self.saved_tags = self.tags.text.trim().to_string();
         self.saved_image = self.image.clone();
         self.saved_caption = self.caption.text.trim().to_string();
@@ -561,10 +689,56 @@ fn source_pane<S: Host>(s: &S) -> El {
         })
 }
 
+/// The field table: one typed row per field the template names, with the note that replaces the
+/// markdown pane's placeholder.
+fn field_pane<S: Host>(s: &S) -> El {
+    let t = tok::theme(true);
+    let editor = s.editor();
+    let mut rows = col().key("field-table").w_full().gap(6.0);
+    for (index, field) in editor.fields.iter().enumerate() {
+        rows = rows.child(
+            col()
+                .key(format!("field-row-{index}"))
+                .w_full()
+                .gap(2.0)
+                .child(
+                    text(&field.name)
+                        .key(format!("field-label-{index}"))
+                        .font(type_::MONO_CAPTION)
+                        .color(t.text_secondary),
+                )
+                .child(
+                    text_input(&field.value, type_::BODY.lh(20.0))
+                        .key(format!("field-{index}"))
+                        .w_full()
+                        .single_line()
+                        .on_edit(move |s: &mut S| &mut s.editor_mut().fields[index].value)
+                        .on_input_change(|s: &mut S, _| {
+                            s.editor_mut().refresh();
+                            s.note_typing();
+                        }),
+                ),
+        );
+    }
+    col()
+        .key("field-pane")
+        .grow(1.0)
+        .h_full()
+        .gap(10.0)
+        .padding(16.0)
+        .child(
+            text("The template supplies this card's text. Fill the fields.")
+                .key("template-note")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
+        .child(rows)
+}
+
 fn preview_pane<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let editor = s.editor();
-    let drawn = preview_body(&editor.buffer.text);
+    let drawn = preview_body(editor.text());
     col()
         .key("preview-pane")
         .grow(1.0)
@@ -583,7 +757,7 @@ fn preview_pane<S: Host>(s: &S) -> El {
                 .color(t.text_secondary)
         })
         .child(
-            text(caption(&editor.buffer.text))
+            text(caption(editor.text()))
                 .key("preview-caption")
                 .font(type_::LABEL)
                 .color(t.text_secondary),
@@ -960,6 +1134,8 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                         .h_full()
                         .child(if s.editor().diagram() {
                             diagram_pane::<S>(s)
+                        } else if s.editor().templated() {
+                            field_pane::<S>(s)
                         } else {
                             source_pane::<S>(s)
                         }),
