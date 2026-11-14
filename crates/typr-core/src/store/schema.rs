@@ -16,7 +16,30 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4];
+
+/// Hidden text makes a one-sided card studyable, so the view's last predicate stops resting on sides
+/// alone. Everything else about the view is V3's: a trashed card, an archived card and a card under an
+/// archived deck stay out of the queues, and `DROP VIEW IF EXISTS` keeps a file whose view is already
+/// gone opening cleanly.
+const V4: &str = r#"
+ALTER TABLE card ADD COLUMN has_cloze INTEGER NOT NULL DEFAULT 0;
+UPDATE card SET has_cloze = 1 WHERE markdown LIKE '%{{%';
+DROP VIEW IF EXISTS studyable_prompt;
+CREATE VIEW studyable_prompt AS
+WITH RECURSIVE archived_deck(id) AS (
+    SELECT id FROM deck WHERE archived = 1
+    UNION
+    SELECT d.id FROM deck d JOIN archived_deck a ON d.parent_id = a.id
+)
+SELECT p.card_id, p.key, p.phase, p.due_at, p.interval_ms
+FROM prompt p
+JOIN card c ON c.id = p.card_id
+WHERE c.trashed_at IS NULL
+  AND c.archived = 0
+  AND (c.sides >= 2 OR c.has_cloze = 1)
+  AND c.deck_id NOT IN (SELECT id FROM archived_deck);
+"#;
 
 /// The one definition of "a prompt a session may offer": the card is not trashed or archived, it
 /// has at least two sides, and no deck above it is archived. Both queue queries read this view, so
@@ -36,6 +59,10 @@ WHERE c.trashed_at IS NULL
   AND c.sides >= 2
   AND c.deck_id NOT IN (SELECT id FROM archived_deck);
 "#;
+
+/// V3's view, for tests that put a file back to the schema a version-3 build left.
+#[cfg(test)]
+pub(crate) const V3_SQL: &str = V3;
 
 /// Drafts belong to a card, or to the card that has not been saved yet, so the key needs no
 /// foreign key: `0` stands for the new card.

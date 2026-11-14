@@ -503,3 +503,124 @@ fn a_new_card_forgotten_while_learning_is_still_new() {
         "and it is not due, because nothing was scheduled"
     );
 }
+
+#[test]
+fn a_hidden_text_card_gets_one_prompt_per_group() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Biology");
+    let card = card(
+        &mut db,
+        deck,
+        "{{1::Insulin}} is made by the {{2::pancreas}}, and {{glucagon}} opposes it.",
+    );
+
+    assert_eq!(
+        db.prompt_keys(card).expect("the keys"),
+        ["cloze:0", "cloze:1", "cloze:2"],
+        "one prompt per group, and the loose span is its own group"
+    );
+}
+
+#[test]
+fn a_card_that_stops_hiding_text_keeps_its_history() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Biology");
+    let card = card(&mut db, deck, "The {{hormone}} is made by the pancreas.");
+
+    db.apply(
+        &Command::Grade {
+            card,
+            key: "cloze:0".to_string(),
+            grade: Grade::Remembered,
+            duration_ms: None,
+        },
+        NOON,
+    )
+    .expect("grade");
+    assert_eq!(db.review_count(card).expect("count"), 1);
+
+    db.apply(
+        &Command::SaveCard {
+            id: card,
+            markdown: "The hormone is made by the pancreas.".to_string(),
+        },
+        NOON,
+    )
+    .expect("save");
+
+    assert_eq!(
+        db.prompt_keys(card).expect("the keys"),
+        ["cloze:0"],
+        "the prompt is kept, history and all"
+    );
+    assert_eq!(
+        db.review_count(card).expect("count"),
+        1,
+        "the record survives"
+    );
+    let queued = db.new_prompts(NOON, 0, 1, None).expect("the queue");
+    assert!(
+        queued.iter().all(|prompt| prompt.card != card),
+        "a card that no longer hides text is out of the queue"
+    );
+}
+
+#[test]
+fn a_one_line_hidden_text_card_is_in_the_new_queue() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Biology");
+    let card = card(&mut db, deck, "The {{hormone}} is made by the pancreas.");
+
+    let queued: Vec<Id> = db
+        .new_prompts(NOON, 0, 1, None)
+        .expect("the queue")
+        .into_iter()
+        .map(|prompt| prompt.card)
+        .collect();
+    assert_eq!(queued, [card], "one line with hidden text is studyable");
+}
+
+#[test]
+fn two_groups_of_one_card_count_once_against_the_cap() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    db.apply(
+        &Command::SetSetting {
+            key: "new_per_day".to_string(),
+            value: "1".to_string(),
+        },
+        0,
+    )
+    .expect("cap to one");
+    let deck = deck(&mut db, "Biology");
+    card(&mut db, deck, "{{1::Insulin}} and {{2::glucagon}}.");
+
+    let alone = db.new_prompts(NOON, 0, 7, None).expect("the queue");
+    let mut keys: Vec<&str> = alone.iter().map(|prompt| prompt.key.as_str()).collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        ["cloze:1", "cloze:2"],
+        "one card's allowance buys both of its groups"
+    );
+
+    let second = card(&mut db, deck, "The {{hormone}} matters.");
+    for seed in 1..12 {
+        let queued = db.new_prompts(NOON, 0, seed, None).expect("the queue");
+        let cards: std::collections::HashSet<Id> =
+            queued.iter().map(|prompt| prompt.card).collect();
+        assert_eq!(
+            cards.len(),
+            1,
+            "the cap counts cards, not prompts: {queued:?}"
+        );
+        assert!(
+            !queued.iter().any(|prompt| prompt.card == second)
+                || queued.iter().all(|prompt| prompt.card == second),
+            "a card is taken whole: {queued:?}"
+        );
+    }
+}

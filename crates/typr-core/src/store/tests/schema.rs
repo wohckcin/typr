@@ -189,10 +189,7 @@ fn a_library_from_before_the_view_gains_it_on_open() {
 
     // Put the file back to the state a v2 build wrote: no view, version two.
     let conn = Connection::open(&path).expect("open raw");
-    conn.execute_batch("DROP VIEW studyable_prompt")
-        .expect("drop the view");
-    conn.pragma_update(None, "user_version", 2)
-        .expect("rewind the version");
+    rewind_for_test(&conn, 2);
     drop(conn);
 
     let db = Db::open(&path).expect("reopen");
@@ -238,10 +235,7 @@ fn a_library_from_one_version_back_reports_the_step_it_ran() {
     let path = dir.path().join("typr.sqlite3");
     drop(Db::open(&path).expect("create"));
     let raw = Connection::open(&path).expect("raw");
-    raw.execute_batch("DROP VIEW studyable_prompt;")
-        .expect("rewind the view too");
-    raw.pragma_update(None, "user_version", CURRENT_VERSION - 1)
-        .expect("rewind");
+    rewind_for_test(&raw, CURRENT_VERSION - 1);
 
     let db = Db::open(&path).expect("reopen");
     assert_eq!(
@@ -251,5 +245,122 @@ fn a_library_from_one_version_back_reports_the_step_it_ran() {
             written: CURRENT_VERSION,
             applied: 1,
         }
+    );
+}
+
+#[test]
+fn a_library_from_before_hidden_text_gains_the_column() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    let db = Db::open(&path).expect("open");
+    let deck = match db
+        .apply(
+            &Command::CreateDeck {
+                parent: None,
+                name: "Biology".to_string(),
+            },
+            0,
+        )
+        .expect("deck")
+    {
+        Outcome::Deck(id) => id,
+        other => panic!("expected a deck: {other:?}"),
+    };
+    let card = match db
+        .apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "The {{hormone}} is made by the {{pancreas}}.".to_string(),
+            },
+            0,
+        )
+        .expect("card")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("expected a card: {other:?}"),
+    };
+    let studyable = |db: &Db| {
+        db.new_prompts(0, 0, 1, None)
+            .expect("the view answers")
+            .len()
+    };
+    let before = studyable(&db);
+    drop(db);
+
+    let conn = Connection::open(&path).expect("open raw");
+    rewind_for_test(&conn, 3);
+    drop(conn);
+
+    let db = Db::open(&path).expect("reopen");
+    let conn = db.connection_for_test();
+    let columns: Vec<String> = {
+        let mut statement = conn.prepare("PRAGMA table_info(card)").expect("pragma");
+        statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("rows")
+            .map(|name| name.expect("a column name"))
+            .collect()
+    };
+    assert!(
+        columns.iter().any(|name| name == "has_cloze"),
+        "the column arrives: {columns:?}"
+    );
+    let cloze: i64 = conn
+        .query_row("SELECT has_cloze FROM card WHERE id = ?1", [card], |row| {
+            row.get(0)
+        })
+        .expect("the card's flag");
+    assert_eq!(cloze, 1, "a card that holds hidden text is marked");
+    assert_eq!(
+        studyable(&db),
+        before,
+        "the view reports the same rows it did before the column arrived"
+    );
+}
+
+#[test]
+fn the_widened_view_still_hides_archived_and_trashed_cards() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    let conn = db.connection_for_test();
+    conn.execute_batch(
+        r#"
+        INSERT INTO deck (id, parent_id, name, archived) VALUES (1, NULL, 'Live', 0);
+        INSERT INTO deck (id, parent_id, name, archived) VALUES (2, NULL, 'Gone', 1);
+        INSERT INTO deck (id, parent_id, name, archived) VALUES (3, 2, 'Under gone', 0);
+        INSERT INTO card (id, deck_id, markdown, sides, archived, trashed_at, search_text, created_at, updated_at, has_cloze)
+            VALUES (1, 1, 'The {{hormone}} acts.', 1, 0, NULL, '', 0, 0, 1);
+        INSERT INTO card (id, deck_id, markdown, sides, archived, trashed_at, search_text, created_at, updated_at, has_cloze)
+            VALUES (2, 1, 'The {{hormone}} acts.', 1, 0, 7, '', 0, 0, 1);
+        INSERT INTO card (id, deck_id, markdown, sides, archived, trashed_at, search_text, created_at, updated_at, has_cloze)
+            VALUES (3, 1, 'The {{hormone}} acts.', 1, 1, NULL, '', 0, 0, 1);
+        INSERT INTO card (id, deck_id, markdown, sides, archived, trashed_at, search_text, created_at, updated_at, has_cloze)
+            VALUES (4, 3, 'The {{hormone}} acts.', 1, 0, NULL, '', 0, 0, 1);
+        INSERT INTO card (id, deck_id, markdown, sides, archived, trashed_at, search_text, created_at, updated_at, has_cloze)
+            VALUES (5, 1, 'front', 1, 0, NULL, '', 0, 0, 0);
+        INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+            VALUES (1, 'cloze:0', 'learn', NULL, 0, 0, 0);
+        INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+            VALUES (2, 'cloze:0', 'learn', NULL, 0, 0, 0);
+        INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+            VALUES (3, 'cloze:0', 'learn', NULL, 0, 0, 0);
+        INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+            VALUES (4, 'cloze:0', 'learn', NULL, 0, 0, 0);
+        INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+            VALUES (5, 'cloze:0', 'learn', NULL, 0, 0, 0);
+        "#,
+    )
+    .expect("the fixture");
+
+    let studyable: Vec<Id> = db
+        .new_prompts(0, 0, 1, None)
+        .expect("the view answers")
+        .into_iter()
+        .map(|prompt| prompt.card)
+        .collect();
+    assert_eq!(
+        studyable,
+        [1],
+        "only the live one-sided hidden-text card is studyable"
     );
 }

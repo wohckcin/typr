@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
+use crate::hidden::{self, Shape};
 use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
 
 use super::{
@@ -160,14 +161,14 @@ impl Db {
             }
             Command::MoveDeck { id, parent } => self.move_deck(*id, *parent),
             Command::CreateCard { deck, markdown } => {
-                let sides = sides_of(markdown);
+                let shape = hidden::shape(markdown);
                 self.conn.execute(
                     "INSERT INTO card (deck_id, markdown, sides, search_text, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-                    params![deck, markdown, sides as i64, folded(markdown), now_ms],
+                    params![deck, markdown, faces_of(&shape), folded(markdown), now_ms],
                 )?;
                 let id = self.conn.last_insert_rowid();
-                self.sync_prompt(id, sides)?;
+                self.sync_prompts(id, &shape)?;
                 self.conn.execute(
                     "DELETE FROM editor_draft WHERE card_id IN (0, ?1)",
                     params![id],
@@ -175,12 +176,12 @@ impl Db {
                 Ok(Outcome::Card(id))
             }
             Command::SaveCard { id, markdown } => {
-                let sides = sides_of(markdown);
+                let shape = hidden::shape(markdown);
                 let changed = self.conn.execute(
                     "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
-                    params![id, markdown, sides as i64, folded(markdown), now_ms],
+                    params![id, markdown, faces_of(&shape), folded(markdown), now_ms],
                 )?;
-                self.sync_prompt(*id, sides)?;
+                self.sync_prompts(*id, &shape)?;
                 self.conn
                     .execute("DELETE FROM editor_draft WHERE card_id = ?1", params![id])?;
                 Ok(Outcome::Changed(changed))
@@ -393,18 +394,23 @@ impl Db {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// Give a two-sided card its `fwd` prompt. A prompt that exists is left exactly as it was, so
-    /// editing text never resets a schedule; a one-sided card keeps the prompt it has and simply
-    /// stops queueing (a note is not studyable).
-    fn sync_prompt(&self, card: Id, sides: usize) -> Result<(), StoreError> {
-        if sides >= 2 {
+    /// Give a card the prompts its shape asks for: `fwd` for two or more sides, one `cloze:<n>` per
+    /// hidden-text group. A prompt that exists is left exactly as it was, so editing text never resets
+    /// a schedule, and nothing is deleted: a group whose spans are gone keeps its history and simply
+    /// stops queueing.
+    fn sync_prompts(&self, card: Id, shape: &Shape) -> Result<(), StoreError> {
+        for key in shape.prompt_keys() {
             self.conn.execute(
                 "INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
-                 VALUES (?1, 'fwd', 'learn', NULL, 0, 0, 0)
+                 VALUES (?1, ?2, 'learn', NULL, 0, 0, 0)
                  ON CONFLICT (card_id, key) DO NOTHING",
-                params![card],
+                params![card, key],
             )?;
         }
+        self.conn.execute(
+            "UPDATE card SET has_cloze = ?2 WHERE id = ?1",
+            params![card, i64::from(shape.hides_text())],
+        )?;
         Ok(())
     }
 
@@ -531,6 +537,13 @@ impl Db {
     }
 
     /// Break the library so a snapshot read fails, for the worker's error path.
+    #[cfg(test)]
+    /// The raw connection, for tests that have to inspect what the schema actually wrote.
+    #[cfg(test)]
+    pub(crate) fn connection_for_test(&self) -> &Connection {
+        &self.conn
+    }
+
     #[cfg(test)]
     pub(crate) fn drop_card_table_for_test(&self) -> Result<(), StoreError> {
         self.conn.execute_batch("DROP TABLE card")?;
@@ -730,8 +743,20 @@ impl Db {
         let mut shuffle = crate::shuffle::Shuffle::new(seed);
         let mut waiting = waiting;
         shuffle.reorder(&mut waiting);
-        waiting.truncate(room);
-        Ok(waiting)
+
+        // The cap counts cards, so a card's groups come and go together: admitting one group of a
+        // card while its sibling waits would split a card's first lesson across two days.
+        let mut admitted: std::collections::HashSet<Id> = std::collections::HashSet::new();
+        let mut kept = Vec::new();
+        for prompt in waiting {
+            if admitted.contains(&prompt.card) {
+                kept.push(prompt);
+            } else if admitted.len() < room {
+                admitted.insert(prompt.card);
+                kept.push(prompt);
+            }
+        }
+        Ok(kept)
     }
 
     /// Grades inside one study day, so a summary and a cap agree about which day it is.
@@ -874,8 +899,13 @@ impl Db {
     }
 }
 
-fn sides_of(markdown: &str) -> usize {
-    crate::sides::split(markdown).len()
+/// The faces a card shows. Hidden text wins over the separator, so such a card has one face however
+/// many separators its text carries.
+fn faces_of(shape: &Shape) -> i64 {
+    match shape {
+        Shape::Sides(sides) => i64::try_from(sides.len()).unwrap_or(i64::MAX),
+        Shape::Hidden { .. } => 1,
+    }
 }
 
 /// The form search and tag matching compare in: no case, no accents.

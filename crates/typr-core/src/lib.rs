@@ -2,6 +2,7 @@
 
 pub mod clock;
 pub mod day;
+pub mod hidden;
 pub mod schedule;
 pub mod screen;
 pub mod session;

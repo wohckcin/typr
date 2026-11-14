@@ -106,3 +106,22 @@ fn schedule(db: &mut Db, card: Id, due_at: i64) {
     .expect("record");
     db.rebuild_prompts().expect("rebuild");
 }
+
+/// Put a file back to an older schema: the version number alone is not a simulation, because a build
+/// of that age had none of the objects later migrations added.
+pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
+    if version < 4 {
+        // The later view names the later column, so it has to go first, and a version-3 file then
+        // carries version 3's view again.
+        conn.execute_batch("DROP VIEW IF EXISTS studyable_prompt")
+            .expect("drop the view");
+        conn.execute_batch("ALTER TABLE card DROP COLUMN has_cloze")
+            .expect("drop the hidden-text column");
+        if version == 3 {
+            conn.execute_batch(crate::store::schema::V3_SQL)
+                .expect("put the version-3 view back");
+        }
+    }
+    conn.pragma_update(None, "user_version", version)
+        .expect("rewind the version");
+}
