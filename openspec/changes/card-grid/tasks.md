@@ -2,8 +2,8 @@
 
 ## 1. The tile
 
-- [ ] 1.1 Add `crates/typr/src/library/tile.rs` with `pub fn tile<S: Host>(card: &CardSummary, width: f32) -> El` drawing the surface, the rendered first side and the footer strip. Verification: `cargo test -p typr --lib library::tile` passes `a_tile_draws_the_first_side_only`.
-- [ ] 1.1a Draw the strip and the footer to the measured anatomy: body 96 above a footer 26, the hidden-side
+- [x] 1.1 Add `crates/typr/src/library/tile.rs` with `pub fn tile<S: Host>(card: &CardSummary, width: f32) -> El` drawing the surface, the rendered first side and the footer strip. Verification: `cargo test -p typr --lib library::tile` passes `a_tile_draws_the_first_side_only`.
+- [x] 1.1a Draw the strip and the footer to the measured anatomy: body 96 above a footer 26, the hidden-side
       label a full-width 22-point strip at the bottom of the body (9px/600, uppercase, 30% white,
       `rgba(0,0,0,0.1)`), the footer `rgba(0,0,0,0.09)` with `0 0 8px 8px` radius holding a 13px sentence-case
       word and a 10px/500 uppercase kicker.
@@ -11,7 +11,7 @@
       strip measures 22 and the footer 26; a
       rendered tile's strings read `New`, `0 days`, `1 hidden side`, with case as drawn.
 
-- [ ] 1.1b Draw tagged and untagged cards at their own heights and let a line take the tallest, rather than
+- [x] 1.1b Draw tagged and untagged cards at their own heights and let a line take the tallest, rather than
       reserving space for a tag strip that is not there.
       *Verification*: a line holding one tagged and one untagged card reports a row height equal to the
       tallest tile, and the untagged tile stays shorter and draws no chip.
@@ -21,9 +21,9 @@
       *Verification*: a card whose first side holds `{{insulin}}` renders a masked span and the tile's strings
       never contain `insulin`.
 
-- [ ] 1.2 Add `fn hidden_sides(card: &CardSummary) -> usize` (sides minus one, floored at zero) and render the badge only above zero. Verification: `a_tile_states_the_sides_it_hides` and `a_note_carries_no_hidden_side_badge`.
+- [x] 1.2 Add `fn hidden_sides(card: &CardSummary) -> usize` (sides minus one, floored at zero) and render the badge only above zero. Verification: `a_tile_states_the_sides_it_hides` and `a_note_carries_no_hidden_side_badge`.
 - [x] 1.0 Widen the snapshot: `CardSummary` gains `prompts: u32`, `unscheduled: u32` and `due_at: Option<i64>`, filled by the card query's left join on `studyable_prompt` (see design.md). No schema change. Verification: `a_card_with_one_due_prompt_snapshots_its_due_date` and `a_note_snapshots_no_prompts`; the existing snapshot tests still pass.
-- [ ] 1.4 Draw tag chips with `fn chips(tags: &[String], width: f32) -> (Vec<&String>, usize)` and the `+N` overflow. Verification: `the_chips_count_what_they_drop`.
+- [x] 1.4 Draw tag chips with `fn chips(tags: &[String], width: f32) -> (Vec<&String>, usize)` and the `+N` overflow. Verification: `the_chips_count_what_they_drop`.
 - [ ] 1.5 Draw the dashed placeholder tile for an empty deck, keyed `new-card`, wired to `Host::new_card`. Verification: `an_empty_deck_offers_a_tile_to_fill` finds the key and pressing it starts a draft.
 
 ## 2. The grid

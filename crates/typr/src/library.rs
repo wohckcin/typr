@@ -19,6 +19,21 @@ static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(
 pub const ROW_HEIGHT_PX: u32 = 44;
 pub const ROW_HEIGHT: f32 = ROW_HEIGHT_PX as f32;
 
+/// The space between two tiles, and between two lines of them.
+pub const GAP: f32 = 16.0;
+
+/// The width below which a second column stops being worth having. It is the width at which a
+/// column wraps, not the width any tile takes: a tile is always exactly its share of the line.
+pub const WRAP_BELOW: f32 = 233.0;
+
+/// The height a tile is drawn at before it has been laid out, and the height every tile is drawn
+/// at, so a line's tiles match. It is the tallest measured anatomy: body, hidden-side strip, tags
+/// and footer.
+pub const TILE_HEIGHT: f32 = 124.0;
+
+/// The tallest a tile may grow, so one long card cannot swallow the deck.
+pub const TILE_MAX_HEIGHT: f32 = 160.0;
+
 /// The app state a library screen draws from. Rune binds every callback to the app's own state
 /// type, so the screen cannot name one implementation.
 pub trait Host: 'static {
@@ -821,4 +836,6 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
 }
 
 #[cfg(test)]
+pub mod tile;
+
 mod tests;

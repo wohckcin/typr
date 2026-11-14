@@ -758,7 +758,11 @@ fn a_card_with_one_due_prompt_snapshots_its_due_date() {
         .expect("the card is in the snapshot");
     assert_eq!(summary.prompts, 1, "one studyable prompt is counted");
     assert_eq!(summary.unscheduled, 0, "it has been scheduled");
-    assert_eq!(summary.due_at, Some(NOON + HOUR), "its due time comes through");
+    assert_eq!(
+        summary.due_at,
+        Some(NOON + HOUR),
+        "its due time comes through"
+    );
 }
 
 #[test]
