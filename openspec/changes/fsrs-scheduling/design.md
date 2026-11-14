@@ -63,6 +63,6 @@ does not change and both schedulers remain trivially testable.
 - FSRS's first-grade behaviour differs from the fixed scheduler's ten-minute learning step; the spec
   requires the fixed path to be unchanged, so a switch is visible in the first review rather than
   hidden.
-- The weights list is eighteen numbers today and FSRS revisions change the count. A stored list whose
+- The weights list is nineteen numbers today and FSRS revisions change the count. A stored list whose
   length differs from the implementation's expectation is refused rather than padded, so an upgrade
   cannot silently reinterpret old weights.

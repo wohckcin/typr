@@ -140,6 +140,38 @@ reverse off neither deletes nor resets the reverse prompt's records — it stops
 turning it back on resumes where it left off. The new-card limit counts prompts, so a card asked
 both ways takes two of the day's slots.
 
+## Scheduling
+
+Two schedulers answer a grade. The fixed one is the default and the one every earlier library was
+scheduled with: a first success waits ten minutes, a repeated one stretches by two and a half, a
+miss falls back to ten minutes. The other is FSRS-5, which keeps a stability and a difficulty per
+prompt and schedules from them against a target recall; a card it has never seen but which already
+has an interval keeps that interval by deriving its stability from it, so switching does not reset
+what the fixed scheduler learned.
+
+Both are set in the `settings` table, which the settings screen (a later change) will expose:
+
+| Key | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `scheduler` | `fixed`, `fsrs` | `fixed` | which scheduler answers a grade |
+| `retention` | 70 to 97 | `90` | the recall FSRS aims at; higher means sooner |
+| `fsrs_weights` | nineteen positive numbers | the FSRS-5 defaults | what the optimiser produced |
+
+The store writes these through `set_scheduler`, `set_retention` and `set_weights`, which refuse a
+value the reader would refuse: an unknown scheduler, a target outside seventy to ninety-seven, or a
+weight list that is not nineteen positive numbers leaves the old setting in place. Nothing is
+written on a refusal, so a library never holds a value that would stop it opening.
+
+FSRS state lives beside the prompt, in two nullable columns: a prompt that has not been through
+FSRS has no memory rather than a made-up one, and grading it under the fixed scheduler leaves those
+columns untouched, so switching back and forth does not lose what either scheduler learned.
+
+The history can be exported for tuning — `Db::export_reviews` returns CSV, one row per record, with
+`card_id,review_time,grade,phase,interval_ms,due_at,duration_ms`. Every column is a number or one of
+the fixed words the store writes, so no cell needs quoting. The optimiser itself is not in the app:
+that file goes out, a weights list comes back in through `fsrs_weights`, and the next FSRS grade
+uses it.
+
 ## Views
 
 A view is a list you keep: a deck's subtree, a search, a tag, a card mode and an order, saved under
