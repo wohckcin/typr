@@ -72,6 +72,7 @@ fn fixture(db: &mut Db) -> (Id, Id, Id, Id) {
         &Command::SetCardTemplate {
             card: two_sided,
             template: Some("<<Word>>\n---\n<<Meaning>>".to_string()),
+            name: None,
         },
         NOW,
     )

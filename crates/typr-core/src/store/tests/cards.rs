@@ -1231,16 +1231,22 @@ fn deck_template(db: &mut Db, deck: Id, template: Option<&str>) {
     .expect("deck template");
 }
 
-/// Set a card's own template, or clear it with `None`.
-fn card_template(db: &mut Db, card: Id, template: Option<&str>) {
+/// Set a card's own text template and name template; `None` clears either.
+fn card_templates(db: &mut Db, card: Id, template: Option<&str>, name: Option<&str>) {
     db.apply(
         &Command::SetCardTemplate {
             card,
             template: template.map(str::to_string),
+            name: name.map(str::to_string),
         },
         0,
     )
-    .expect("card template");
+    .expect("card templates");
+}
+
+/// Set a card's own template, or clear it with `None`.
+fn card_template(db: &mut Db, card: Id, template: Option<&str>) {
+    card_templates(db, card, template, None);
 }
 
 /// Replace a card's fields.
@@ -1665,5 +1671,69 @@ fn a_card_created_in_a_templated_deck_is_rendered() {
         summary(&db, id).sides,
         0,
         "with no fields filled the card has nothing to say yet, so it is a note"
+    );
+}
+
+#[test]
+fn a_stored_name_follows_an_edit() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    let mut db = Db::open(&path).expect("open");
+    let deck = deck(&mut db, "Biology");
+    let id = card(&mut db, deck, "first\n---\nback");
+    assert_eq!(summary(&db, id).name, "first");
+
+    db.apply(
+        &Command::SaveCard {
+            id,
+            markdown: "third\n---\nfourth".to_string(),
+        },
+        0,
+    )
+    .expect("save");
+    assert_eq!(
+        summary(&db, id).name,
+        "third",
+        "the name is what the card says now, not what it said when it was made"
+    );
+
+    // The backfill runs for a library arriving at the name column, so reopening this one must
+    // leave the stored name alone rather than derive it again from whatever the text holds.
+    drop(db);
+    let db = Db::open(&path).expect("reopen");
+    assert_eq!(summary(&db, id).name, "third");
+}
+
+#[test]
+fn a_name_template_names_the_card_over_its_text() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let id = card(&mut db, deck, "");
+    card_templates(
+        &mut db,
+        id,
+        Some("<<Word>>\n---\n<<Meaning>>"),
+        Some("<<Word>> (<<Kind>>)"),
+    );
+    fields(
+        &mut db,
+        id,
+        &[
+            ("Word", "hablar"),
+            ("Kind", "verb"),
+            ("Meaning", "to speak"),
+        ],
+    );
+
+    assert_eq!(
+        summary(&db, id).name,
+        "hablar (verb)",
+        "a name template reads the fields like any other template, and the name is not the text"
+    );
+    assert_eq!(
+        summary(&db, id).markdown,
+        "hablar\n---\nto speak",
+        "the text template still renders the text"
     );
 }

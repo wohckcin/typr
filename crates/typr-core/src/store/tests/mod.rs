@@ -99,6 +99,17 @@ fn card(db: &mut Db, deck: Id, markdown: &str) -> Id {
     }
 }
 
+/// The name the list shows for a card.
+fn name_of(db: &Db, card: Id) -> String {
+    db.snapshot()
+        .expect("snapshot")
+        .cards
+        .into_iter()
+        .find(|summary| summary.id == card)
+        .expect("the card is in the snapshot")
+        .name
+}
+
 fn schedule(db: &mut Db, card: Id, due_at: i64) {
     db.append_record_for_test(Record {
         card,
@@ -116,6 +127,15 @@ fn schedule(db: &mut Db, card: Id, due_at: i64) {
 /// Put a file back to an older schema: the version number alone is not a simulation, because a build
 /// of that age had none of the objects later migrations added.
 pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
+    if version < 9 {
+        // A version-8 file knew no names. The index names the column, so it goes first.
+        conn.execute_batch("DROP INDEX IF EXISTS card_name")
+            .expect("drop the name index");
+        conn.execute_batch("ALTER TABLE card DROP COLUMN name")
+            .expect("drop the name column");
+        conn.execute_batch("ALTER TABLE card DROP COLUMN name_template")
+            .expect("drop the name template");
+    }
     if version < 8 {
         // A version-7 file knew no views and no pins.
         conn.execute_batch("DROP TABLE IF EXISTS view")

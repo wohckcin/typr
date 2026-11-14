@@ -1,6 +1,8 @@
 //! The schema, and the only code that changes it.
 
-use rusqlite::Connection;
+use std::collections::HashMap;
+
+use rusqlite::{Connection, params};
 
 use super::StoreError;
 
@@ -16,7 +18,25 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9];
+
+/// The step that adds the name column, whose backfill needs more than SQL.
+const NAMES: usize = 9;
+
+/// Card names: the line a list shows and a `[[reference]]` resolves against.
+///
+/// The name is a column rather than a read-time preview because a reference resolves against it
+/// with one index lookup, and because the name a reference points at must not move when the card's
+/// fields change around it. `name_template` is the card's own name template; `NULL` means "name me
+/// from my first side".
+///
+/// Existing cards are backfilled in Rust, in `backfill_names`, not by a `substr` here: a first side
+/// ends at a `---` outside a fence, which is a rule `crate::sides` owns and SQL cannot repeat.
+const V9: &str = r#"
+ALTER TABLE card ADD COLUMN name TEXT NOT NULL DEFAULT '';
+ALTER TABLE card ADD COLUMN name_template TEXT;
+CREATE INDEX card_name ON card (name COLLATE NOCASE);
+"#;
 
 /// Custom views: a pin on a card, and the filters the user saved.
 ///
@@ -346,6 +366,9 @@ pub fn migrate(conn: &mut Connection) -> Result<SchemaFacts, StoreError> {
     for (index, sql) in MIGRATIONS.iter().enumerate().skip(version) {
         let tx = conn.transaction()?;
         tx.execute_batch(sql)?;
+        if index + 1 == NAMES {
+            backfill_names(&tx)?;
+        }
         tx.pragma_update(None, "user_version", (index + 1) as i64)?;
         tx.commit()?;
         applied += 1;
@@ -355,4 +378,44 @@ pub fn migrate(conn: &mut Connection) -> Result<SchemaFacts, StoreError> {
         written: recorded + applied as i64,
         applied,
     })
+}
+
+/// Give every card that predates names the name its first side implies.
+///
+/// Runs inside V9's transaction, so a library either gains every name or none. The names are made
+/// unique per deck with the same rule a save uses, so the backfill cannot leave two cards in one
+/// deck answering to one name.
+fn backfill_names(conn: &Connection) -> Result<(), StoreError> {
+    let mut stmt = conn.prepare("SELECT id, deck_id, kind, markdown FROM card ORDER BY id")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+        ))
+    })?;
+    let cards = rows.collect::<Result<Vec<_>, _>>()?;
+    let mut taken: HashMap<i64, Vec<String>> = HashMap::new();
+    for (id, deck, kind, markdown) in cards {
+        // A diagram asks from its picture; its caption is not the card's text and never becomes
+        // its name.
+        let name = if kind == "diagram" {
+            String::new()
+        } else {
+            let first = crate::sides::split(&markdown)
+                .first()
+                .copied()
+                .unwrap_or("");
+            crate::name::for_card(first, None, &crate::template::Fields::new(&[]))
+        };
+        let names = taken.entry(deck).or_default();
+        let others = names.iter().map(String::as_str).collect::<Vec<_>>();
+        let name = crate::name::unique(&name, &others);
+        if !name.is_empty() {
+            conn.execute("UPDATE card SET name = ?2 WHERE id = ?1", params![id, name])?;
+            names.push(name);
+        }
+    }
+    Ok(())
 }

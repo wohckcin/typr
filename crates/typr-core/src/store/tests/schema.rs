@@ -204,6 +204,89 @@ fn a_library_from_before_the_view_gains_it_on_open() {
 }
 
 #[test]
+fn every_card_that_existed_gains_a_name() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    let db = Db::open(&path).expect("open");
+    let deck = match db
+        .apply(
+            &Command::CreateDeck {
+                parent: None,
+                name: "Biology".to_string(),
+            },
+            0,
+        )
+        .expect("deck")
+    {
+        Outcome::Deck(id) => id,
+        other => panic!("expected a deck: {other:?}"),
+    };
+    let make = |db: &Db, markdown: &str| match db
+        .apply(
+            &Command::CreateCard {
+                deck,
+                markdown: markdown.to_string(),
+            },
+            0,
+        )
+        .expect("card")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("expected a card: {other:?}"),
+    };
+    // Padded, because a name is the first side as a reader sees it, not as it was typed.
+    let padded = make(&db, "  Krebs cycle  \n---\nThe second stage");
+    let named = make(&db, "Introduction\n---\nThe first");
+    let twin = make(&db, "Introduction\n---\nThe second");
+    let diagram = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: "The heart".to_string(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("expected a card: {other:?}"),
+    };
+    drop(db);
+
+    // Put the file back to the state a v8 build wrote: no name column, version eight.
+    let conn = Connection::open(&path).expect("open raw");
+    rewind_for_test(&conn, 8);
+    drop(conn);
+
+    let db = Db::open(&path).expect("reopen");
+    assert_eq!(
+        name_of(&db, padded),
+        "Krebs cycle",
+        "the backfill takes the first side, trimmed"
+    );
+    assert_eq!(name_of(&db, named), "Introduction");
+    assert_eq!(
+        name_of(&db, twin),
+        "Introduction (2)",
+        "two cards of one name in one deck are told apart, oldest keeps the plain name"
+    );
+    assert_eq!(
+        name_of(&db, diagram),
+        "",
+        "a diagram has no text, so it has no name — never its caption"
+    );
+    assert!(
+        db.snapshot()
+            .expect("snapshot")
+            .cards
+            .iter()
+            .all(|card| card.kind == CardKind::Diagram || !card.name.is_empty()),
+        "every card that has text arrives named"
+    );
+}
+
+#[test]
 fn opening_reports_what_the_schema_did() {
     let dir = TempDir::new().expect("temp dir");
     let db = open_temp(&dir);

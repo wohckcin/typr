@@ -332,6 +332,7 @@ impl Db {
                 self.sync_prompts(*id, &shape)?;
                 self.conn
                     .execute("DELETE FROM editor_draft WHERE card_id = ?1", params![id])?;
+                self.rename(*id)?;
                 Ok(Outcome::Changed(changed))
             }
             Command::MoveCard { id, deck } => {
@@ -344,9 +345,11 @@ impl Db {
                 Ok(Outcome::Changed(changed))
             }
             Command::SetFields { card, fields } => self.set_fields(*card, fields, now_ms),
-            Command::SetCardTemplate { card, template } => {
-                self.set_card_template(*card, template.as_deref(), now_ms)
-            }
+            Command::SetCardTemplate {
+                card,
+                template,
+                name,
+            } => self.set_card_template(*card, template.as_deref(), name.as_deref(), now_ms),
             Command::SetDeckTemplate { deck, template } => {
                 self.set_deck_template(*deck, template.as_deref(), now_ms)
             }
@@ -581,7 +584,8 @@ impl Db {
                 "SELECT c.id, c.deck_id, c.sides, c.archived, c.trashed_at, c.updated_at, c.markdown,
                         c.search_text, COUNT(sp.card_id), SUM(sp.card_id IS NOT NULL AND sp.due_at IS NULL), MIN(sp.due_at),
                         c.reverse, c.kind, c.image, c.caption, c.template, c.pinned, c.created_at,
-                        (SELECT COUNT(*) FROM review_log r WHERE r.card_id = c.id AND r.phase <> 'learn')
+                        (SELECT COUNT(*) FROM review_log r WHERE r.card_id = c.id AND r.phase <> 'learn'),
+                        c.name
                  FROM card c
                  LEFT JOIN studyable_prompt sp ON sp.card_id = c.id
                  GROUP BY c.id
@@ -605,6 +609,7 @@ impl Db {
                     reviews: count_of(row.get(18)?),
                     pinned: row.get::<_, i64>(16)? != 0,
                     preview: preview(&row.get::<_, String>(6)?),
+                    name: row.get(19)?,
                     markdown: row.get(6)?,
                     search_text: row.get(7)?,
                     prompts: count_of(row.get(8)?),
@@ -889,38 +894,91 @@ impl Db {
             .optional()?)
     }
 
-    /// Write a card's text from its template and fields.
+    /// Write a card's text from its template and fields, then name it from the text and fields it
+    /// just wrote.
     ///
     /// `card.markdown` is a cache of `render(template, fields)`: every mutation that can change
     /// either calls this, so `sides`, `search_text` and the review can go on reading one plain
-    /// string. A card with no template in force is left alone — the text it holds is its own, which
-    /// is what makes clearing a template leave the cards readable.
+    /// string. A card with no template in force keeps the text it holds — which is what makes
+    /// clearing a template leave the cards readable — but it is still named here, because a rename
+    /// and the references that point at it have to move together.
     fn rerender(&self, card: Id, now_ms: i64) -> Result<(), StoreError> {
         // A diagram is asked from its rectangles, and its text is not what a template is for;
-        // writing rendered text over it would queue text prompts it never shows.
+        // writing rendered text over it would queue text prompts it never shows. It has no name
+        // either: a `[[reference]]` is text, and a diagram holds a picture.
         if self.kind_of(card)? == "diagram" {
             return Ok(());
         }
-        let Some((template, _from)) = self.template_of(card)? else {
-            return Ok(());
-        };
-        let pairs = self.fields_of(card)?;
-        let deck = self.deck_name_of(card)?;
-        let text = template::render_card(&template, &pairs, deck.as_deref());
-        let shape = hidden::shape(&text);
-        // A value the template does not use is still part of what the card says, so search has to
-        // reach it.
-        let mut search = folded(&text);
-        for (_, value) in &pairs {
-            search.push(' ');
-            search.push_str(&folded(value));
+        if let Some((template, _from)) = self.template_of(card)? {
+            let pairs = self.fields_of(card)?;
+            let deck = self.deck_name_of(card)?;
+            let text = template::render_card(&template, &pairs, deck.as_deref());
+            let shape = hidden::shape(&text);
+            // A value the template does not use is still part of what the card says, so search has
+            // to reach it.
+            let mut search = folded(&text);
+            for (_, value) in &pairs {
+                search.push(' ');
+                search.push_str(&folded(value));
+            }
+            self.conn.execute(
+                "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
+                params![card, text, hidden::faces(&text), search, now_ms],
+            )?;
+            self.sync_prompts(card, &shape)?;
         }
-        self.conn.execute(
-            "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
-            params![card, text, hidden::faces(&text), search, now_ms],
+        self.rename(card)
+    }
+
+    /// Give a card the name its text and name template imply.
+    ///
+    /// Runs inside the save's transaction, after the text is written: the name is what `[[…]]`
+    /// resolves against, so a card whose text is new and whose name is old would answer to a name
+    /// it no longer says.
+    fn rename(&self, card: Id) -> Result<(), StoreError> {
+        let (markdown, current, template): (String, String, Option<String>) = self.conn.query_row(
+            "SELECT markdown, name, name_template FROM card WHERE id = ?1",
+            params![card],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
-        self.sync_prompts(card, &shape)?;
+        let first = crate::sides::split(&markdown)
+            .first()
+            .copied()
+            .unwrap_or("");
+        let pairs = self.fields_of(card)?;
+        let wanted =
+            crate::name::for_card(first, template.as_deref(), &template::Fields::new(&pairs));
+        let name = self.unique_name(card, &wanted)?;
+        if name != current {
+            self.conn.execute(
+                "UPDATE card SET name = ?2 WHERE id = ?1",
+                params![card, name],
+            )?;
+        }
         Ok(())
+    }
+
+    /// `name` made unique among the cards in its deck, which is the scope a reference resolves in
+    /// first.
+    ///
+    /// The card being named is left out of the comparison, so a suffixed name survives its own
+    /// saves instead of gaining a second suffix each time.
+    fn unique_name(&self, card: Id, name: &str) -> Result<String, StoreError> {
+        if name.is_empty() {
+            return Ok(String::new());
+        }
+        let deck: Id = self.conn.query_row(
+            "SELECT deck_id FROM card WHERE id = ?1",
+            params![card],
+            |row| row.get(0),
+        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name FROM card WHERE deck_id = ?1 AND id <> ?2 ORDER BY id")?;
+        let rows = stmt.query_map(params![deck, card], |row| row.get::<_, String>(0))?;
+        let taken = rows.collect::<Result<Vec<_>, _>>()?;
+        let taken = taken.iter().map(String::as_str).collect::<Vec<_>>();
+        Ok(crate::name::unique(name, &taken))
     }
 
     /// Replace a card's fields and its rendered text with them.
@@ -949,16 +1007,17 @@ impl Db {
         Ok(Outcome::Changed(changed))
     }
 
-    /// Give a card its own template, or `None` to inherit its deck's again.
+    /// Give a card its own text template and name template, or `None` to fall back for either.
     fn set_card_template(
         &self,
         card: Id,
         template: Option<&str>,
+        name: Option<&str>,
         now_ms: i64,
     ) -> Result<Outcome, StoreError> {
         let changed = self.conn.execute(
-            "UPDATE card SET template = ?2, updated_at = ?3 WHERE id = ?1",
-            params![card, template, now_ms],
+            "UPDATE card SET template = ?2, name_template = ?3, updated_at = ?4 WHERE id = ?1",
+            params![card, template, name, now_ms],
         )?;
         if changed == 0 {
             return Err(StoreError::Missing {

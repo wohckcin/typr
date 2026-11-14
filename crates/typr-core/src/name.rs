@@ -49,7 +49,10 @@ pub fn unique(name: &str, taken: &[&str]) -> String {
     let mut suffix = 2;
     loop {
         let candidate = format!("{name} ({suffix})");
-        if !taken.iter().any(|other| folded(other) == folded(&candidate)) {
+        if !taken
+            .iter()
+            .any(|other| folded(other) == folded(&candidate))
+        {
             return candidate;
         }
         suffix += 1;

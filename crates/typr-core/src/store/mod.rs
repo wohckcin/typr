@@ -145,8 +145,11 @@ pub struct CardSummary {
     pub reviews: u32,
     /// Whether the card is pinned, which a view can ask to list alone.
     pub pinned: bool,
-    /// The first side's first line, cut short: what a list row shows.
+    /// The first side's first line, cut short: what a list row shows under the name.
     pub preview: String,
+    /// What a list shows instead of the preview where space is tight, and what a `[[…]]` resolves
+    /// against. `''` for a card with no text (a diagram) and for a card nobody has renamed.
+    pub name: String,
     /// The card's text, so a session can split it into sides without another round trip.
     pub markdown: String,
     /// The card's text folded the way `LIKE` compares it, so the library can filter without a
@@ -445,10 +448,12 @@ pub enum Command {
         card: Id,
         fields: Vec<(String, String)>,
     },
-    /// `None` takes the card back to inheriting its deck's template.
+    /// A card's own templates. `template` renders its text, `name` names it, and `None` in either
+    /// clears that one: the text falls back to the deck's template, the name to the first side.
     SetCardTemplate {
         card: Id,
         template: Option<String>,
+        name: Option<String>,
     },
     /// `None` takes the deck, and every card under it without a template of its own, back to
     /// rendering the text each already holds.
@@ -776,8 +781,14 @@ pub trait Store: Send + Sync {
     fn set_tags(&self, card: Id, tags: &[String]) -> Result<u64, StoreError>;
     /// Replace a card's fields; its text is re-rendered from whatever template is in force.
     fn set_fields(&self, card: Id, fields: &[(String, String)]) -> Result<u64, StoreError>;
-    /// `None` takes the card back to inheriting its deck's template.
-    fn set_card_template(&self, card: Id, template: Option<&str>) -> Result<u64, StoreError>;
+    /// A card's own text template and name template; `None` clears either, so the text falls back
+    /// to the deck's template and the name to the first side.
+    fn set_card_template(
+        &self,
+        card: Id,
+        template: Option<&str>,
+        name: Option<&str>,
+    ) -> Result<u64, StoreError>;
     /// `None` takes the deck, and the cards under it without one of their own, back to the text
     /// each already holds.
     fn set_deck_template(&self, deck: Id, template: Option<&str>) -> Result<u64, StoreError>;

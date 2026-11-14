@@ -23,6 +23,7 @@ fn card(sides: u32, markdown: &str) -> CardSummary {
         reviews: 0,
         pinned: false,
         preview: String::new(),
+        name: String::new(),
         markdown: markdown.to_string(),
         search_text: String::new(),
         prompts: u32::from(sides >= 2),

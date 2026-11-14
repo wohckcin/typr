@@ -726,6 +726,7 @@ impl Library {
                 reviews: 0,
                 pinned: false,
                 preview: format!("Card {id}"),
+                name: format!("Card {id}"),
                 markdown: format!("Card {id}\n---\nCard {id}"),
                 search_text: format!("card {id}"),
                 prompts: u32::from(id % 3 != 0),

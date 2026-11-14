@@ -394,6 +394,9 @@ fn import_into(
                 &Command::SetCardTemplate {
                     card: id,
                     template: Some(template),
+                    // The archive names decks but not cards, so the imported card takes the name
+                    // its text and this template imply.
+                    name: None,
                 },
                 now_ms,
             )?;

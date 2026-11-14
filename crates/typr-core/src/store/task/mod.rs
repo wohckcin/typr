@@ -307,10 +307,16 @@ impl Store for Handle {
         })
     }
 
-    fn set_card_template(&self, card: Id, template: Option<&str>) -> Result<u64, StoreError> {
+    fn set_card_template(
+        &self,
+        card: Id,
+        template: Option<&str>,
+        name: Option<&str>,
+    ) -> Result<u64, StoreError> {
         self.submit(Command::SetCardTemplate {
             card,
             template: template.map(str::to_string),
+            name: name.map(str::to_string),
         })
     }
 
