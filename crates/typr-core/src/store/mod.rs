@@ -688,6 +688,28 @@ pub enum StoreError {
         #[source]
         source: rusqlite::Error,
     },
+    /// A file the transfer had to read, named so the reader can act on it.
+    #[error("the file {path} could not be read: {source}")]
+    Read {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    /// A transfer file that cannot be understood, with the part that was wrong.
+    #[error("the file {path} is not a Mochi export this build can read: {reason}")]
+    Archive {
+        path: std::path::PathBuf,
+        reason: String,
+    },
+    /// A Mochi export whose format version this build does not know: refused before writing.
+    #[error(
+        "the Mochi export {path} records format version {version}, but this build reads version {supported}"
+    )]
+    ArchiveVersion {
+        path: std::path::PathBuf,
+        version: u64,
+        supported: u64,
+    },
     #[error("the library is closed")]
     Closed,
     /// The background library work panicked. The connection is suspect, so nothing restarts it.

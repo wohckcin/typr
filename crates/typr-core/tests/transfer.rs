@@ -1,9 +1,11 @@
 //! Whole-library copies and the formats a library moves through.
 
+use std::io::Write;
 use std::path::Path;
 
 use typr_core::store::{Command, Db, Grade, Id, Outcome, StoreError};
 use typr_core::transfer;
+use zip::write::{SimpleFileOptions, ZipWriter};
 
 const NOW: i64 = 1_768_089_600_000 + 13 * 60 * 60 * 1000;
 const HOUR: i64 = 60 * 60 * 1000;
@@ -180,5 +182,82 @@ fn an_existing_target_is_refused() {
         std::fs::read(&target).expect("the existing file"),
         b"an older export",
         "the refused export left the old file alone"
+    );
+}
+
+/// Write a minimal archive with the three files every Mochi export carries.
+fn write_archive(path: &Path, manifest: &str, decks: &str, cards: &str, media: &[(&str, &[u8])]) {
+    let file = std::fs::File::create(path).expect("an archive");
+    let mut zip = ZipWriter::new(file);
+    for (name, body) in [
+        ("manifest.json", manifest.as_bytes()),
+        ("decks.json", decks.as_bytes()),
+        ("cards.json", cards.as_bytes()),
+    ] {
+        zip.start_file(name, SimpleFileOptions::default())
+            .expect("a zip entry");
+        zip.write_all(body).expect("a written entry");
+    }
+    for (name, body) in media {
+        zip.start_file(*name, SimpleFileOptions::default())
+            .expect("a zip entry");
+        zip.write_all(body).expect("a written entry");
+    }
+    zip.finish().expect("a finished archive");
+}
+
+#[test]
+fn a_newer_export_version_is_refused() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let archive = dir.path().join("future.mochi");
+    write_archive(
+        &archive,
+        r#"{"format":"mochi","version":2,"tables":["decks","cards"],"counts":{}}"#,
+        "[]",
+        "[]",
+        &[],
+    );
+
+    let error = transfer::mochi::manifest(&archive).expect_err("the refusal");
+    assert!(
+        matches!(
+            error,
+            StoreError::ArchiveVersion {
+                version: 2,
+                supported: 1,
+                ..
+            }
+        ),
+        "the refusal names both versions: {error}"
+    );
+}
+
+#[test]
+fn a_truncated_archive_is_refused_before_any_write() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let source = dir.path().join("typr.sqlite3");
+    let mut db = open(&source);
+    fixture(&mut db);
+    let before = db.snapshot().expect("the library").cards.len();
+
+    let archive = dir.path().join("cut.mochi");
+    write_archive(
+        &archive,
+        r#"{"format":"mochi","version":1,"tables":["decks","cards"],"counts":{"decks":1,"cards":1}}"#,
+        "[]",
+        "[]",
+        &[],
+    );
+    let bytes = std::fs::read(&archive).expect("the archive");
+    std::fs::write(&archive, &bytes[..bytes.len() / 2]).expect("a truncated archive");
+
+    assert!(
+        transfer::mochi::manifest(&archive).is_err(),
+        "a cut archive has no usable central directory"
+    );
+    assert_eq!(
+        db.snapshot().expect("the library").cards.len(),
+        before,
+        "reading the manifest wrote nothing"
     );
 }

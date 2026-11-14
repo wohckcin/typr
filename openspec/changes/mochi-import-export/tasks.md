@@ -9,7 +9,7 @@ Depends on `card-templates` (fields), `diagram-cards` (masks) and `cloze-deletio
 
 ## 2. Mochi import
 
-- [ ] 2.1 `transfer::mochi::manifest(archive) -> Result<Manifest, StoreError>` reading the format version and declared counts first, refusing an unknown version.
+- [x] 2.1 `transfer::mochi::manifest(archive) -> Result<Manifest, StoreError>` reading the format version and declared counts first, refusing an unknown version.
   - **Verification**: `a_newer_export_version_is_refused` and `a_truncated_archive_is_refused_before_any_write` (the second asserts the library's card count before and after).
 - [ ] 2.2 Decks and cards: create decks with nesting, then each card through `Db::apply`, mapping text, templates (as a card template), fields and tags.
   - **Verification**: `three_nested_decks_and_forty_cards_import_whole` and `an_imported_card_renders_through_its_template`.

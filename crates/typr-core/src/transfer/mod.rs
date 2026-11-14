@@ -15,6 +15,8 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::store::StoreError;
 
+pub mod mochi;
+
 /// Copy the library at `db_path` into `target` without opening it for writing.
 ///
 /// `VACUUM INTO` reads the source in one statement and writes a consistent database with no WAL
