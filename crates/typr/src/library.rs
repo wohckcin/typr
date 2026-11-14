@@ -36,6 +36,9 @@ pub trait Host: 'static {
     /// Take a whole deck, and everything under it, out of the library.
     fn archive_deck(&mut self, _deck: Id) {}
 
+    /// Bring a deck, and everything under it, back into the library.
+    fn unarchive_deck(&mut self, _deck: Id) {}
+
     /// Archive a deck, asking first when it would take cards with it.
     fn request_archive_deck(&mut self, deck: Id) {
         if self.library().holds_cards(deck) {
@@ -573,6 +576,21 @@ fn filter_bar<S: Host>(s: &S) -> El {
             .font(type_::LABEL)
             .color(t.text_secondary),
         );
+    if let Some(deck) = library.selected_deck
+        && library
+            .snapshot
+            .decks
+            .iter()
+            .any(|known| known.id == deck && known.archived)
+    {
+        bar = bar.child(
+            Button::new("Unarchive deck")
+                .variant(ButtonVariant::Ghost)
+                .on_press(move |s: &mut S| s.unarchive_deck(deck))
+                .build(&KIT)
+                .key("unarchive-deck"),
+        );
+    }
     if library.mode == CardMode::Trash {
         bar = bar.child(empty_trash_button::<S>());
     }

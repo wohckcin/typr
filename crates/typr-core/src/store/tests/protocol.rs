@@ -457,3 +457,83 @@ fn a_worker_that_shut_down_cleanly_leaves_no_status() {
     drop(store);
     assert!(status.ended().is_none(), "a clean quit records nothing");
 }
+
+/// A clock that holds the first reading until released, then panics on every later one.
+struct HoldsThenDrops {
+    readings: std::sync::atomic::AtomicUsize,
+    released: std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
+}
+
+impl crate::clock::Clock for HoldsThenDrops {
+    fn now_ms(&self) -> i64 {
+        let reading = self
+            .readings
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if reading == 0 {
+            let (flag, cvar) = &*self.released;
+            let mut open = flag.lock().expect("gate");
+            while !*open {
+                open = cvar.wait(open).expect("gate");
+            }
+        }
+        assert!(reading == 0, "the second reading fell over");
+        0
+    }
+}
+
+#[test]
+fn a_panic_on_a_later_message_is_answered_against_that_message() {
+    let dir = TempDir::new().expect("temp dir");
+    let gate = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let store = Handle::spawn(
+        open_temp(&dir),
+        Box::new(HoldsThenDrops {
+            readings: std::sync::atomic::AtomicUsize::new(0),
+            released: std::sync::Arc::clone(&gate),
+        }),
+        noop_waker(),
+    )
+    .expect("spawn");
+
+    let ids = [
+        store.create_deck(None, "One").expect("sent"),
+        store.create_deck(None, "Two").expect("sent"),
+        store.create_deck(None, "Three").expect("sent"),
+    ];
+    {
+        let (flag, cvar) = &*gate;
+        *flag.lock().expect("gate") = true;
+        cvar.notify_all();
+    }
+
+    let events = wait_for(&store, 4);
+    let mut answered: Vec<(u64, String)> = events
+        .iter()
+        .map(|event| {
+            (
+                event.id,
+                match &event.result {
+                    Ok(_) => "ok".to_string(),
+                    Err(error) => error.to_string(),
+                },
+            )
+        })
+        .collect();
+    answered.sort();
+    assert_eq!(
+        answered,
+        vec![
+            (
+                UNPROMPTED,
+                "the library stopped: the second reading fell over".to_string()
+            ),
+            (ids[0], "ok".to_string()),
+            (
+                ids[1],
+                "the library stopped: the second reading fell over".to_string()
+            ),
+            (ids[2], "the library is closed".to_string()),
+        ],
+        "the message that panicked is the one answered as stopped, not the first of the batch"
+    );
+}

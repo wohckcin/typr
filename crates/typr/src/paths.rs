@@ -35,6 +35,12 @@ pub fn attachments_root_from_environment() -> Result<PathBuf, StoreError> {
     Ok(attachments_root(&dirs))
 }
 
+/// The library file the process environment names, which is what a failure message needs.
+pub fn database_path_from_environment() -> Result<PathBuf, StoreError> {
+    let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;
+    Ok(database_path(&dirs))
+}
+
 /// Open the library from the process environment, creating its folder if needed.
 ///
 /// `RUNE_DIRS_ROOT`, when set, moves every folder (see [`rune::dirs`]), which is how a test or an

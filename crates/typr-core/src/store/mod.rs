@@ -204,7 +204,12 @@ impl Snapshot {
                         && card.trashed_at.is_none()
                         && visible_decks.contains(&card.deck)
                 }
-                CardMode::Archived => card.archived && card.trashed_at.is_none(),
+                // A card is in the archived view either because it was archived itself or
+                // because the deck holding it was, which is the only place it can be reached.
+                CardMode::Archived => {
+                    card.trashed_at.is_none()
+                        && (card.archived || !visible_decks.contains(&card.deck))
+                }
                 CardMode::Trash => card.trashed_at.is_some(),
             })
             .filter(|card| deck.is_none() || scope.contains(&card.deck))

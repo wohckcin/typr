@@ -1634,3 +1634,79 @@ fn a_grade_is_timed_like_any_other_command() {
         "a grade is timed, so a slow one can be written down"
     );
 }
+
+#[test]
+fn a_card_under_an_archived_deck_is_reachable_and_the_deck_can_come_back() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_a_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    assert_eq!(state.library.cards().len(), 1);
+
+    LibraryHost::archive_deck(&mut state, 1);
+    wait_for(&mut state, "the deck to be archived", |s| {
+        s.library
+            .snapshot()
+            .decks
+            .iter()
+            .any(|deck| deck.id == 1 && deck.archived)
+    });
+
+    state.library.set_mode(CardMode::Archived);
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "a card whose deck was archived is in the archived view, or it is nowhere"
+    );
+
+    state.library.select_deck(Some(1));
+    let mut runtime = rune::Runtime::new(state, view, (900.0, 600.0), rune::Env::new(true, 1.0));
+    runtime.frame(0.0);
+    assert!(
+        runtime.find("unarchive-deck").is_some(),
+        "the archived deck offers a way back"
+    );
+
+    let mut state = std::mem::take(&mut runtime.state);
+    drop(runtime);
+    LibraryHost::unarchive_deck(&mut state, 1);
+    wait_for(&mut state, "the deck to come back", |s| {
+        s.library
+            .snapshot()
+            .decks
+            .iter()
+            .any(|deck| deck.id == 1 && !deck.archived)
+    });
+
+    state.library.set_mode(CardMode::Active);
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "and the card is back in the library"
+    );
+}
+
+#[test]
+fn a_library_that_cannot_be_opened_names_its_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    std::fs::write(&path, b"not a database").expect("write");
+    let error = match Db::open(&path) {
+        Ok(_) => panic!("a file that is not a database cannot open"),
+        Err(error) => error,
+    };
+
+    let line = open_failure(Some(path.clone()), &error);
+    assert!(
+        line.contains(&path.display().to_string()),
+        "the reader is told which file: {line}"
+    );
+    assert!(line.contains("could not be opened"), "{line}");
+
+    let nameless = open_failure(None, &error);
+    assert!(!nameless.contains("at  could not"), "{nameless}");
+    assert!(nameless.starts_with("The library could not be opened"));
+}

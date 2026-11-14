@@ -192,6 +192,22 @@ fn overdue_days(now_ms: i64, due_at_ms: i64, offset_ms: i64) -> i64 {
     (day::study_day(now_ms, offset_ms) - day::study_day(due_at_ms, offset_ms)).max(0)
 }
 
+/// What the status line says when the library cannot be opened. The file is named whenever it can
+/// be found, because a reason without a place cannot be acted on.
+fn open_failure(where_is: Option<std::path::PathBuf>, error: &StoreError) -> String {
+    match where_is {
+        Some(path) => format!(
+            "The library at {} could not be opened: {}",
+            path.display(),
+            logging::describe(error)
+        ),
+        None => format!(
+            "The library could not be opened: {}",
+            logging::describe(error)
+        ),
+    }
+}
+
 /// Remember the id of a command that went out, answering whether it did.
 fn remember_sent(
     in_flight: &mut HashMap<u64, (&'static str, Instant)>,
@@ -389,6 +405,14 @@ impl library::Host for State {
         self.track("archive_deck", sent);
     }
 
+    fn unarchive_deck(&mut self, deck: Id) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.archive_deck(deck, false),
+            None => Err(StoreError::Closed),
+        };
+        self.track("archive_deck", sent);
+    }
+
     fn restore_card(&mut self, card: Id) {
         // The archive is undone by un-archiving; the trash by restoring. Which one depends on the
         // view the button sits in, and that is the list's mode.
@@ -511,10 +535,8 @@ impl State {
                 self.store = Some(handle);
             }
             Err(error) => {
-                self.say(format!(
-                    "The library could not be opened: {}",
-                    logging::describe(&error)
-                ));
+                let where_is = paths::database_path_from_environment().ok();
+                self.say(open_failure(where_is, &error));
             }
         }
     }

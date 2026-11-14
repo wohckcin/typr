@@ -297,13 +297,15 @@ fn work(
     while let Ok(message) = rx.recv() {
         let mut batch = Vec::new();
         // The id is copied out before `apply` consumes the message: if that call panics, this is
-        // the only place the answer can still be addressed to.
-        let in_flight = message.id;
+        // the only place the answer can still be addressed to. It follows the batch, so a panic on
+        // the third of five is answered against the third.
+        let in_flight = std::cell::Cell::new(message.id);
         // Coalesce: apply everything already queued before paying for the snapshot re-read, so a
         // bulk import costs one read rather than one per row.
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             let mut dirty = apply(&db, &*clock, message, &mut batch);
             while let Ok(next) = rx.try_recv() {
+                in_flight.set(next.id);
                 dirty |= apply(&db, &*clock, next, &mut batch);
             }
             dirty
@@ -316,7 +318,7 @@ fn work(
                 // database is consistent because `Db::apply` runs one transaction per command.
                 let message = panic_message(&payload);
                 batch.push(Event {
-                    id: in_flight,
+                    id: in_flight.get(),
                     result: Err(StoreError::WorkerPanicked {
                         message: message.clone(),
                     }),
