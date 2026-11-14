@@ -5,6 +5,7 @@ pub mod day;
 pub mod fsrs;
 pub mod hidden;
 pub mod keymap;
+pub mod library_view;
 pub mod markdown_ext;
 pub mod name;
 pub mod reference;

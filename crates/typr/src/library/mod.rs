@@ -703,6 +703,7 @@ impl Library {
             archived: false,
             reverse: None,
             template: None,
+            view: typr_core::library_view::ViewMode::Grid,
         };
         let mut library = Library {
             snapshot: Arc::new(Snapshot {
@@ -811,6 +812,7 @@ impl Library {
                     archived: false,
                     reverse: None,
                     template: None,
+                    view: typr_core::library_view::ViewMode::Grid,
                 },
                 Deck {
                     id: 2,
@@ -819,6 +821,7 @@ impl Library {
                     archived: false,
                     reverse: None,
                     template: None,
+                    view: typr_core::library_view::ViewMode::Grid,
                 },
                 Deck {
                     id: 3,
@@ -827,6 +830,7 @@ impl Library {
                     archived: false,
                     reverse: None,
                     template: None,
+                    view: typr_core::library_view::ViewMode::Grid,
                 },
             ];
         }

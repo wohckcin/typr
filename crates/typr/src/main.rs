@@ -2309,6 +2309,7 @@ fn main() {
                     archived: false,
                     reverse: None,
                     template: None,
+                    view: typr_core::library_view::ViewMode::Grid,
                 }],
                 cards: vec![
                     CardSummary {

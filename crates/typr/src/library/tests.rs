@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use super::{GAP, Library, WRAP_BELOW, columns_for, deck_tree, tile_width, view};
+use typr_core::library_view::ViewMode;
 use typr_core::store::{CardMode, Deck, Id};
 
 #[test]
@@ -102,6 +103,7 @@ fn a_tag_filter_and_a_deck_filter_compose() {
         archived: false,
         reverse: None,
         template: None,
+        view: ViewMode::Grid,
     };
     let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
     snapshot.decks.push(second);
@@ -150,6 +152,7 @@ fn named(id: i64, parent: Option<i64>, name: &str) -> Deck {
         archived: false,
         reverse: None,
         template: None,
+        view: ViewMode::Grid,
     }
 }
 

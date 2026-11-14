@@ -1,6 +1,7 @@
 //! The orders a list can be shown in, and the filter a view saves.
 
 use super::*;
+use crate::library_view::ViewMode;
 use crate::store::{Deck, Snapshot};
 
 /// A library of `count` cards in one deck, each told apart by its preview only.
@@ -12,6 +13,7 @@ fn library(count: i64) -> Snapshot {
         archived: false,
         reverse: None,
         template: None,
+        view: ViewMode::Grid,
     };
     Snapshot {
         decks: vec![deck],

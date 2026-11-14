@@ -501,3 +501,21 @@ fn filtering_a_parent_includes_its_children() {
         "a filter on a parent lists the cards under its children"
     );
 }
+
+#[test]
+fn a_deck_without_a_view_reads_as_grid() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let snapshot = db.snapshot().expect("snapshot");
+    let found = snapshot
+        .decks
+        .iter()
+        .find(|each| each.id == deck)
+        .expect("the deck is in the snapshot");
+    assert_eq!(
+        found.view,
+        crate::library_view::ViewMode::Grid,
+        "a deck that never chose a view is a grid, not unreadable"
+    );
+}

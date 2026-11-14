@@ -10,6 +10,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::fsrs::Memory;
 use crate::hidden::{self, Shape};
+use crate::library_view::ViewMode;
 use crate::schedule::{FixedMultiplier, Fsrs, Policy, PromptState, Scheduler};
 use crate::template;
 use crate::transfer::{self, mochi};
@@ -554,8 +555,8 @@ impl Db {
     pub fn snapshot(&self) -> Result<Snapshot, StoreError> {
         let decks = {
             let mut stmt = self.conn.prepare(
-                "SELECT id, parent_id, name, archived, reverse, template FROM deck
-                 ORDER BY name COLLATE NOCASE, id",
+                "SELECT id, parent_id, name, archived, reverse, template, COALESCE(view, 'grid')
+                 FROM deck ORDER BY name COLLATE NOCASE, id",
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(Deck {
@@ -565,6 +566,7 @@ impl Db {
                     archived: row.get::<_, i64>(3)? != 0,
                     reverse: flag(row.get(4)?),
                     template: row.get(5)?,
+                    view: ViewMode::parse(&row.get::<_, String>(6)?),
                 })
             })?;
             rows.collect::<Result<Vec<_>, _>>()?

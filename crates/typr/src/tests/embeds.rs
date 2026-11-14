@@ -5,6 +5,7 @@
 //! lives, and what is proven here is that the reached body is what the frame shows.
 
 use super::*;
+use typr_core::library_view::ViewMode;
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 /// A deck so a card's home is in the snapshot, the way a published library always has it.
@@ -16,6 +17,7 @@ fn deck(id: Id, name: &str) -> Deck {
         archived: false,
         reverse: None,
         template: None,
+        view: ViewMode::Grid,
     }
 }
 

@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::hidden;
+use crate::library_view::ViewMode;
 
 pub use db::{Db, Folded, folded};
 pub use schema::{CURRENT_VERSION, SchemaFacts};
@@ -91,6 +92,8 @@ pub struct Deck {
     pub reverse: Option<bool>,
     /// The markdown its cards are rendered from, or `None` to inherit the parent deck's.
     pub template: Option<String>,
+    /// How this deck's cards are laid out. Never `None`: a deck with no stored view is a grid.
+    pub view: ViewMode,
 }
 
 /// Which of the two things a card asks: text, or a picture with rectangles on it.
