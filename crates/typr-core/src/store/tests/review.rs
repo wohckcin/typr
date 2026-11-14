@@ -1026,3 +1026,45 @@ fn grade(db: &mut Db, card: Id, key: &str, grade: Grade, at: i64) {
 
 const TEN_MINUTES: i64 = 10 * 60 * 1000;
 const DAY: i64 = 24 * HOUR;
+
+#[test]
+fn setting_reverse_on_a_card_or_deck_that_does_not_exist_is_refused() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+
+    let card = db.apply(
+        &Command::SetCardReverse {
+            card: 404,
+            reverse: Some(true),
+        },
+        0,
+    );
+    assert!(
+        matches!(
+            card,
+            Err(StoreError::Missing {
+                what: "card",
+                id: 404
+            })
+        ),
+        "a card that is not there is not silently left inheriting: {card:?}"
+    );
+
+    let deck = db.apply(
+        &Command::SetDeckReverse {
+            deck: 404,
+            reverse: Some(false),
+        },
+        0,
+    );
+    assert!(
+        matches!(
+            deck,
+            Err(StoreError::Missing {
+                what: "deck",
+                id: 404
+            })
+        ),
+        "{deck:?}"
+    );
+}

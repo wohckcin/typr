@@ -275,3 +275,30 @@ fn a_tile_hides_every_answer_a_hidden_text_card_holds() {
         "no answer is readable: {strings:?}"
     );
 }
+
+#[test]
+fn a_card_asked_both_ways_says_so_on_its_tile() {
+    let mut both = card(2, "front\n---\nback");
+    both.reverse = Some(true);
+    let (_, drawn) = Probe {
+        library: Library::seeded(1),
+        card: both,
+        width: 245.0,
+    }
+    .measure();
+    assert!(
+        drawn.iter().any(|line| line == "BOTH WAYS"),
+        "the footer names the direction where the other states are named: {drawn:?}"
+    );
+
+    let (_, forward) = Probe {
+        library: Library::seeded(1),
+        card: card(2, "front\n---\nback"),
+        width: 245.0,
+    }
+    .measure();
+    assert!(
+        forward.iter().all(|line| line != "BOTH WAYS"),
+        "and a card that never set it says nothing: {forward:?}"
+    );
+}

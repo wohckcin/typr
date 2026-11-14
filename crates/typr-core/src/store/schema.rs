@@ -24,7 +24,8 @@ pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5];
 /// The view is V4's body again, widened by one disjunct. V4 is key-aware, so `rev` is admitted by
 /// nothing until this clause names it, and no exclusion filter is needed. `deck_reverse` walks in
 /// the opposite direction to `archived_deck` — from the roots down — because a value is inherited
-/// downwards; a deck no root reaches inherits nothing and falls back to the library default.
+/// downwards; a deck no root reaches has no row, so `COALESCE(…, 0)` reads it as off rather than
+/// as the library default.
 const V5: &str = r#"
 ALTER TABLE deck ADD COLUMN reverse INTEGER;
 ALTER TABLE card ADD COLUMN reverse INTEGER;

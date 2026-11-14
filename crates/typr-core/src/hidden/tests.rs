@@ -138,3 +138,24 @@ fn masking_every_group_leaves_a_card_without_hidden_text_alone() {
     let text = "front\n---\nback";
     assert_eq!(masked_all(text, &shape(text)), text);
 }
+
+#[test]
+fn a_card_claims_the_keys_the_store_writes() {
+    let two_sided = shape("front\n---\nback");
+    assert_eq!(two_sided.prompt_keys(), vec!["fwd".to_string()]);
+    assert_eq!(
+        two_sided.claimed_keys(),
+        vec!["fwd".to_string(), "rev".to_string()],
+        "a two-sided card claims the reverse prompt as well"
+    );
+
+    let grouped = shape("Our lungs pull {{2::oxygen}} from the {{1::air}}.");
+    assert_eq!(
+        grouped.claimed_keys(),
+        grouped.prompt_keys(),
+        "hidden text is its own question, so it never claims a reverse prompt"
+    );
+
+    let note = shape("just a note");
+    assert!(note.claimed_keys().is_empty(), "a note claims nothing");
+}

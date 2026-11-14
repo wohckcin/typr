@@ -456,6 +456,8 @@ pub enum StoreError {
     #[error("card {card} has no prompt {key}")]
     NoPrompt { card: Id, key: String },
     /// A deck name another deck under the same parent already uses.
+    #[error("{what} {id} does not exist")]
+    Missing { what: &'static str, id: Id },
     #[error("a deck called {name:?} is already under that parent")]
     DuplicateName { name: String },
     /// A move that would put a deck inside itself.

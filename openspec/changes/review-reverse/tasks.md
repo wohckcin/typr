@@ -45,7 +45,7 @@
 
 ## 5. Close out
 
-- [x] 5.1 Refresh the `library-5000` scene so it includes one reverse-enabled deck, and add `review-reverse` snapping a card asked from its answer side.
+- [x] 5.1 Give one card in the `library-grid-wide` fixture its own reverse setting so a scene shows the marker, and add the `session-reverse` scene snapping a card asked from its answer side.
   - **Verification**: `--list-scenes` lists it and its `--snap` is non-blank.
 - [x] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.

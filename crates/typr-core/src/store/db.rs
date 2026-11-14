@@ -264,6 +264,12 @@ impl Db {
                     "UPDATE card SET reverse = ?2 WHERE id = ?1",
                     params![card, reverse.map(i64::from)],
                 )?;
+                if changed == 0 {
+                    return Err(StoreError::Missing {
+                        what: "card",
+                        id: *card,
+                    });
+                }
                 Ok(Outcome::Changed(changed))
             }
             Command::SetDeckReverse { deck, reverse } => {
@@ -271,6 +277,12 @@ impl Db {
                     "UPDATE deck SET reverse = ?2 WHERE id = ?1",
                     params![deck, reverse.map(i64::from)],
                 )?;
+                if changed == 0 {
+                    return Err(StoreError::Missing {
+                        what: "deck",
+                        id: *deck,
+                    });
+                }
                 Ok(Outcome::Changed(changed))
             }
             Command::Grade {
@@ -450,10 +462,7 @@ impl Db {
         // to appear in the claim set below: a key the shape does not claim is retired by this very
         // call, which would leave the reverse row unanswerable from the moment it was written.
         // Nothing here reads a reverse setting, so toggling reverse never writes a prompt.
-        let mut keys = shape.prompt_keys();
-        if shape.claims_reverse() {
-            keys.push("rev".to_string());
-        }
+        let keys = shape.claimed_keys();
         for key in &keys {
             self.conn.execute(
                 "INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)

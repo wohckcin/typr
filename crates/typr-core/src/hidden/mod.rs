@@ -47,6 +47,17 @@ impl Shape {
     ///
     /// Two sides can be read in either order, so the reverse prompt is written beside `fwd`. Hidden
     /// text is already the question, so a group never reverses.
+    /// Every prompt key this card claims: the shape's own keys plus `rev` for a card with two or
+    /// more sides. The store writes exactly these and the app admits exactly these, so the two
+    /// cannot drift apart.
+    pub fn claimed_keys(&self) -> Vec<String> {
+        let mut keys = self.prompt_keys();
+        if self.claims_reverse() {
+            keys.push("rev".to_string());
+        }
+        keys
+    }
+
     pub fn claims_reverse(&self) -> bool {
         matches!(self, Shape::Sides(sides) if sides.len() >= 2)
     }

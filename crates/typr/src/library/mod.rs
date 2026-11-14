@@ -393,6 +393,8 @@ impl Library {
             cards.cards[1].tags = vec!["biology".to_string(), "anatomy".to_string()];
             cards.cards[4].tags = vec!["cells".to_string()];
             cards.cards[6].tags = vec!["exam".to_string(), "biology".to_string()];
+            // One card is asked from both ends, so a scene shows the marker it earns.
+            cards.cards[2].reverse = Some(true);
         }
         // The list is a projection of the snapshot, so it has to be rebuilt from the fixture.
         library.refresh();

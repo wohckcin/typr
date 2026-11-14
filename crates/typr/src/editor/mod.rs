@@ -143,7 +143,6 @@ impl Editor {
         }
     }
 
-    /// Hold the tags the card carries now, so the field starts where the card is.
     /// The card's reverse state as one word, so the header reads the same in every case.
     pub fn reverse_label(&self) -> &'static str {
         match self.reverse {
@@ -158,6 +157,7 @@ impl Editor {
         self.reverse = reverse;
     }
 
+    /// Hold the tags the card carries now, so the field starts where the card is.
     pub fn load_tags(&mut self, tags: &[String]) {
         let line = tags.join(", ");
         self.tags.replace_text(line.clone());

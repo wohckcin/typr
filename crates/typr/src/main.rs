@@ -690,12 +690,12 @@ impl State {
                 let shape = hidden::shape(&card.markdown);
                 // A prompt the card's shape does not claim cannot be asked: masking it would hide
                 // nothing, so the question would show the answer. A one-sided card is a note, which
-                // is the same rule with an empty key list. The reverse prompt is the one exception:
-                // it is claimed by a card with two sides rather than by the shape's own key list.
-                let reverse = key == "rev" && shape.claims_reverse();
-                if !reverse && !shape.prompt_keys().contains(&key) {
+                // is the same rule with an empty key list. The claim set is the shape's, so this
+                // and the store's writing of prompts cannot drift apart.
+                if !shape.claimed_keys().contains(&key) {
                     return None;
                 }
+                let reverse = key == "rev";
                 Some(match &shape {
                     hidden::Shape::Sides(sides) if reverse => {
                         Entry::reverse(card.id, sides.clone(), overdue)
