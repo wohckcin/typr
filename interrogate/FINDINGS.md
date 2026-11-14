@@ -59,6 +59,19 @@ reachable wrong answer or unhelpful failure; **low** = a diagnostic gap.
   during a worker panic, whether the preview reflects side boundaries.
 - The `cargo test --workspace --locked` suite is green at `c77c60b`: none of the above is covered.
 
-## Running any of these
+## Where the repros went
 
-See `README.md` in this directory.
+Every finding was reproduced by running it before the fix. The throwaway reproducers stopped compiling
+the moment a fix changed a signature, so they were deleted once the suite covered them; git still has
+them.
+
+```sh
+git show 643f652:interrogate/core-audit.rs
+git show 643f652:interrogate/app-probes.rs
+```
+
+Against `main` at `fdd8f97` every repro but one passed: `core-adv_repro` 5, `core-adversarial` 4,
+`core-audit` 4, `core-repro` 3, `core-verify_probe` 2 of 3. The odd one out,
+`a_panic_in_a_batch_is_attributed_to_the_wrong_request`, failed because it asserted the broken
+behaviour it was written to expose ("the second request got no answer at all"); the worker now answers
+`answered=[1, 2, 0]`.
