@@ -2179,3 +2179,38 @@ fn a_prompt_left_over_from_a_two_sided_card_does_not_open_a_session() {
         entries.len()
     );
 }
+
+#[test]
+fn a_prompt_the_card_no_longer_claims_does_not_open_a_session() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_markdown(&dir, "{{1::alpha}} {{2::beta}}");
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    settle(&mut state, 0);
+    let card = state.library.cards()[0].id;
+    let saved = state
+        .store
+        .as_ref()
+        .expect("store")
+        .save_card(card, "{{1::alpha}} only")
+        .expect("saved");
+    settle(&mut state, saved);
+    refresh_library(&mut state);
+
+    assert!(
+        state
+            .session_entries(vec![(card, "cloze:2".to_string(), None)])
+            .is_empty(),
+        "a group whose spans are gone cannot be asked"
+    );
+    assert_eq!(
+        state
+            .session_entries(vec![(card, "cloze:1".to_string(), None)])
+            .len(),
+        1,
+        "the group the card still holds is asked as usual"
+    );
+}

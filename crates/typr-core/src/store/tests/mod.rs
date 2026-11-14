@@ -117,6 +117,8 @@ pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
             .expect("drop the view");
         conn.execute_batch("ALTER TABLE card DROP COLUMN has_cloze")
             .expect("drop the hidden-text column");
+        conn.execute_batch("ALTER TABLE prompt DROP COLUMN retired")
+            .expect("drop the retirement column");
         if version == 3 {
             conn.execute_batch(crate::store::schema::V3_SQL)
                 .expect("put the version-3 view back");

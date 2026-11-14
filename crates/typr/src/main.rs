@@ -655,10 +655,13 @@ impl State {
                 let card = snapshot.cards.iter().find(|card| card.id == id)?;
                 let overdue = due_at.map_or(0, |due_at| overdue_days(now, due_at, offset));
                 let shape = hidden::shape(&card.markdown);
+                // A prompt the card's shape does not claim cannot be asked: masking it would hide
+                // nothing, so the question would show the answer. A one-sided card is a note, which
+                // is the same rule with an empty key list.
+                if !shape.prompt_keys().contains(&key) {
+                    return None;
+                }
                 Some(match &shape {
-                    // A one-sided card is a note: a prompt left over from when it had two sides
-                    // must not put it in a session, whatever the queue answered with.
-                    hidden::Shape::Sides(sides) if sides.len() < 2 => return None,
                     hidden::Shape::Sides(sides) => Entry::sides(card.id, sides.clone(), overdue),
                     hidden::Shape::Hidden { text, .. } => Entry::masked(
                         card.id,

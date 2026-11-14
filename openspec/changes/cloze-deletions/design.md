@@ -51,8 +51,16 @@ The predicate names the key because `has_cloze` cannot be trusted on its own acr
 backfilling it from `markdown LIKE '%{{%'` also fires on a span inside a fence or a backtick run,
 which the parser reads as text, and a stale `fwd` prompt would then put a one-sided note back in a
 session. V4 therefore applies no backfill — every library that reaches it holds only `fwd` prompts,
-which the `sides >= 2` half gates — and the app adds a second guard in `session_entries`: a card
-whose shape is `Sides` with fewer than two sides yields no entry, whatever the queue answered.
+which the `sides >= 2` half gates — and the app adds a second guard in `session_entries`: a key the
+card's shape does not claim yields no entry, whatever the queue answered. That single membership
+test also covers a one-sided note, whose shape claims no key at all.
+
+**A key the shape no longer claims is retired, not left queueing.** A prompt row is never deleted, so
+`{{1::alpha}} {{2::beta}}` saved as `{{1::alpha}} only` would otherwise keep `cloze:2` due forever —
+and masking a group that no longer exists hides nothing, so the review would print the answer as the
+question. V4 adds `prompt.retired`, the view adds `AND p.retired = 0`, and `sync_prompts` marks every
+key the shape does not claim and clears the mark when the spans come back, so the cap, the deck due
+counts and the progress line stop counting a prompt nobody can answer while its history stays.
 
 **A face carries `hidden` and `shown`.** `Entry` becomes `{ card, prompt, faces: Vec<Face>, overdue }`
 with `Face { hidden: String, shown: String }`. For sides the two strings are equal; for a group they

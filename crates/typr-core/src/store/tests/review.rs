@@ -624,3 +624,78 @@ fn two_groups_of_one_card_count_once_against_the_cap() {
         );
     }
 }
+
+#[test]
+fn a_group_whose_spans_are_gone_stops_queueing() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let under = deck(&mut db, "Biology");
+    let card = card(&mut db, under, "{{1::alpha}} {{2::beta}}");
+    match db
+        .apply(
+            &Command::Grade {
+                card,
+                key: "cloze:2".to_string(),
+                grade: Grade::Remembered,
+                duration_ms: None,
+            },
+            NOON,
+        )
+        .expect("grade")
+    {
+        Outcome::Graded { .. } => {}
+        other => panic!("expected a grade: {other:?}"),
+    }
+
+    // The second group's spans are gone, so its key can no longer be asked: masking it would hide
+    // nothing and the review would print the answer as the question.
+    db.apply(
+        &Command::SaveCard {
+            id: card,
+            markdown: "{{1::alpha}} only".to_string(),
+        },
+        NOON,
+    )
+    .expect("save");
+
+    assert_eq!(
+        db.prompt_keys(card).expect("keys"),
+        vec!["cloze:1".to_string(), "cloze:2".to_string()],
+        "a retired prompt keeps its row and its history"
+    );
+    let retired: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT retired FROM prompt WHERE card_id = ?1 AND key = 'cloze:2'",
+            [card],
+            |row| row.get(0),
+        )
+        .expect("the retirement flag");
+    assert_eq!(retired, 1, "the key is marked retired");
+    assert!(
+        db.due_prompts(NOON + 400 * 24 * HOUR, 0, 1, None)
+            .expect("due")
+            .iter()
+            .all(|prompt| prompt.key != "cloze:2"),
+        "a retired prompt is never due"
+    );
+
+    // Asking for it again clears the mark, so the schedule it kept is used again.
+    db.apply(
+        &Command::SaveCard {
+            id: card,
+            markdown: "{{1::alpha}} {{2::beta}}".to_string(),
+        },
+        NOON,
+    )
+    .expect("save again");
+    let retired: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT retired FROM prompt WHERE card_id = ?1 AND key = 'cloze:2'",
+            [card],
+            |row| row.get(0),
+        )
+        .expect("the flag after the second save");
+    assert_eq!(retired, 0, "a returning group is answerable again");
+}

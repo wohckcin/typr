@@ -396,14 +396,27 @@ impl Db {
 
     /// Give a card the prompts its shape asks for: `fwd` for two or more sides, one `cloze:<n>` per
     /// hidden-text group. A prompt that exists is left exactly as it was, so editing text never resets
-    /// a schedule, and nothing is deleted: a group whose spans are gone keeps its history and simply
-    /// stops queueing.
+    /// a schedule, and nothing is deleted: a group whose spans are gone keeps its history, is marked
+    /// retired and stops queueing, and asking for it again clears the mark.
     fn sync_prompts(&self, card: Id, shape: &Shape) -> Result<(), StoreError> {
-        for key in shape.prompt_keys() {
+        let keys = shape.prompt_keys();
+        for key in &keys {
             self.conn.execute(
                 "INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
                  VALUES (?1, ?2, 'learn', NULL, 0, 0, 0)
                  ON CONFLICT (card_id, key) DO NOTHING",
+                params![card, key],
+            )?;
+        }
+        // A key the shape no longer claims cannot be answered: masking it hides nothing, so it would
+        // ask the question and print the answer. The row stays for its history.
+        self.conn.execute(
+            "UPDATE prompt SET retired = 1 WHERE card_id = ?1",
+            params![card],
+        )?;
+        for key in &keys {
+            self.conn.execute(
+                "UPDATE prompt SET retired = 0 WHERE card_id = ?1 AND key = ?2",
                 params![card, key],
             )?;
         }

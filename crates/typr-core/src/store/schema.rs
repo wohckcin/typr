@@ -28,6 +28,7 @@ const V4: &str = r#"
 -- text. Every library that reaches this step holds only `fwd` prompts, which the view gates on
 -- sides below.
 ALTER TABLE card ADD COLUMN has_cloze INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE prompt ADD COLUMN retired INTEGER NOT NULL DEFAULT 0;
 DROP VIEW IF EXISTS studyable_prompt;
 CREATE VIEW studyable_prompt AS
 WITH RECURSIVE archived_deck(id) AS (
@@ -40,6 +41,7 @@ FROM prompt p
 JOIN card c ON c.id = p.card_id
 WHERE c.trashed_at IS NULL
   AND c.archived = 0
+  AND p.retired = 0
   AND (
         (p.key = 'fwd' AND c.sides >= 2)
         OR (p.key LIKE 'cloze:%' AND c.has_cloze = 1)
