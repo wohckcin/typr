@@ -3,7 +3,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use typr_core::store::{Command, Db, Grade, Id, Outcome, StoreError};
+use typr_core::store::{CardKind, Command, Db, Grade, Id, Outcome, StoreError};
 use typr_core::transfer;
 use zip::write::{SimpleFileOptions, ZipWriter};
 
@@ -624,7 +624,7 @@ fn an_imported_image_is_present_after_its_source_is_deleted() {
     std::fs::remove_file(&archive).expect("the archive is the only source");
 
     let card = &db.snapshot().expect("the library").cards[0];
-    assert_eq!(card.kind, typr_core::store::CardKind::Diagram);
+    assert_eq!(card.kind, CardKind::Diagram);
     assert_eq!(card.image.as_deref(), Some("leak.png"));
     assert_eq!(card.caption.as_deref(), Some("Where is the leak?"));
     assert_eq!(
@@ -708,4 +708,40 @@ fn a_copied_picture_never_overwrites_the_first_copy() {
         std::fs::read(pictures.join(&second)).expect("the second copy"),
         b"second"
     );
+}
+
+#[test]
+fn a_manifest_count_mismatch_imports_nothing() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([{"id": 1, "name": "Spanish"}]);
+    let cards = serde_json::json!([{"id": 1, "deck": 1, "text": "hola"}]);
+    let archive = write_mochi(
+        dir.path(),
+        "short.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 1, "cards": 2}),
+    );
+
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let error = db
+        .apply(
+            &Command::ImportArchive {
+                archive,
+                attachments: dir.path().join("attachments"),
+            },
+            NOW,
+        )
+        .expect_err("the manifest promised a card the archive does not hold");
+
+    let StoreError::Archive { reason, .. } = error else {
+        panic!("expected the archive to be refused, got {error:?}");
+    };
+    assert!(
+        reason.contains("declares") && reason.contains("cards: 2"),
+        "the reason names the mismatch: {reason}"
+    );
+    let snapshot = db.snapshot().expect("the library");
+    assert!(snapshot.cards.is_empty(), "no card survived the rollback");
+    assert!(snapshot.decks.is_empty(), "no deck survived the rollback");
 }
