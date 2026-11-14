@@ -23,8 +23,8 @@ use typr_core::screen::Queue;
 use typr_core::session::{Entry, Mode, Session};
 use typr_core::store::{
     CardKind, CardMode, CardRef, CardSummary, Deck, Grade, Handle, Id, MaskRect, MaskRow, Outcome,
-    SavedView, SettingKey, SettingValue, Settings, Sort, SortDir, Store, StoreError, ViewSpec,
-    WorkerStatus,
+    SavedView, SettingKey, SettingValue, Settings, Snapshot, Sort, SortDir, Store, StoreError,
+    ViewSpec, WorkerStatus,
 };
 use typr_core::{day, hidden};
 
