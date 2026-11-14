@@ -18,8 +18,9 @@ without it, and every card type added later inherits the direction rule for free
   and grading happens after the first side is revealed.
 - Reverse is enabled per card, per deck, or for the whole library, with the nearest setting winning.
   Changing it affects future reviews only: no history is deleted and no interval is recomputed.
-- The queue, the cap, the due ordering and the history view all treat the two directions as separate
-  prompts, because they already key on `(card, key)`.
+- The queue, the due ordering and the history view treat the two directions as separate prompts,
+  because they already key on `(card, key)`; the per-day cap counts the card once, because it limits
+  how much new material a day admits.
 - The library shows which direction a card is waiting on, and the editor offers a per-card toggle.
 
 ## Capabilities

@@ -62,9 +62,10 @@ extra table.
 `prompt` starts with `rev`, reverses the vector. Everything downstream (`revealed`, `read_only`, the
 grade gate, `reshuffle`) keeps working because it only counts faces.
 
-**The cap counts prompts, not cards.** Mochi's new-card queue counts review items, and the cap is
-already expressed per prompt in `new_prompts`; counting cards would let reverse silently double a
-day's work.
+**The cap counts cards, not directions.** The queue holds a prompt per direction, but the allowance is
+a limit on how much new material a day admits, so `new_prompts` admits whole cards against it and
+`learned_on` counts a card whose first `review`-phase record falls on that day. Counting directions
+would halve the day's new material for every card asked both ways.
 
 **`cloze-deletions` owns the `Each card has at most one prompt` block and this change does not touch
 it.** Two open changes cannot both modify one requirement and archive, and the cloze variant machinery
@@ -78,7 +79,8 @@ carry the prompt-count wording forward.
 - A view with two recursive CTEs (archived decks, deck reverse) is harder to read. The existing
   `due_prompts`/`new_prompts` callers are unchanged, and the agreement test between the view and the
   snapshot keeps them honest.
-- Reverse doubles the work for cards that are enabled, which is the point, but it also doubles the new
-  queue; the cap is the mitigation and the library default is off so nothing changes until asked.
+- Reverse doubles the work for cards that are enabled, which is the point, and it also doubles the
+  new queue for those cards; the cap does not absorb that, because it counts cards. The library
+  default is off and every deck and card can say otherwise, so nothing changes until asked.
 - A card toggled per card while its deck flips later keeps its own value, which can surprise; the row
   says the card is asked in both directions, so the state is visible where the toggle lives.
