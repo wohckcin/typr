@@ -935,6 +935,18 @@ fn main() {
         ("library-empty", |state: &mut State| {
             state.screen = Screen::Library;
         }),
+        ("library-grid", |state: &mut State| {
+            state.library = Library::seeded(9);
+            state.seeded = true;
+        }),
+        ("library-grid-wide", |state: &mut State| {
+            state.library = Library::seeded_tiles();
+            state.seeded = true;
+        }),
+        ("library-grid-empty", |state: &mut State| {
+            state.library = Library::seeded(0);
+            state.seeded = true;
+        }),
         ("library-nested", |state: &mut State| {
             state.library = Library::seeded_nested();
             state.seeded = true;

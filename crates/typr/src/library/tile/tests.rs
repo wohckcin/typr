@@ -30,7 +30,7 @@ fn a_tile_draws_the_first_side_only() {
         library,
         |s: &Library, _: &mut rune::Cx<Library>| {
             let card = s.cards().first().expect("one card").clone();
-            super::tile::<Library>(&card, 245.0, NOON)
+            super::tile::<Library>(s, &card, 245.0, NOON)
         },
         (400.0, 400.0),
         rune::Env::new(true, 1.0),
@@ -146,7 +146,7 @@ impl Probe {
             rune::col()
                 .w_full()
                 .items_start()
-                .child(super::tile::<Probe>(&s.card, s.width, NOON))
+                .child(super::tile::<Probe>(s, &s.card, s.width, NOON))
         }
         let mut runtime =
             rune::Runtime::new(self, draw, (1200.0, 600.0), rune::Env::new(true, 1.0));

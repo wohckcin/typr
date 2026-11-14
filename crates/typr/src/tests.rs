@@ -1028,29 +1028,135 @@ fn the_library_offers_a_way_into_the_editor() {
         rune::Env::new(true, 1.0),
     );
     runtime.frame(0.0);
-    assert!(runtime.find("edit-1").is_some(), "a card can be opened");
-    assert!(runtime.find("new-card").is_some(), "and a new one started");
+    assert!(runtime.find("tile-1").is_some(), "the card is a tile");
+    assert!(
+        runtime.find("new-card-button").is_some(),
+        "and a new one started"
+    );
 
-    // Pressing the row itself is the affordance the accessibility tree exposes, so it has to open
-    // the card, not just select it.
-    let (x, y) = runtime.find("card-1").expect("the card row");
+    // The tile's body is what the accessibility tree exposes as a button, so a press on it has to
+    // open the card, not just select it.
+    let (x, y) = runtime.find("tile-body-1").expect("the tile's body");
     runtime.pointer_down(x, y);
     runtime.pointer_up(x, y);
     runtime.frame(0.1);
     let mut state = runtime.state;
     assert!(
         matches!(state.screen, Screen::Editor),
-        "pressing a row opens that card"
+        "pressing a tile opens that card"
     );
-    assert_eq!(state.editor.card, Some(1), "the row's own card opens");
+    assert_eq!(state.editor.card, Some(1), "the tile's own card opens");
     assert_eq!(
         state.editor.buffer.text, "front\n---\nback",
-        "the row's markdown is in the buffer"
+        "the tile's markdown is in the buffer"
     );
 
     library::Host::new_card(&mut state);
     assert!(matches!(state.screen, Screen::Editor), "a new card opens");
     assert_eq!(state.editor.card, None, "with no id until it is saved");
+}
+
+#[test]
+fn pressing_a_tile_opens_its_card() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    settle(&mut state, 0);
+    refresh_library(&mut state);
+
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..3 {
+        runtime.frame(0.1);
+    }
+    let (x, y) = runtime.find("tile-body-1").expect("the tile's body");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+
+    let state = runtime.state;
+    assert!(
+        matches!(state.screen, Screen::Editor),
+        "the tile opens its card"
+    );
+    assert_eq!(state.library.selected_card, Some(1), "and selects it");
+}
+
+#[test]
+fn the_deck_actions_still_run_from_a_tile() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    settle(&mut state, 0);
+    refresh_library(&mut state);
+
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..3 {
+        runtime.frame(0.1);
+    }
+
+    // The footer has to sit inside the tile's own box, or the press never reaches it: a `grow`n
+    // body contributed no height to the parent and the tile stayed as short as its footer.
+    let elements = runtime.elements();
+    let tile = elements
+        .iter()
+        .find(|e| e.key.as_deref() == Some("tile-1"))
+        .expect("the tile")
+        .rect;
+    let menu = elements
+        .iter()
+        .find(|e| e.key.as_deref() == Some("menu-1"))
+        .expect("the menu button")
+        .rect;
+    assert!(
+        menu[1] + menu[3] <= tile[1] + tile[3] + 0.5
+            && menu[0] + menu[2] <= tile[0] + tile[2] + 0.5,
+        "the menu sits inside the tile: tile {tile:?} menu {menu:?}"
+    );
+
+    let (x, y) = (menu[0] + menu[2] / 2.0, menu[1] + menu[3] / 2.0);
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+    assert_eq!(runtime.state.library.menu, Some(1), "the menu opens");
+
+    let (x, y) = runtime.find("archive-1").expect("archive in the menu");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    for _ in 0..100 {
+        runtime.frame(0.1);
+        let mut state = std::mem::take(&mut runtime.state);
+        refresh_library(&mut state);
+        let archived = state.library.cards().is_empty();
+        runtime.state = state;
+        if archived {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let state = runtime.state;
+    assert!(
+        state.library.cards().is_empty(),
+        "an archived card leaves the active deck"
+    );
+    assert_eq!(state.library.menu, None, "and the menu closes");
 }
 
 #[test]
@@ -1088,11 +1194,12 @@ fn a_card_moves_to_another_deck_and_keeps_its_schedule() {
         .find(|id| *id != from)
         .expect("the new deck");
 
-    // The row offers the move, and the sidebar takes the card.
+    // The tile's menu offers the move, and the sidebar takes the card.
     let mut preview = State {
         library: Library::seeded(3),
         ..State::default()
     };
+    preview.library.menu = Some(1);
     let mut runtime = rune::Runtime::new(
         preview,
         crate::view,

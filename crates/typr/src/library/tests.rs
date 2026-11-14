@@ -1,29 +1,76 @@
 use std::sync::atomic::Ordering;
 
-use super::{Library, ROW_HEIGHT_PX, deck_tree, view};
+use super::{GAP, Library, WRAP_BELOW, columns_for, deck_tree, tile_width, view};
 use typr_core::store::{CardMode, Deck};
 
 #[test]
-fn a_long_library_builds_only_the_rows_on_screen() {
+fn two_tiles_fit_at_482_points() {
+    assert_eq!(columns_for(482.0), 2, "two shares of 233 and the gap");
+    assert_eq!(columns_for(767.0), 3);
+    assert_eq!(columns_for(1485.0), 6);
+    assert_eq!(
+        columns_for(WRAP_BELOW * 2.0 + GAP),
+        2,
+        "the narrowest two-column grid is one tile over the wrap width"
+    );
+    assert!(
+        (tile_width(767.0, 3) - 245.0).abs() < 0.5,
+        "three shares of 767 are 245 each, got {}",
+        tile_width(767.0, 3)
+    );
+    assert!(
+        (tile_width(482.0, 2) - 233.0).abs() < 0.5,
+        "two shares of 482 are 233 each, got {}",
+        tile_width(482.0, 2)
+    );
+}
+
+#[test]
+fn one_tile_fits_when_nothing_else_does() {
+    assert_eq!(columns_for(0.0), 1, "an unmeasured grid still draws a tile");
+    assert_eq!(
+        columns_for(200.0),
+        1,
+        "narrower than one share is still one"
+    );
+    assert_eq!(columns_for(WRAP_BELOW), 1, "exactly one share is one");
+    assert!(
+        (tile_width(200.0, 1) - 200.0).abs() < 0.5,
+        "one column takes the whole width"
+    );
+}
+
+#[test]
+fn a_long_deck_builds_only_the_tile_rows_on_screen() {
     let mut runtime = rune::Runtime::new(
         Library::seeded(5000),
         |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
         (960.0, 640.0),
         rune::Env::new(true, 1.0),
     );
-    runtime.frame(0.0);
+    // The width arrives one frame after the first layout, and the counter accumulates every
+    // commit, so take the largest single frame's build.
+    let mut busiest = 0;
+    for _ in 0..6 {
+        let before = runtime.state.built_rows.load(Ordering::Relaxed);
+        runtime.frame(0.1);
+        let built = runtime.state.built_rows.load(Ordering::Relaxed) - before;
+        busiest = busiest.max(built);
+    }
 
-    let built = runtime.state.built_rows.load(Ordering::Relaxed);
-    let on_screen = (640usize).div_ceil(ROW_HEIGHT_PX as usize);
-    assert!(built > 0, "nothing was built at all");
-    assert!(
-        built < on_screen * 4,
-        "built {built} rows for a {on_screen}-row window of 5000"
-    );
+    let width = runtime.state.grid_width;
+    assert_eq!(width, 760.0, "the grid is the window less the sidebar");
+    let columns = columns_for(width);
+    // Six lines of 116 points fit in a 640-point viewport.
+    let on_screen = 6;
     assert_eq!(
         runtime.state.visible.len(),
         5000,
         "the filter keeps every card"
+    );
+    assert!(
+        busiest <= on_screen * 4,
+        "built {busiest} lines in one frame for a {on_screen}-line window at {columns} columns"
     );
 }
 
@@ -227,4 +274,66 @@ fn selecting_another_deck_abandons_the_name_field() {
     runtime.frame(0.1);
     assert_eq!(runtime.state.renaming, None, "the field stayed open");
     assert_eq!(runtime.state.snapshot.decks[0].name, "Biology");
+}
+
+#[test]
+fn the_grid_is_measured_from_the_window_not_from_its_own_tiles() {
+    let mut runtime = rune::Runtime::new(
+        Library::seeded(9),
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (960.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..3 {
+        runtime.frame(0.1);
+    }
+    assert_eq!(
+        runtime.state.grid_width, 760.0,
+        "the window less the sidebar, got {}",
+        runtime.state.grid_width
+    );
+    let grid = columns_for(runtime.state.grid_width);
+    assert_eq!(grid, 3, "three columns of 242.67");
+    let tile = runtime
+        .elements()
+        .into_iter()
+        .find(|element| element.key.as_deref() == Some("tile-1"))
+        .expect("the first tile");
+    assert!(
+        (tile.rect[2] - 242.667).abs() < 1.0,
+        "the tile is 242.67 wide, got {}",
+        tile.rect[2]
+    );
+}
+#[test]
+fn an_empty_deck_offers_a_tile_to_fill() {
+    let library = Library::seeded(0);
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (960.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..3 {
+        runtime.frame(0.1);
+    }
+    let placeholders: Vec<_> = runtime
+        .elements()
+        .into_iter()
+        .filter(|element| element.key.as_deref() == Some("new-card"))
+        .collect();
+    assert_eq!(
+        placeholders.len(),
+        1,
+        "an empty deck draws exactly one tile that starts a card"
+    );
+    let rect = placeholders[0].rect;
+    assert!(
+        (rect[2] - 242.667).abs() < 1.0,
+        "the placeholder is one grid share wide, got {rect:?}"
+    );
+    assert!(
+        (rect[3] - 94.0).abs() < 1.0,
+        "the placeholder is as tall as a tile, got {rect:?}"
+    );
 }

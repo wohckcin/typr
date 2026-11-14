@@ -39,7 +39,8 @@ a PNG on disk. Nothing compares them today, so a regression is invisible.
 "no literal in a screen" requirement is checkable by grep in CI.
 
 **A card is one bordered, elevated surface; metadata is secondary text inside it.** The alternative,
-separate name and preview rows, is what makes the current list look like a table.
+separate text and metadata rows, is what would make a tile read as a table. `card-grid` owns what a tile
+holds and how it wraps; this change owns only its colour, its type and its spacing.
 
 **The review card keeps its bounds across the reveal.** The answer slot is reserved at the height of the
 revealed content measured on the previous card, and a shorter answer pads rather than collapses; that is

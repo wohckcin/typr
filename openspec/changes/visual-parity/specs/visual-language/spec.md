@@ -21,13 +21,14 @@ light and dark themes.
 ### Requirement: A card is one object on the page
 
 The system SHALL render a card as a single surface with a radius, a border and one step of elevation,
-SHALL place its name and its preview inside that surface, SHALL show its metadata as secondary text, and
-SHALL show a hover and a focus state that do not move it.
+SHALL place everything the card shows inside that surface, SHALL show its metadata as secondary text, and
+SHALL show a hover and a focus state that do not move it. What a card shows is `card-grid`'s to decide.
 
-#### Scenario: A list row reads as one card
+#### Scenario: A tile reads as one card
 
-- **WHEN** the library lists a card
-- **THEN** the name, preview and metadata share one border, and hovering changes only colour and shadow
+- **WHEN** the library draws a card
+- **THEN** its text, its badges and its chips share one border, and hovering changes only colour and
+  shadow
 
 #### Scenario: Focus is visible without motion
 

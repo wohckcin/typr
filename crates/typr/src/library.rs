@@ -29,10 +29,41 @@ pub const WRAP_BELOW: f32 = 233.0;
 /// The height a tile is drawn at before it has been laid out, and the height every tile is drawn
 /// at, so a line's tiles match. It is the tallest measured anatomy: body, hidden-side strip, tags
 /// and footer.
-pub const TILE_HEIGHT: f32 = 124.0;
+pub const TILE_HEIGHT: f32 = 100.0;
+
+/// The sidebar's fixed width, which the grid's share of the window is measured against.
+pub const SIDEBAR_WIDTH: f32 = 200.0;
+
+/// The width the grid assumes before it has been laid out: a three-column window.
+pub const FALLBACK_GRID_WIDTH: f32 = 767.0;
 
 /// The tallest a tile may grow, so one long card cannot swallow the deck.
 pub const TILE_MAX_HEIGHT: f32 = 160.0;
+
+/// How many tile columns fit across `width`: the width is divided until the next column would be
+/// narrower than `WRAP_BELOW`, and there is always at least one.
+pub fn columns_for(width: f32) -> usize {
+    if !width.is_finite() || width < WRAP_BELOW {
+        return 1;
+    }
+    // Counted in points rather than divided and floored, so nothing is cast from a float.
+    let mut columns = 1;
+    while (columns as f32 + 1.0) * (WRAP_BELOW + GAP) - GAP <= width {
+        columns += 1;
+    }
+    columns
+}
+
+/// How many lines of tiles `cards` takes at `columns` across.
+pub fn tile_rows(cards: usize, columns: usize) -> usize {
+    cards.div_ceil(columns.max(1))
+}
+
+/// The width one tile takes on a line of `columns` filling `width`.
+pub fn tile_width(width: f32, columns: usize) -> f32 {
+    let columns = columns.max(1);
+    ((width - GAP * (columns - 1) as f32) / columns as f32).max(1.0)
+}
 
 /// The app state a library screen draws from. Rune binds every callback to the app's own state
 /// type, so the screen cannot name one implementation.
@@ -147,6 +178,10 @@ pub struct Library {
     pub confirming_archive: Option<Id>,
     /// The card waiting for a deck, while the sidebar offers itself as one.
     pub moving_card: Option<Id>,
+    /// Which tile has its action menu open, if any.
+    pub menu: Option<Id>,
+    /// The width the grid was last laid out at, so the column count follows the window.
+    pub grid_width: f32,
 }
 
 impl Default for Library {
@@ -166,6 +201,8 @@ impl Default for Library {
             moving: None,
             confirming_archive: None,
             moving_card: None,
+            menu: None,
+            grid_width: 0.0,
         }
     }
 }
@@ -293,6 +330,56 @@ impl Library {
                 due_at: (id % 3 == 2).then_some(-1),
             })
             .collect();
+        library.refresh();
+        library
+    }
+
+    /// A library whose tiles differ: long first sides, tags, and cards in each schedule state, so a
+    /// scene shows the grid the way real content lays it out.
+    pub fn seeded_tiles() -> Library {
+        let mut library = Library::seeded(9);
+        {
+            let cards = Arc::make_mut(&mut library.snapshot);
+            let texts = [
+                ("What is mitosis?", "Cell division."),
+                (
+                    "Name the four chambers of the heart, in the order blood reaches them",
+                    "Right atrium, right ventricle, left atrium, left ventricle.",
+                ),
+                ("El subjuntivo de \"hablar\"", "hable."),
+                (
+                    "Explain osmosis in one sentence.",
+                    "Water crossing a membrane.",
+                ),
+                (
+                    "Which organelle makes ATP, and what does the inner membrane fold into?",
+                    "The mitochondrion; cristae.",
+                ),
+                (
+                    "¿Qué es la fotosíntesis?",
+                    "Cómo las plantas hacen alimento.",
+                ),
+                (
+                    "List the stages of mitosis.",
+                    "Prophase, metaphase, anaphase, telophase.",
+                ),
+                ("What does a ribosome do?", "Builds proteins."),
+                (
+                    "Describe the difference between diffusion and active transport, with an example of each",
+                    "Diffusion is passive; active transport spends ATP, as the sodium pump does.",
+                ),
+            ];
+            for (card, (front, back)) in cards.cards.iter_mut().zip(texts) {
+                card.markdown = format!("{front}\n---\n{back}");
+                card.preview = front.to_string();
+                card.search_text = format!("{front} {back}").to_lowercase();
+            }
+            cards.cards[0].tags = vec!["biology".to_string()];
+            cards.cards[1].tags = vec!["biology".to_string(), "anatomy".to_string()];
+            cards.cards[4].tags = vec!["cells".to_string()];
+            cards.cards[6].tags = vec!["exam".to_string(), "biology".to_string()];
+        }
+        // The list is a projection of the snapshot, so it has to be rebuilt from the fixture.
         library.refresh();
         library
     }
@@ -487,7 +574,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let mut sidebar = col()
         .key("decks")
-        .w(200.0)
+        .w(SIDEBAR_WIDTH)
         .h_full()
         .padding(8.0)
         .gap(2.0)
@@ -617,7 +704,8 @@ fn filter_bar<S: Host>(s: &S) -> El {
             .variant(ButtonVariant::Submit)
             .on_press(|s: &mut S| s.new_card())
             .build(&KIT)
-            .key("new-card"),
+            // The empty deck's tile owns `new-card`; this bar button is the other way in.
+            .key("new-card-button"),
     );
     if let Some(deck) = library.selected_deck {
         bar = bar.child(
@@ -637,91 +725,25 @@ fn plural(count: usize) -> &'static str {
     if count == 1 { "card" } else { "cards" }
 }
 
-fn card_row<S: Host>(card: &CardSummary, selected: bool, mode: CardMode) -> El {
-    let t = tok::theme(true);
-    let id = card.id;
-    let mut tags = String::new();
-    for tag in &card.tags {
-        if !tags.is_empty() {
-            tags.push(' ');
-        }
-        tags.push('#');
-        tags.push_str(tag);
-    }
-    let note = if card.sides < 2 { "note" } else { "" };
-    let mut line = row()
-        .key(format!("card-{}", card.id))
-        .h(ROW_HEIGHT)
-        .px(12.0)
-        .center_y()
-        .gap(8.0)
-        .fill(if selected {
-            t.control_off
-        } else {
-            t.control_off.alpha(0.0)
-        })
-        .child(
-            text(if card.preview.is_empty() {
-                "(empty)".to_string()
-            } else {
-                card.preview.clone()
-            })
-            .font(type_::BODY)
-            .grow(1.0)
-            .color(t.text),
-        )
-        .child(text(tags).font(type_::LABEL).color(t.text_secondary))
-        .child(text(note).font(type_::LABEL).color(t.text_secondary));
-    if mode == CardMode::Active {
-        line = line
-            .child(
-                Button::new("Move")
-                    .variant(ButtonVariant::Ghost)
-                    .on_press(move |s: &mut S| s.library_mut().moving_card = Some(id))
-                    .build(&KIT)
-                    .key(format!("move-card-{id}")),
-            )
-            .child(
-                Button::new("Edit")
-                    .variant(ButtonVariant::Ghost)
-                    .on_press(move |s: &mut S| s.open_card(id))
-                    .build(&KIT)
-                    .key(format!("edit-{id}")),
-            )
-            .child(
-                Button::new("Archive")
-                    .variant(ButtonVariant::Ghost)
-                    .on_press(move |s: &mut S| s.archive_card(id))
-                    .build(&KIT)
-                    .key(format!("archive-{id}")),
-            )
-            .child(
-                Button::new("Delete")
-                    .variant(ButtonVariant::Ghost)
-                    .on_press(move |s: &mut S| s.trash_card(id))
-                    .build(&KIT)
-                    .key(format!("delete-{id}")),
-            );
-    } else {
-        line = line.child(
-            Button::new("Restore")
-                .variant(ButtonVariant::Ghost)
-                .on_press(move |s: &mut S| s.restore_card(id))
-                .build(&KIT)
-                .key(format!("restore-{id}")),
-        );
-    }
-    // The row is the card's primary action, and the only one assistive technology offers: a
-    // press opens it, because the row is what the accessibility tree exposes as a button.
-    line.on_press(move |s: &mut S| {
-        s.library_mut().selected_card = Some(id);
-        s.open_card(id);
-    })
-}
-
 /// The library screen.
 pub fn view<S: Host>(s: &S) -> El {
     let library = s.library();
+    let now = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock);
+    // The grid is laid out from the width the scroll viewport actually got, so the column count
+    // follows the window rather than a constant.
+    let width = if library.grid_width > 0.0 {
+        library.grid_width
+    } else {
+        FALLBACK_GRID_WIDTH
+    };
+    let columns = columns_for(width);
+    let tile_width = tile_width(width, columns);
+    // An empty deck still draws one line: that line holds the tile that starts the first card.
+    let lines = if library.visible.is_empty() {
+        1
+    } else {
+        tile_rows(library.visible.len(), columns)
+    };
     let list = col()
         .key("cards")
         .grow(1.0)
@@ -734,16 +756,22 @@ pub fn view<S: Host>(s: &S) -> El {
                 .key("rows")
                 .growth(GrowthSpec::default())
                 .virtual_rows(
-                    library.visible.len(),
-                    ROW_HEIGHT,
-                    |s: &S, index| -> Cow<'_, str> {
-                        format!("card-{}", s.library().visible[index].id).into()
-                    },
-                    |s: &S, index| {
+                    lines,
+                    TILE_HEIGHT + GAP,
+                    |_s: &S, index| -> Cow<'_, str> { format!("line-{index}").into() },
+                    move |s: &S, index| {
+                        s.library().built_rows.fetch_add(1, Ordering::Relaxed);
                         let library = s.library();
-                        library.built_rows.fetch_add(1, Ordering::Relaxed);
-                        let card = &library.visible[index];
-                        card_row::<S>(card, library.selected_card == Some(card.id), library.mode)
+                        let mut line = row().key("line").w_full().gap(GAP).items_start();
+                        if library.visible.is_empty() {
+                            return line.child(self::tile::placeholder::<S>(tile_width));
+                        }
+                        let first = index * columns;
+                        let last = (first + columns).min(library.visible.len());
+                        for card in &library.visible[first..last] {
+                            line = line.child(self::tile::tile::<S>(s, card, tile_width, now));
+                        }
+                        line
                     },
                 ),
         );
@@ -751,6 +779,14 @@ pub fn view<S: Host>(s: &S) -> El {
         .w_full()
         .h_full()
         .fill(tok::theme(true).bg)
+        .on_layout(|s: &mut S, rect: [f32; 4]| {
+            // The window, less the sidebar: measuring the grid's own parent would make the tiles
+            // decide the width they are laid out in.
+            let width = (rect[2] - SIDEBAR_WIDTH).max(0.0);
+            if (s.library().grid_width - width).abs() > 0.5 {
+                s.library_mut().grid_width = width;
+            }
+        })
         .child(deck_sidebar::<S>(s))
         .child(
             col()
@@ -835,7 +871,7 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
         .build(&KIT, layer);
 }
 
-#[cfg(test)]
 pub mod tile;
 
+#[cfg(test)]
 mod tests;
