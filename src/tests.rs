@@ -461,3 +461,96 @@ fn the_archived_and_trash_views_restore_and_destroy() {
         "and the library holds no trace of it"
     );
 }
+
+#[test]
+fn archiving_a_card_and_a_deck_takes_them_out_of_the_library() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    assert_eq!(state.library.cards().len(), 1, "the card starts active");
+
+    // Give it a schedule, so archiving has a due date to preserve.
+    let graded = state
+        .store
+        .as_ref()
+        .expect("store")
+        .grade(1, "fwd", Grade::Remembered, None)
+        .expect("sent");
+    settle(&mut state, graded);
+    let far = i64::MAX / 4;
+    let due = |state: &mut State| {
+        let id = state
+            .store
+            .as_ref()
+            .expect("store")
+            .due_prompts(far, 0, 1)
+            .expect("sent");
+        for _ in 0..200 {
+            let answer = state
+                .store
+                .as_ref()
+                .expect("store")
+                .poll()
+                .into_iter()
+                .find(|event| event.id == id);
+            if let Some(event) = answer {
+                if let Ok(Outcome::Due(prompts)) = event.result {
+                    return prompts.len();
+                }
+                panic!("expected the due queue");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        panic!("no answer for the due queue");
+    };
+    assert_eq!(due(&mut state), 1, "the graded card is scheduled");
+
+    library::Host::archive_card(&mut state, 1);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        state.library.cards().is_empty(),
+        "an archived card leaves the active view"
+    );
+    assert_eq!(due(&mut state), 0, "and leaves the due queue");
+
+    library::Host::restore_card(&mut state, 1);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if !state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "restoring brings it back to the active view"
+    );
+    assert_eq!(due(&mut state), 1, "and its due date came back with it");
+
+    // A deck archive takes everything under it out of the library.
+    library::Host::archive_deck(&mut state, 1);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        state.library.cards().is_empty(),
+        "a card under an archived deck leaves the active view"
+    );
+    assert_eq!(due(&mut state), 0, "and leaves the due queue with it");
+}

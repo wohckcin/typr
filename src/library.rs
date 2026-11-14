@@ -29,6 +29,12 @@ pub trait Host: 'static {
         self.library_mut().set_mode(mode);
     }
 
+    /// Take a card out of the library without deleting it.
+    fn archive_card(&mut self, _card: Id) {}
+
+    /// Take a whole deck, and everything under it, out of the library.
+    fn archive_deck(&mut self, _deck: Id) {}
+
     /// Bring a card out of the archive or the trash. A host with no store cannot, and says so by
     /// doing nothing.
     fn restore_card(&mut self, _card: Id) {}
@@ -301,6 +307,15 @@ fn filter_bar<S: Host>(s: &S) -> El {
     if library.mode == CardMode::Trash {
         bar = bar.child(empty_trash_button::<S>());
     }
+    if let Some(deck) = library.selected_deck {
+        bar = bar.child(
+            Button::new("Archive deck")
+                .variant(ButtonVariant::Ghost)
+                .on_press(move |s: &mut S| s.archive_deck(deck))
+                .build(&KIT)
+                .key("archive-deck"),
+        );
+    }
     bar
 }
 
@@ -340,7 +355,15 @@ fn card_row<S: Host>(card: &CardSummary, selected: bool, mode: CardMode) -> El {
         )
         .child(text(tags).font(type_::LABEL).color(t.text_secondary))
         .child(text(note).font(type_::LABEL).color(t.text_secondary));
-    if mode != CardMode::Active {
+    if mode == CardMode::Active {
+        line = line.child(
+            Button::new("Archive")
+                .variant(ButtonVariant::Ghost)
+                .on_press(move |s: &mut S| s.archive_card(id))
+                .build(&KIT)
+                .key(format!("archive-{id}")),
+        );
+    } else {
         line = line.child(
             Button::new("Restore")
                 .variant(ButtonVariant::Ghost)

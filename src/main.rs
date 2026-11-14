@@ -104,6 +104,26 @@ impl library::Host for State {
         &mut self.library
     }
 
+    fn archive_card(&mut self, card: Id) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.archive_card(card, true),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
+    }
+
+    fn archive_deck(&mut self, deck: Id) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.archive_deck(deck, true),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
+    }
+
     fn restore_card(&mut self, card: Id) {
         // The archive is undone by un-archiving; the trash by restoring. Which one depends on the
         // view the button sits in, and that is the list's mode.

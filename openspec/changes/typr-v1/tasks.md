@@ -35,7 +35,7 @@
 - [x] 4.2 Implement card creation, edit and reassignment between decks, and verify a test that a moved card keeps its `prompt` row and due date
 - [x] 4.3 Implement tags stored on the card, case-insensitive matching with first-seen casing preserved, and verify a test that filters by `grammar` and matches `Grammar`, and that a `#` heading produces no tag
 - [x] 4.4 Implement card search over `search_text` with case and diacritic folding, and verify `cancion` finds `Canción` and that results stay within the selected deck's subtree
-- [ ] 4.5 Implement archive for cards and decks with the archived view and restore, and verify an archived due card is absent from the due queue and its due date survives restore
+- [x] 4.5 Implement archive for cards and decks with the archived view and restore, and verify an archived due card is absent from the due queue and its due date survives restore
 
   **Open**: `Command::ArchiveCard` and `Db::archive_card` exist and are tested, but nothing in `src/` calls them and no control switches `Library::mode`, so the archived view cannot be reached. The remaining work is the screen, not the store.
 - [x] 4.6 Implement the studyable predicate (not archived, not trashed, no archived ancestor), and verify a card under an archived deck is absent from both queues while a sibling deck's cards remain
