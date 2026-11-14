@@ -87,7 +87,7 @@ fn a_library_written_before_the_split_still_opens_and_grades() {
     );
     assert_eq!(
         db.prompt_keys(card).expect("prompts"),
-        vec!["fwd".to_string()],
+        vec!["fwd".to_string(), "rev".to_string()],
         "no prompt was invented or lost"
     );
     assert!(

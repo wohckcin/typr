@@ -29,6 +29,11 @@ const V5: &str = r#"
 ALTER TABLE deck ADD COLUMN reverse INTEGER;
 ALTER TABLE card ADD COLUMN reverse INTEGER;
 INSERT OR IGNORE INTO settings (key, value) VALUES ('reverse_default', '0');
+-- Every two-sided card claims a reverse prompt from now on, so a library written before this
+-- column existed gets the row here rather than waiting to be saved again: turning reverse on must
+-- queue what is already there.
+INSERT OR IGNORE INTO prompt (card_id, key, phase)
+    SELECT id, 'rev', 'learn' FROM card WHERE sides >= 2;
 DROP VIEW IF EXISTS studyable_prompt;
 CREATE VIEW studyable_prompt AS
 WITH RECURSIVE archived_deck(id) AS (

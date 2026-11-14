@@ -319,8 +319,8 @@ fn a_library_from_before_hidden_text_gains_the_column() {
     );
     assert_eq!(
         db.prompt_keys(card).expect("keys"),
-        vec!["fwd".to_string()],
-        "an older library holds one prompt per two-sided card"
+        vec!["fwd".to_string(), "rev".to_string()],
+        "an older library keeps its forward prompt and gains the reverse one the backfill writes"
     );
     assert_eq!(
         studyable(&db),
@@ -428,14 +428,36 @@ fn a_library_from_before_reverse_gains_the_columns() {
     let path = dir.path().join("library.sqlite3");
     {
         let db = Db::open(&path).expect("open");
+        let deck = match db
+            .apply(
+                &Command::CreateDeck {
+                    parent: None,
+                    name: "Deck".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            Outcome::Deck(id) => id,
+            other => panic!("creating a deck: {other:?}"),
+        };
+        // Written before V5 existed: a two-sided card and a note, and no `rev` row for either.
         db.apply(
-            &Command::CreateDeck {
-                parent: None,
-                name: "Deck".to_string(),
+            &Command::CreateCard {
+                deck,
+                markdown: "front\n---\nback".to_string(),
             },
             0,
         )
-        .expect("deck");
+        .expect("two-sided card");
+        db.apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "a note".to_string(),
+            },
+            0,
+        )
+        .expect("note");
         rewind_for_test(db.connection_for_test(), 4);
     }
 
@@ -460,6 +482,26 @@ fn a_library_from_before_reverse_gains_the_columns() {
         )
         .expect("the library default");
     assert_eq!(default, "0", "reverse is off until asked for");
+
+    // The backfill: a card written before reverse existed already claims its reverse prompt, so
+    // turning reverse on queues what is already in the library instead of waiting for a re-save.
+    let rev_cards: Vec<Id> = {
+        let mut stmt = db
+            .connection_for_test()
+            .prepare("SELECT card_id FROM prompt WHERE key = 'rev' ORDER BY card_id")
+            .expect("statement");
+        let rows = stmt.query_map([], |row| row.get(0)).expect("query");
+        rows.collect::<Result<Vec<Id>, _>>().expect("rows")
+    };
+    let two_sided: Id = db
+        .connection_for_test()
+        .query_row("SELECT id FROM card WHERE sides >= 2", [], |row| row.get(0))
+        .expect("the two-sided card");
+    assert_eq!(
+        rev_cards,
+        vec![two_sided],
+        "the two-sided card gains a reverse prompt and the note does not"
+    );
 }
 
 #[test]
