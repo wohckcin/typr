@@ -815,3 +815,46 @@ fn the_backlink_panel_lists_every_referrer() {
         "the backlink opened the card that refers here"
     );
 }
+
+/// Typing `[[` offers the library's names, and choosing one finishes the reference.
+#[test]
+fn typing_two_brackets_offers_names_and_a_choice_fills_them() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (handle, _, referrer, _, _) = referencing_library(&dir);
+    let mut state = editing(handle, referrer);
+    state.editor.buffer.replace_text("See [[Kr".to_string());
+    state.editor.settle();
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+    assert!(
+        runtime.find("reference-picker").is_some(),
+        "the picker is drawn while a reference is being typed"
+    );
+    let (x, y) = runtime
+        .find("reference-option-0")
+        .expect("the matching card is offered");
+    assert!(
+        runtime
+            .elements()
+            .iter()
+            .any(
+                |element| element.key.as_deref() == Some("reference-option-0")
+                    && element.label.as_deref() == Some("Krebs cycle")
+            ),
+        "the option is the card's name"
+    );
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+    assert_eq!(
+        runtime.state.editor.buffer.text, "See [[Krebs cycle]]",
+        "the choice finishes the reference and closes it"
+    );
+}

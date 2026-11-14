@@ -250,6 +250,23 @@ impl editor::Host for State {
     fn open_card(&mut self, card: Id) {
         <State as crate::library::Host>::open_card(self, card);
     }
+
+    fn card_names(&self) -> Vec<String> {
+        let editing = self.editor.card;
+        let mut names: Vec<String> = self
+            .library
+            .snapshot()
+            .cards
+            .iter()
+            .filter(|card| {
+                Some(card.id) != editing && card.trashed_at.is_none() && !card.name.is_empty()
+            })
+            .map(|card| card.name.clone())
+            .collect();
+        names.sort_by_key(|name| typr_core::store::folded(name));
+        names.dedup_by(|a, b| typr_core::store::folded(a) == typr_core::store::folded(b));
+        names
+    }
 }
 
 /// How many whole study days a prompt is past its due date, which is what decides whether a

@@ -49,6 +49,11 @@ pub trait Host: 'static {
 
     /// Open another card, which a reference or a backlink asks for.
     fn open_card(&mut self, _card: Id) {}
+
+    /// The names a half-typed reference can complete to. A host without a library offers none.
+    fn card_names(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 impl Host for Editor {
@@ -428,6 +433,41 @@ impl Editor {
         self.kind == CardKind::Diagram
     }
 
+    /// The reference being typed at the caret: where its name starts, and what is typed so far.
+    ///
+    /// `None` when the caret is not inside `[[…]]` with nothing in the way: a closed reference, a
+    /// selection, or a line break between the brackets is not something to complete.
+    pub fn reference_query(&self) -> Option<(usize, String)> {
+        let caret = self.buffer.focus;
+        if self.buffer.range() != (caret, caret) {
+            return None;
+        }
+        let before = self.buffer.text.get(..caret)?;
+        let open = before.rfind("[[")?;
+        let typed = &before[open + 2..];
+        if typed.contains("]]") || typed.contains('\n') {
+            return None;
+        }
+        Some((open + 2, typed.to_string()))
+    }
+
+    /// Finish the reference being typed with `name`, and close it if the author has not.
+    pub fn complete_reference(&mut self, name: &str) {
+        let Some((start, typed)) = self.reference_query() else {
+            return;
+        };
+        let end = start + typed.len();
+        let closing = if self.buffer.text[end..].starts_with("]]") {
+            ""
+        } else {
+            "]]"
+        };
+        self.buffer.anchor = start;
+        self.buffer.focus = end;
+        self.buffer.insert(&format!("{name}{closing}"));
+        self.settle();
+    }
+
     /// Switch between the two kinds. The text is kept either way, so a switch is undoable.
     /// Switch the card between text and a diagram, refusing the switch while the card holds what
     /// the other kind would hide: converting a card is not a way to throw its content away.
@@ -790,6 +830,49 @@ fn markdown<S: Host>(attachments: &Attachments, text: &str, key: u64) -> El {
             })
             .render(&MarkdownStyle::neutral(true))
     })
+}
+
+/// The names a half-typed reference can complete to, each one press away.
+fn reference_picker<S: Host>(s: &S) -> El {
+    let t = tok::theme(true);
+    let mut picker = col().key("reference-picker").w_full().gap(2.0);
+    // A templated card's text comes from its fields, so there is no markdown pane to complete.
+    if s.editor().templated() {
+        return picker;
+    }
+    let Some((_, typed)) = s.editor().reference_query() else {
+        return picker;
+    };
+    let needle = typr_core::store::folded(&typed);
+    let mut offered = 0;
+    for name in s.card_names() {
+        if !typr_core::store::folded(&name).contains(&needle) {
+            continue;
+        }
+        // Eight is a glance; a longer list would cover the text being written.
+        if offered == 8 {
+            break;
+        }
+        let index = offered;
+        let pick = name.clone();
+        picker = picker.child(
+            Button::new(name)
+                .variant(ButtonVariant::Ghost)
+                .on_press(move |s: &mut S| s.editor_mut().complete_reference(&pick))
+                .build(&KIT)
+                .key(format!("reference-option-{index}")),
+        );
+        offered += 1;
+    }
+    if offered == 0 {
+        return picker;
+    }
+    picker.child(
+        text("Choose a card to finish the reference")
+            .key("reference-hint")
+            .font(type_::LABEL)
+            .color(t.text_secondary),
+    )
 }
 
 fn source_pane<S: Host>(s: &S) -> El {
@@ -1334,7 +1417,8 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                             field_pane::<S>(s)
                         } else {
                             source_pane::<S>(s)
-                        }),
+                        })
+                        .child(reference_picker::<S>(s)),
                 )
                 .child(preview_pane::<S>(s))
                 .children(s.editor().showing_history.then(|| {
