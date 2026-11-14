@@ -1068,3 +1068,48 @@ fn setting_reverse_on_a_card_or_deck_that_does_not_exist_is_refused() {
         "{deck:?}"
     );
 }
+
+#[test]
+fn a_card_counts_once_against_the_cap_however_many_directions_it_holds() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    db.apply(
+        &Command::SetSetting {
+            key: "new_per_day".to_string(),
+            value: "1".to_string(),
+        },
+        0,
+    )
+    .expect("cap to one");
+    let deck = deck(&mut db, "Languages");
+    db.apply(
+        &Command::SetDeckReverse {
+            deck,
+            reverse: Some(true),
+        },
+        0,
+    )
+    .expect("reverse on");
+    let both = card(&mut db, deck, "front\n---\nback");
+
+    for seed in 1..12 {
+        let queued = db.new_prompts(NOON, 0, seed, None).expect("the queue");
+        let mut keys: Vec<&str> = queued.iter().map(|prompt| prompt.key.as_str()).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            ["fwd", "rev"],
+            "one card's allowance buys both of its directions"
+        );
+    }
+
+    // The day's ledger agrees: a card that graduated in both directions fills one slot.
+    grade(&mut db, both, "fwd", Grade::Remembered, NOON);
+    grade(&mut db, both, "rev", Grade::Remembered, NOON);
+    assert_eq!(
+        db.learned_on(crate::day::study_day(NOON, 0), 0)
+            .expect("learned"),
+        1,
+        "two directions of one card are one card learned"
+    );
+}
