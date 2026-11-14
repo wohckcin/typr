@@ -13,8 +13,9 @@ use typr_core::store::{Grade, Id, StoreError};
 pub trait Host: 'static {
     fn session(&self) -> &Session;
     fn session_mut(&mut self) -> &mut Session;
-    /// Send the grade to the store and answer the id it was sent under.
-    fn submit_grade(&mut self, card: Id, grade: Grade) -> Result<u64, StoreError>;
+    /// Send the grade to the store and answer the id it was sent under. The key names the prompt
+    /// being answered: a card may hold a forward prompt, a reverse one, or a group apiece.
+    fn submit_grade(&mut self, card: Id, key: &str, grade: Grade) -> Result<u64, StoreError>;
     /// How many cards are due right now, for the summary.
     fn due_now(&self) -> usize;
     /// Leave the session and go back to the library.
@@ -27,6 +28,20 @@ pub trait Host: 'static {
     fn keycaps(&self) -> bool {
         false
     }
+
+    /// The picture a diagram card asks about, resolved from its name under the attachments folder.
+    fn picture(&self, _src: &str) -> Option<rune::Image> {
+        None
+    }
+
+    /// The size the picture pane had when it was last laid out, in points. Covers are placed
+    /// against it, so it is only known once the frame has been laid out.
+    fn picture_pane(&self) -> (f32, f32) {
+        (0.0, 0.0)
+    }
+
+    /// Record the size the picture pane was laid out at.
+    fn set_picture_pane(&mut self, _width: f32, _height: f32) {}
 }
 
 /// Run a command the table bound to the session surface. Answers whether it was used.
@@ -79,7 +94,10 @@ pub fn answer<S: Host>(s: &mut S, grade: Grade) {
     let Some((card, grade)) = s.session_mut().grade(grade) else {
         return;
     };
-    match s.submit_grade(card, grade) {
+    // The prompt is the one on screen when the grade was chosen; a session that moved on before the
+    // send still grades the prompt the user actually answered.
+    let key = s.session().prompt_of(card).unwrap_or("fwd").to_string();
+    match s.submit_grade(card, &key, grade) {
         Ok(id) => s.session_mut().sent(id),
         Err(_) => s.session_mut().unsent(),
     }
@@ -120,6 +138,73 @@ fn side_heading<S: Host>(s: &S) -> String {
 }
 
 /// One side of the current card, rendered, with what is still hidden.
+/// The picture of a diagram face, with the group being asked covered until the answer is revealed.
+///
+/// The covers are placed against the size the pane had in the last frame, because an image's drawn
+/// size is only known once it has been laid out. The first frame therefore draws the picture without
+/// covers and the second draws them, which is the same one-frame settle the grid uses for its
+/// column count.
+fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
+    let t = tok::theme(true);
+    let (image, caption, masks) = face.picture()?;
+    let unmasked = s.session().revealed() > 0 || !face.unmasks();
+    let (pane_w, pane_h) = s.picture_pane();
+
+    let mut pane = col()
+        .key("diagram-face")
+        .w_full()
+        .gap(6.0)
+        .on_layout(|s: &mut S, rect| s.set_picture_pane(rect[2], rect[3]));
+
+    match s.picture(image) {
+        Some(picture) => {
+            let mut drawn = rune::el().role("image").w_full().padding(0.0);
+            if let Some([w, _]) = picture.size() {
+                drawn = drawn.max_w(w as f32);
+            }
+            pane = pane.child(drawn.pixels(picture.pixels()));
+        }
+        None => {
+            pane = pane.child(
+                text(format!("The picture {image} is missing"))
+                    .key("diagram-missing")
+                    .color(t.text_secondary)
+                    .font(type_::LABEL),
+            );
+        }
+    }
+
+    if !unmasked {
+        // One cover per rectangle of the group being asked, in the pane's own points. A rectangle
+        // outside the pane is clamped rather than drawn over the edge.
+        for (index, mask) in masks.iter().enumerate() {
+            let left = (mask.x * pane_w).clamp(0.0, pane_w);
+            let top = (mask.y * pane_h).clamp(0.0, pane_h);
+            let width = (mask.w * pane_w).min(pane_w - left);
+            let height = (mask.h * pane_h).min(pane_h - top);
+            pane = pane.child(
+                col()
+                    .key(format!("cover-{index}"))
+                    .absolute(left, top)
+                    .size(width, height)
+                    .radius(2.0)
+                    .fill(t.card)
+                    .border(1.0, t.text_secondary.alpha(0.35)),
+            );
+        }
+    }
+
+    if let Some(caption) = caption {
+        pane = pane.child(
+            text(caption.to_owned())
+                .key("diagram-caption")
+                .color(t.text_secondary)
+                .font(type_::LABEL),
+        );
+    }
+    Some(pane)
+}
+
 pub fn view<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let session = s.session();
@@ -138,6 +223,9 @@ pub fn view<S: Host>(s: &S) -> El {
         });
     for el in body {
         card = card.child(el);
+    }
+    if let Some(picture) = session.asking().and_then(|face| picture_face(s, face)) {
+        card = card.child(picture);
     }
     if session.hidden() > 0 {
         card = card.child(

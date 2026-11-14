@@ -225,6 +225,14 @@ impl Session {
         self.read_only = false;
     }
 
+    /// The prompt key of one card in this session, if it is here at all.
+    pub fn prompt_of(&self, card: Id) -> Option<&str> {
+        self.entries
+            .iter()
+            .find(|entry| entry.card == card)
+            .map(|entry| entry.prompt.as_str())
+    }
+
     /// The card on screen, if there is one.
     pub fn current(&self) -> Option<&Entry> {
         self.entries.get(self.at)

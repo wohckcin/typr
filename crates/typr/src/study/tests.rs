@@ -11,9 +11,13 @@ const NOON: i64 = 1_760_000_000_000;
 struct App {
     session: Session,
     sent: Vec<(u64, Id, Grade)>,
+    /// The prompt key each grade was sent under, so a test can say which prompt was answered.
+    keys: Vec<(Id, String)>,
     due: usize,
     left: bool,
     shuffles: u32,
+    /// The size the picture pane reads as laid out, which places a diagram face's covers.
+    pane: (f32, f32),
 }
 
 impl App {
@@ -25,9 +29,11 @@ impl App {
         App {
             session: Session::new(queue, entries),
             sent: Vec::new(),
+            keys: Vec::new(),
             due: 0,
             left: false,
             shuffles: 0,
+            pane: (400.0, 300.0),
         }
     }
 
@@ -50,10 +56,19 @@ impl Host for App {
         &mut self.session
     }
 
-    fn submit_grade(&mut self, card: Id, grade: Grade) -> Result<u64, StoreError> {
+    fn submit_grade(&mut self, card: Id, key: &str, grade: Grade) -> Result<u64, StoreError> {
         let id = self.sent.len() as u64 + 1;
         self.sent.push((id, card, grade));
+        self.keys.push((card, key.to_string()));
         Ok(id)
+    }
+
+    fn picture_pane(&self) -> (f32, f32) {
+        self.pane
+    }
+
+    fn set_picture_pane(&mut self, width: f32, height: f32) {
+        self.pane = (width, height);
     }
 
     fn due_now(&self) -> usize {
@@ -169,7 +184,7 @@ fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
     for grade in [Grade::Remembered, Grade::Forgot, Grade::Remembered] {
         app.session.reveal();
         let (card, grade) = app.session.grade(grade).unwrap();
-        let id = app.submit_grade(card, grade).expect("sent");
+        let id = app.submit_grade(card, "fwd", grade).expect("sent");
         app.session.sent(id);
         app.acknowledge();
     }
@@ -178,7 +193,7 @@ fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
         .advance_clock(NOON + typr_core::clock::LEARNING_STEP_MS);
     app.session.reveal();
     let (card, grade) = app.session.grade(Grade::Remembered).unwrap();
-    let id = app.submit_grade(card, grade).expect("sent");
+    let id = app.submit_grade(card, "fwd", grade).expect("sent");
     app.session.sent(id);
     app.acknowledge();
     assert!(app.session.finished());
@@ -242,4 +257,82 @@ fn the_session_draws_the_bindings_the_table_holds() {
             "the session does not draw {row:?}; it draws {drawn:?}"
         );
     }
+}
+
+use typr_core::store::MaskRect;
+
+fn draw_diagram(s: &App, _: &mut rune::Cx<App>) -> rune::El {
+    view(s)
+}
+
+fn diagram_app(masks: Vec<MaskRect>) -> App {
+    let mut app = App::with(Queue::Due, &[]);
+    app.session = Session::new(
+        Queue::Due,
+        vec![Entry::mask_group(
+            4,
+            "mask:2",
+            "plate.png",
+            Some("The chambers of the heart".to_string()),
+            masks,
+            0,
+        )],
+    );
+    app
+}
+
+fn render(app: App) -> Runtime<App> {
+    let mut runtime = Runtime::new(app, draw_diagram, (900.0, 700.0), Env::new(true, 1.0));
+    // The picture pane's size arrives on the first layout, so covers are placed on the second frame.
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    runtime
+}
+
+fn keys_at(runtime: &Runtime<App>, prefix: &str) -> Vec<String> {
+    runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.key)
+        .filter(|key| key.starts_with(prefix))
+        .collect()
+}
+
+#[test]
+fn a_diagram_review_covers_only_its_own_group() {
+    // Each state is measured in its own runtime: Rune keeps a keyed element after it leaves the tree,
+    // so `elements()` from one run still lists covers a later frame removed.
+    let covered = keys_at(
+        &render(diagram_app(vec![
+            MaskRect::new(0.1, 0.1, 0.2, 0.2),
+            MaskRect::new(0.2, 0.1, 0.1, 0.1),
+        ])),
+        "cover-",
+    );
+    assert_eq!(
+        covered.len(),
+        2,
+        "one cover per rectangle of the group being asked, and none for a group that is not"
+    );
+
+    let mut uncovered_app = diagram_app(vec![MaskRect::new(0.1, 0.1, 0.2, 0.2)]);
+    assert!(uncovered_app.session.reveal(), "the reveal is the answer");
+    let uncovered = keys_at(&render(uncovered_app), "cover-");
+    assert!(
+        uncovered.is_empty(),
+        "an uncovered group has nothing over it: {uncovered:?}"
+    );
+}
+
+#[test]
+fn a_diagram_review_shows_its_caption() {
+    let app = diagram_app(vec![MaskRect::new(0.1, 0.1, 0.2, 0.2)]);
+    let mut runtime = Runtime::new(app, draw_diagram, (900.0, 700.0), Env::new(true, 1.0));
+    runtime.frame(0.0);
+    let caption = runtime
+        .elements()
+        .into_iter()
+        .find(|element| element.key.as_deref() == Some("diagram-caption"))
+        .and_then(|element| element.text);
+    assert_eq!(caption.as_deref(), Some("The chambers of the heart"));
 }

@@ -92,6 +92,8 @@ struct State {
     arrivals: Option<u64>,
     /// The deck the running session was opened for, so arrivals stay inside it.
     session_deck: Option<Id>,
+    /// The size the picture pane was laid out at, which places a diagram face's covers.
+    picture_pane: (f32, f32),
     /// The history request in flight, with the card it was made for.
     history_request: Option<(u64, Id)>,
     /// The create-card request in flight, whose answer carries the new id.
@@ -134,6 +136,7 @@ impl Default for State {
             card_request: None,
             failure: None,
             seeded: false,
+            picture_pane: (0.0, 0.0),
             seed: 1,
             pending_new_card: None,
             deck_request: None,
@@ -454,12 +457,24 @@ impl study::Host for State {
         &mut self.session
     }
 
-    fn submit_grade(&mut self, card: Id, grade: Grade) -> Result<u64, StoreError> {
+    fn picture(&self, src: &str) -> Option<rune::Image> {
+        self.editor.attachments.picture(src)
+    }
+
+    fn picture_pane(&self) -> (f32, f32) {
+        self.picture_pane
+    }
+
+    fn set_picture_pane(&mut self, width: f32, height: f32) {
+        self.picture_pane = (width, height);
+    }
+
+    fn submit_grade(&mut self, card: Id, key: &str, grade: Grade) -> Result<u64, StoreError> {
         let Some(store) = &self.store else {
             self.fail(&StoreError::Closed);
             return Err(StoreError::Closed);
         };
-        let sent = store.grade(card, "fwd", grade, None);
+        let sent = store.grade(card, key, grade, None);
         // A grade is a command like any other: it is timed, so a slow one is written down.
         if let Ok(id) = &sent {
             self.sent.insert(*id, ("grade", Instant::now()));

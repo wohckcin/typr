@@ -16,7 +16,7 @@ turns into an enum.
 
 - [x] 2.1 `Face` becomes an enum with a text and an image variant; `Session` builds image faces from the mask group, counting one face per group.
   - **Verification**: `a_mask_group_is_one_face` grades after a single reveal; all sides and cloze tests still pass.
-- [ ] 2.2 The review screen draws the image with the group's rectangles covered and uncovers them on reveal, showing the caption when present.
+- [x] 2.2 The review screen draws the image with the group's rectangles covered and uncovers them on reveal, showing the caption when present.
   - **Verification**: `crates/typr/src/tests.rs::a_diagram_review_covers_only_its_own_group` reads the rendered elements for one cover per rectangle of the reviewed group and none for the other; `a_diagram_review_shows_its_caption` finds the caption text.
 
 ## 3. Author a diagram

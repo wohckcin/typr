@@ -74,7 +74,9 @@ fn a_grade_is_timed_like_any_other_command() {
         ..State::default()
     };
 
-    let id = state.submit_grade(1, Grade::Remembered).expect("sent");
+    let id = state
+        .submit_grade(1, "fwd", Grade::Remembered)
+        .expect("sent");
     assert!(
         state.sent.contains_key(&id),
         "a grade is timed, so a slow one can be written down"

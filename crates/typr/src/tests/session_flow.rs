@@ -11,7 +11,7 @@ fn a_grade_that_lands_after_leaving_does_not_open_a_summary() {
         ..State::default()
     };
     let grade = state.session.grade(Grade::Remembered).expect("graded").1;
-    let id = state.submit_grade(1, grade).expect("sent");
+    let id = state.submit_grade(1, "fwd", grade).expect("sent");
     state.session.sent(id);
 
     state.leave_session();
@@ -83,7 +83,7 @@ fn a_refused_grade_says_why_and_leaves_the_card_up() {
         ..State::default()
     };
     let grade = state.session.grade(Grade::Remembered).expect("graded").1;
-    let id = state.submit_grade(9, grade).expect("sent");
+    let id = state.submit_grade(9, "fwd", grade).expect("sent");
     state.session.sent(id);
 
     for _ in 0..100 {
