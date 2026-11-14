@@ -159,6 +159,7 @@ points, and the action stays.
 | Library | `s` | Review what is due |
 | Library | `n` | Review the new cards |
 | Library | `c` | New card |
+| Library | `x` | Cram the cards the filter selects |
 | Editor | `s` | Save the card |
 | Editor | `h` | Show the card's history |
 | Editor | `Alt+N` | Add a rectangle to a diagram |

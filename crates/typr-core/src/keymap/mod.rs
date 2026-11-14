@@ -48,6 +48,7 @@ pub enum Command {
     NarrowerRectangle,
     TallerRectangle,
     ShorterRectangle,
+    CramSession,
 }
 
 impl Command {
@@ -72,6 +73,7 @@ impl Command {
             Command::NarrowerRectangle => "Narrow the rectangle",
             Command::TallerRectangle => "Make the rectangle taller",
             Command::ShorterRectangle => "Make the rectangle shorter",
+            Command::CramSession => "Cram the cards the filter selects",
         }
     }
 }
@@ -317,6 +319,11 @@ const TABLE: &[Binding] = &[
         Surface::Summary,
         Command::ShowShortcuts,
         Chord::key(Key::Char('?')),
+    ),
+    row(
+        Surface::Library,
+        Command::CramSession,
+        Chord::key(Key::Char('x')),
     ),
 ];
 

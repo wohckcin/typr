@@ -1585,3 +1585,39 @@ fn deleting_the_view_that_is_showing_returns_to_the_whole_library() {
     assert!(!state.library.pinned_only, "the pin filter went with it");
     assert_eq!(state.library.cards().len(), 2, "every card is listed again");
 }
+
+#[test]
+fn a_cram_session_with_nothing_selected_does_not_open() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut tx = Tx::default();
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+    // The one card carries no tag, so the filter selects nothing at all.
+    state.library.tag = Some("exam".to_string());
+
+    assert!(on_key(&mut state, &letter_press("x"), &mut tx));
+    wait_for(&mut state, "the cram answer", |state| {
+        state.cram_request.is_none()
+    });
+
+    assert!(
+        matches!(state.screen, Screen::Library),
+        "a run over nothing would open on a summary of no answers"
+    );
+    assert_ne!(
+        state.session.mode(),
+        Mode::Cram,
+        "no session was opened for an empty filter"
+    );
+    assert!(
+        state
+            .failure
+            .as_deref()
+            .is_some_and(|failure| failure.contains("Nothing to cram")),
+        "the screen says there is nothing to cram: {:?}",
+        state.failure
+    );
+}

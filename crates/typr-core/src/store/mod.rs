@@ -11,6 +11,8 @@ mod view;
 
 use std::sync::Arc;
 
+use crate::hidden;
+
 pub use db::{Db, Folded, folded};
 pub use schema::{CURRENT_VERSION, SchemaFacts};
 pub use task::{Handle, Waker, WorkerStatus};
@@ -165,6 +167,31 @@ pub struct CardSummary {
 }
 
 impl CardSummary {
+    /// The questions this card holds, in the keys the store schedules it under.
+    ///
+    /// A diagram is asked a group at a time, hidden text a group at a time, and a plain card by its
+    /// sides. The store counts these in `prompts`; this names them, which is what a cram run needs
+    /// to build a queue the scheduler did not.
+    pub fn prompt_keys(&self) -> Vec<String> {
+        if self.kind == CardKind::Diagram {
+            let mut groups: Vec<u32> = self.masks.iter().map(|mask| mask.group).collect();
+            groups.sort_unstable();
+            groups.dedup();
+            return groups
+                .into_iter()
+                .map(|group| format!("mask:{group}"))
+                .collect();
+        }
+        let shape = hidden::shape(&self.markdown);
+        let mut keys = shape.prompt_keys();
+        // The effective reverse is decided by the card, its deck and the library, and none of them
+        // is here. The count is: the store already dropped `rev` from it when nothing asks it.
+        if shape.claims_reverse() && self.prompts > 1 {
+            keys.push("rev".to_string());
+        }
+        keys
+    }
+
     /// Whether a mode's slice of the library holds this card.
     ///
     /// A card is in the archive either because it was archived itself or because the deck holding

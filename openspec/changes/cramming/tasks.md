@@ -13,7 +13,7 @@ Depends on `custom-views` for `ViewSpec`.
 
 - [x] 2.1 `Db::cards_for_view(&ViewSpec) -> Result<Vec<CardSummary>, StoreError>` reuses the snapshot filter and returns studyable cards only in `Cram`, ignoring due dates and the cap.
   - **Verification**: `a_cram_selection_matches_the_list` compares the query with `Snapshot::cards_matching` for four specs; `a_cram_selection_ignores_due_dates_and_the_cap` schedules everything into next week and still returns them.
-- [ ] 2.2 Repeating: forgot requeues to the end, remembered removes, and the session finishes only when empty.
+- [x] 2.2 Repeating: forgot requeues to the end, remembered removes, and the session finishes only when empty.
   - **Verification**: `one_card_three_passes` mirrors the spec scenario, and `a_cram_session_with_nothing_selected_does_not_open`.
 
 ## 3. Screen

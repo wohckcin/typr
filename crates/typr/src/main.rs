@@ -123,6 +123,10 @@ struct State {
     panel: keymap::panel::Panel,
     /// The command palette, and what is typed into it.
     palette: keymap::palette::Palette,
+    /// The cram selection request in flight, whose answer is the run's queue.
+    cram_request: Option<u64>,
+    /// The filter the cram session walks, kept so the summary can save it as a view.
+    cram_spec: Option<ViewSpec>,
 }
 
 impl Default for State {
@@ -156,6 +160,8 @@ impl Default for State {
             sent: HashMap::new(),
             panel: keymap::panel::Panel::default(),
             palette: keymap::palette::Palette::default(),
+            cram_request: None,
+            cram_spec: None,
         }
     }
 }
@@ -952,6 +958,29 @@ impl State {
         self.wanted = Some(queue);
     }
 
+    /// Ask the store for the cards the library's filter selects, and open a cram run over them.
+    ///
+    /// The filter is the one on screen, so a drill answers what the user is looking at rather than
+    /// what the schedule happens to hold. The spec travels with the request: the summary saves the
+    /// filter the run was started from, not whatever the library holds when the run ends.
+    fn start_cram(&mut self) {
+        let Some(store) = &self.store else {
+            self.fail(&StoreError::Closed);
+            return;
+        };
+        let spec = self.library.spec();
+        let sent = store.cards_for_view(&spec);
+        if remember(
+            &mut self.sent,
+            "cards_for_view",
+            &mut self.cram_request,
+            &mut self.failure,
+            sent,
+        ) {
+            self.cram_spec = Some(spec);
+        }
+    }
+
     /// Whether an arrivals answer is for the session on screen. A request already sent when the
     /// reader walked away must not put a card into a session nobody is looking at, because that
     /// session then reads as unfinished and the app stops offering a new one.
@@ -1062,6 +1091,19 @@ impl State {
                     if self.wanted.take() == Some(Queue::New) {
                         let prompts = prompts.into_iter().map(|p| (p.card, p.key, None)).collect();
                         self.open_session(Queue::New, prompts);
+                    }
+                }
+                Ok(Outcome::Cards(cards)) if self.cram_request == Some(event.id) => {
+                    self.cram_request = None;
+                    // A run over nothing would open on a summary of no answers, so the library
+                    // stays where it is and says why.
+                    if cards.is_empty() {
+                        self.cram_spec = None;
+                        self.say("Nothing to cram: the filter selects no card".to_string());
+                    } else {
+                        self.session = Session::cram(cram_entries(&cards));
+                        self.session_deck = None;
+                        self.screen = Screen::Session;
                     }
                 }
                 Ok(Outcome::Card(id)) if self.card_request == Some(event.id) => {
@@ -1252,6 +1294,10 @@ impl State {
             }
             Command::NewCard => {
                 library::Host::new_card(self);
+                true
+            }
+            Command::CramSession => {
+                self.start_cram();
                 true
             }
             _ => false,
@@ -1490,6 +1536,21 @@ fn entry_for(card: &CardSummary, key: &str, overdue: i64) -> Option<Entry> {
             overdue,
         ),
     })
+}
+
+/// The cards a cram run walks, one question apiece.
+///
+/// A session answers a card once: answering puts the card in `answered` and the walk skips its
+/// other entries, so a second question for the same card could never be shown. The filter selects
+/// cards, so one entry each is the whole of it; forgetting returns that one entry to the end.
+fn cram_entries(cards: &[CardSummary]) -> Vec<Entry> {
+    cards
+        .iter()
+        .filter_map(|card| {
+            let key = card.prompt_keys().into_iter().next()?;
+            entry_for(card, &key, 0)
+        })
+        .collect()
 }
 
 fn main() {
