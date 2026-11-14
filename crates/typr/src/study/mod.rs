@@ -1,6 +1,8 @@
 //! The study screen: the side in front of the user, the keys that answer it, and the summary
 //! that ends a session.
 
+use std::rc::Rc;
+
 use rune::tok::{self, type_};
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, Markdown, MarkdownStyle, root};
@@ -34,6 +36,12 @@ pub trait Host: 'static {
 
     /// The picture a diagram card asks about, resolved from its name under the attachments folder.
     fn picture(&self, _src: &str) -> Option<rune::Image> {
+        None
+    }
+
+    /// The text of the card `name` names, for an embed in the reviewed text to draw. A host
+    /// without a library draws the name as one the library does not hold.
+    fn embed(&self, _name: &str) -> Option<String> {
         None
     }
 
@@ -236,10 +244,13 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
 pub fn view<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let session = s.session();
-    let body = session
-        .lines()
-        .into_iter()
-        .map(|(line, _)| Markdown::new(line).render(&MarkdownStyle::neutral(true)));
+    let body = session.lines().into_iter().map(|(line, _)| {
+        let embeds = Rc::new(crate::embed::Embeds::of(line, |name| s.embed(name)));
+        let drawn = crate::embed::expanded(line, &embeds);
+        Markdown::new(drawn)
+            .code_frame(move |card, frame| crate::embed::frame(card, frame, &embeds))
+            .render(&MarkdownStyle::neutral(true))
+    });
 
     let mut card = col()
         .key("session-card")

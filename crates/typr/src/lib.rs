@@ -4,6 +4,7 @@ pub mod keymap;
 pub mod attachments;
 pub mod day_offset;
 pub mod editor;
+pub mod embed;
 pub mod history;
 pub mod library;
 pub mod logging;

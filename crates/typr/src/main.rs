@@ -21,8 +21,8 @@ use typr_core::keymap::{Command, Surface};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Mode, Session};
 use typr_core::store::{
-    CardKind, CardMode, CardRef, CardSummary, Grade, Handle, Id, MaskRect, MaskRow, Outcome,
-    SavedView, Sort, SortDir, Store, StoreError, ViewSpec, WorkerStatus,
+    CardKind, CardMode, CardRef, CardSummary, Deck, Grade, Handle, Id, MaskRect, MaskRow, Outcome,
+    SavedView, Snapshot, Sort, SortDir, Store, StoreError, ViewSpec, WorkerStatus,
 };
 use typr_core::{day, hidden};
 
@@ -266,6 +266,10 @@ impl editor::Host for State {
         names.sort_by_key(|name| typr_core::store::folded(name));
         names.dedup_by(|a, b| typr_core::store::folded(a) == typr_core::store::folded(b));
         names
+    }
+
+    fn embed(&self, name: &str) -> Option<String> {
+        self.embed_body(name)
     }
 }
 
@@ -732,6 +736,10 @@ impl study::Host for State {
 
     fn session_mut(&mut self) -> &mut Session {
         &mut self.session
+    }
+
+    fn embed(&self, name: &str) -> Option<String> {
+        self.embed_body(name)
     }
 
     fn picture(&self, src: &str) -> Option<rune::Image> {
@@ -2086,6 +2094,50 @@ fn main() {
                 Some("Biology"),
             );
         }),
+        ("card-embed", |state: &mut State| {
+            // The preview of a card that embeds another: the named card's body is drawn inside a
+            // bordered inset, captioned with the name, with the card's own text around it.
+            state.screen = Screen::Editor;
+            state.editor = Editor::new(
+                Some(1),
+                "The stages of mitosis\n\n![[Mitosis]]\n---\nCell division.".to_string(),
+            );
+            state.library.set_snapshot(std::sync::Arc::new(Snapshot {
+                decks: vec![Deck {
+                    id: 1,
+                    parent: None,
+                    name: "Biology".to_string(),
+                    archived: false,
+                    reverse: None,
+                    template: None,
+                }],
+                cards: vec![
+                    CardSummary {
+                        id: 1,
+                        deck: 1,
+                        name: "The stages of mitosis".to_string(),
+                        markdown: "The stages of mitosis\n\n![[Mitosis]]\n---\nCell division."
+                            .to_string(),
+                        ..CardSummary::default()
+                    },
+                    CardSummary {
+                        id: 2,
+                        deck: 1,
+                        name: "Mitosis".to_string(),
+                        markdown: "Mitosis is how one cell becomes two identical cells."
+                            .to_string(),
+                        ..CardSummary::default()
+                    },
+                ],
+                ..Snapshot::default()
+            }));
+            // What a store with this library would have resolved the embed's name to, so the
+            // preview does not also report it as a reference that names no card.
+            state.editor.references = vec![CardRef {
+                id: 2,
+                name: "Mitosis".to_string(),
+            }];
+        }),
     ];
     // Without this Rune ends a window close with `_exit`, so both the worker's flush and the quit
     // record below would be skipped: data would survive only because each command commits as it is
@@ -2101,6 +2153,19 @@ fn main() {
 
     // The worker's end is only knowable after its handle went with the state, inside `rune::run`.
     finish(WORKER.get());
+}
+
+/// The card on screen is the one an embed resolves from, so the deck it sits in is preferred the
+/// way a reference's is.
+impl State {
+    fn embed_body(&self, name: &str) -> Option<String> {
+        let from = match self.screen {
+            Screen::Editor => self.editor.card,
+            Screen::Session => self.session.current().map(|entry| entry.card),
+            _ => None,
+        };
+        typr::embed::lookup(self.library.snapshot(), from, name)
+    }
 }
 
 #[cfg(test)]

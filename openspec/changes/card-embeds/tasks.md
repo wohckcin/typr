@@ -10,7 +10,7 @@
 
 ## 2. Rendering
 
-- [ ] 2.1 Draw a `typr-embed` block as an inset block with the source card's body and a
+- [x] 2.1 Draw a `typr-embed` block as an inset block with the source card's body and a
       caption naming it, in the editor preview and in a review face.
       *Verification*: a scene card embedding another draws the inset block and the caption,
       and its own text still renders around it.

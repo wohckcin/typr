@@ -12,6 +12,7 @@ use typr_core::store::Db;
 
 mod diagnostics;
 mod editor_flow;
+mod embeds;
 mod library_flow;
 mod session_flow;
 

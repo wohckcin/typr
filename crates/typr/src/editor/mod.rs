@@ -1,6 +1,7 @@
 //! The card editor: the markdown buffer on the left, its rendering on the right.
 
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
 use rune::tok::{self, type_};
 use rune::{El, ScrollSpec, TextEdit, col, memo, row, text, text_input};
@@ -53,6 +54,12 @@ pub trait Host: 'static {
     /// The names a half-typed reference can complete to. A host without a library offers none.
     fn card_names(&self) -> Vec<String> {
         Vec::new()
+    }
+
+    /// The text of the card `name` names, for an embed to draw. A host without a library draws
+    /// the name as one the library does not hold.
+    fn embed(&self, _name: &str) -> Option<String> {
+        None
     }
 }
 
@@ -814,9 +821,15 @@ pub fn preview_key(card: Option<Id>, text: &str) -> u64 {
     hasher.finish()
 }
 
-fn markdown<S: Host>(attachments: &Attachments, text: &str, key: u64) -> El {
+fn markdown<S: Host>(
+    attachments: &Attachments,
+    text: &str,
+    key: u64,
+    embeds: Rc<crate::embed::Embeds>,
+) -> El {
     let images = attachments.clone();
     memo("preview", key, move || {
+        let drawn = Rc::clone(&embeds);
         Markdown::new(text.to_string())
             .images(move |src| images.picture(src))
             // The reference pass wrote this target: a card id, not a place on the web. Handled
@@ -828,6 +841,8 @@ fn markdown<S: Host>(attachments: &Attachments, text: &str, key: u64) -> El {
                     s.open_card(id);
                 }
             })
+            // An embed block says to draw a card's text, not to show the block it was written as.
+            .code_frame(move |card, frame| crate::embed::frame(card, frame, &drawn))
             .render(&MarkdownStyle::neutral(true))
     })
 }
@@ -958,7 +973,12 @@ fn preview_pane<S: Host>(s: &S) -> El {
     let editor = s.editor();
     // The reference pass runs on the drawn text: a reference the card hides is masked before it is
     // rewritten, so the preview cannot leak the answer through a link.
-    let drawn = editor.link_up(&preview_body(editor.text()));
+    // A reference inside `![[Name]]` is the embed's own bracket pair, not a link: the embed pass
+    // runs first so a resolved name is drawn as the block it is, instead of being rewritten into
+    // an `![…](typr-card:…)` image inside it.
+    let masked = preview_body(editor.text());
+    let embeds = Rc::new(crate::embed::Embeds::of(&masked, |name| s.embed(name)));
+    let shown = editor.link_up(&crate::embed::expanded(&masked, &embeds));
     col()
         .key("preview-pane")
         .grow(1.0)
@@ -972,8 +992,9 @@ fn preview_pane<S: Host>(s: &S) -> El {
         .child(if editor.saveable() {
             markdown::<S>(
                 &editor.attachments,
-                &drawn,
-                preview_key(editor.card, &drawn),
+                &shown,
+                preview_key(editor.card, &shown) ^ embeds.digest(),
+                Rc::clone(&embeds),
             )
         } else {
             text("Nothing to save yet. Write the front of the card.")
