@@ -56,6 +56,24 @@ cargo build -p typr --release --features rune/tooling
 JSON object: `{"key": "remembered"}` taps an element by its key, `{"text": "…"}` types into the
 focused field, `{"physical": "Escape"}` presses a key, and a `"t"` field places it in seconds.
 
+## Writing cards
+
+A card is markdown. Two things give it structure:
+
+- A line that is exactly `---` (nothing else on it) splits the card into sides. A study session
+  reveals the sides in order and grades once, after the last one. A card with no `---` is a note:
+  it never enters a queue.
+- `{{hidden text}}` hides text until you reveal it. One unnumbered span is one prompt; numbered
+  spans `{{1::this}}` and `{{2::that}}` are separate prompts, each with its own schedule,
+  because each one is a different question.
+- Hidden text wins over the separator: a card that hides text is asked as hidden text, however
+  many lines of `---` it holds.
+- Spans inside fenced code blocks and inside `backticks` are literal text, not hidden text.
+
+While you type, the preview shows `[ … ]` where an answer is masked, and the caption counts
+prompts rather than sides — so a card with two numbered groups reports two prompts, not two
+sides.
+
 ## Dependencies
 
 `rune` and `rune-kit` are pinned to one Rune `dev` revision in `crates/typr/Cargo.toml`, and

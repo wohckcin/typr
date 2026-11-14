@@ -11,6 +11,7 @@ use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root
 static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));
 
 use crate::attachments::{self, Attachments};
+use typr_core::hidden::{self, Shape};
 use typr_core::store::Id;
 
 /// The app state an editor screen draws from.
@@ -186,6 +187,12 @@ impl Editor {
             .collect()
     }
 
+    /// How many prompts the card will have once it is stored: numbered hidden-text groups
+    /// count one each, two or more sides count one, and a note counts none.
+    pub fn prompts(&self) -> usize {
+        hidden::shape(&self.buffer.text).prompt_count()
+    }
+
     /// Keep the preview's parse only as long as its source, so editing another card cannot
     /// invalidate this one's.
     pub fn settle(&mut self) {
@@ -289,6 +296,35 @@ impl Editor {
     }
 }
 
+/// What the preview draws: a card that hides text is drawn with its first group masked, so the
+/// author sees the question a session will ask, not the answer.
+pub fn preview_body(text: &str) -> String {
+    let shape = hidden::shape(text);
+    match &shape {
+        Shape::Hidden { .. } => match shape.prompt_keys().first() {
+            Some(key) => hidden::masked(text, &shape, key),
+            None => text.to_string(),
+        },
+        Shape::Sides(_) => text.to_string(),
+    }
+}
+
+/// The line under the preview: prompts for a card that hides text, sides for a card that does
+/// not, because "two sides" would be wrong for two numbered groups on one side.
+pub fn caption(text: &str) -> String {
+    match hidden::shape(text) {
+        Shape::Hidden { .. } => match hidden::shape(text).prompt_count() {
+            1 => "1 prompt".to_string(),
+            n => format!("{n} prompts"),
+        },
+        Shape::Sides(sides) => match sides.iter().filter(|side| !side.trim().is_empty()).count() {
+            0 => "Empty card".to_string(),
+            1 => "One side: this is a note and never queues".to_string(),
+            n => format!("{n} sides"),
+        },
+    }
+}
+
 /// A parse is chosen by the card and the text, nothing else, so one card's edit leaves every
 /// other card's parse alone.
 pub fn preview_key(card: Option<Id>, text: &str) -> u64 {
@@ -326,7 +362,7 @@ fn source_pane<S: Host>(s: &S) -> El {
 fn preview_pane<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let editor = s.editor();
-    let sides = typr_core::sides::split(&editor.buffer.text).len();
+    let drawn = preview_body(&editor.buffer.text);
     col()
         .key("preview-pane")
         .grow(1.0)
@@ -338,20 +374,17 @@ fn preview_pane<S: Host>(s: &S) -> El {
         .padding(16.0)
         .fill(t.card)
         .child(if editor.saveable() {
-            markdown(&editor.attachments, &editor.buffer.text, editor.memo())
+            markdown(&editor.attachments, &drawn, editor.memo())
         } else {
             text("Nothing to save yet. Write the front of the card.")
                 .key("preview-empty")
                 .color(t.text_secondary)
         })
         .child(
-            text(match sides {
-                0 => "Empty card".to_string(),
-                1 => "One side: this is a note and never queues".to_string(),
-                n => format!("{n} sides"),
-            })
-            .font(type_::LABEL)
-            .color(t.text_secondary),
+            text(caption(&editor.buffer.text))
+                .key("preview-caption")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
         )
 }
 

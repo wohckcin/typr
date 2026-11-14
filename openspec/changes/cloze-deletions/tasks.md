@@ -18,23 +18,23 @@
 
 ## 3. Review the mask
 
-- [ ] 3.1 `Entry` becomes `{ card, prompt, faces: Vec<Face>, overdue }` with `Face { hidden, shown }`; `Session` reads `hidden` until revealed and `shown` after.
+- [x] 3.1 `Entry` becomes `{ card, prompt, faces: Vec<Face>, overdue }` with `Face { hidden, shown }`; `Session` reads `hidden` until revealed and `shown` after.
   - **Verification**: `crates/typr-core/src/session/tests.rs` keeps every existing sides test passing unchanged, and `a_hidden_text_face_unmasks_on_one_reveal` grades after a single reveal.
-- [ ] 3.2 `State::session_entries` builds entries from the store's prompts and the card's shape, so a `cloze:<n>` prompt yields one face and a two-sided card yields two.
+- [x] 3.2 `State::session_entries` builds entries from the store's prompts and the card's shape, so a `cloze:<n>` prompt yields one face and a two-sided card yields two.
   - **Verification**: `crates/typr/src/tests.rs::a_hidden_text_prompt_shows_a_masked_sentence` opens a session on a cloze card, finds the mask in the rendered text, presses Space once and finds the answer with the grade buttons on screen.
 
 ## 4. Show it in the editor
 
-- [ ] 4.1 The preview masks the card's first group and the sides caption becomes a prompt count: "2 prompts" for two groups, "1 prompt" for a single group, and no sides caption at all on such a card.
+- [x] 4.1 The preview masks the card's first group and the sides caption becomes a prompt count: "2 prompts" for two groups, "1 prompt" for a single group, and no sides caption at all on such a card.
   - **Verification**: `the_preview_masks_hidden_text_and_counts_the_prompts` types a two-group card and reads the caption and the masked text out of the rendered elements.
-- [ ] 4.2 A card holding hidden text renders one pane, not source-and-sides wording that claims two sides.
+- [x] 4.2 A card holding hidden text renders one pane, not source-and-sides wording that claims two sides.
   - **Verification**: `a_hidden_text_card_is_not_described_as_two_sides` fails if the caption says "2 sides".
 
 ## 5. Close out
 
-- [ ] 5.1 Document the syntax in `README.md` beside the separator, and add a scene `review-cloze` showing a masked card.
+- [x] 5.1 Document the syntax in `README.md` beside the separator, and add a scene `review-cloze` showing a masked card.
   - **Verification**: `cargo run -q -p typr -- --list-scenes` lists `review-cloze`, and its `--snap` is non-blank.
-- [ ] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, and every scene snapping.
+- [x] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, and every scene snapping.
   - **Verification**: all three commands report success, and the ten existing scenes still snap.
 
 ## Workflow follow-up

@@ -1,4 +1,4 @@
-use super::{Editor, preview_key, view};
+use super::{Editor, caption, preview_body, preview_key, view};
 use typr_core::store::Id;
 
 #[test]
@@ -353,4 +353,72 @@ fn a_draft_lands_in_a_card_that_has_nothing_typed() {
         typed.buffer.text, "what the user typed",
         "a draft never overwrites what is on screen"
     );
+}
+
+#[test]
+fn a_card_that_hides_text_previews_with_its_first_group_masked() {
+    let mut editor = Editor::new(None, "The {{gland}} is small.".to_string());
+    editor.settle();
+
+    assert_eq!(
+        preview_body(&editor.buffer.text),
+        "The [ … ] is small.",
+        "the preview asks the question a session will ask"
+    );
+    assert!(
+        !preview_body(&editor.buffer.text).contains("gland"),
+        "the answer is not on screen while it is being written"
+    );
+}
+
+#[test]
+fn a_numbered_group_is_masked_only_when_it_is_the_group_being_asked() {
+    let text = "Our lungs pull {{2::oxygen}} from the {{1::air}}";
+
+    assert_eq!(
+        preview_body(text),
+        "Our lungs pull oxygen from the [ … ]",
+        "the first numbered group is masked and later ones stay readable"
+    );
+}
+
+#[test]
+fn the_caption_counts_prompts_for_hidden_text_and_sides_for_the_rest() {
+    assert_eq!(caption("{{1::alpha}} and {{2::beta}}"), "2 prompts");
+    assert_eq!(caption("The {{gland}} is small."), "1 prompt");
+    assert_eq!(caption("front\n---\nback"), "2 sides");
+    assert_eq!(
+        caption("only a note"),
+        "One side: this is a note and never queues"
+    );
+    assert_eq!(caption("   "), "Empty card");
+}
+
+#[test]
+fn the_preview_says_prompts_on_screen_for_a_hidden_text_card() {
+    let mut editor = Editor::new(None, "{{1::alpha}} and {{2::beta}}".to_string());
+    editor.settle();
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+
+    let caption = runtime
+        .elements()
+        .into_iter()
+        .filter(|element| element.key.as_deref() == Some("preview-caption"))
+        .filter_map(|element| element.text)
+        .collect::<Vec<String>>()
+        .join("");
+
+    assert_eq!(
+        caption, "2 prompts",
+        "the preview counts prompts, not sides"
+    );
+    assert_eq!(runtime.state.prompts(), 2);
 }
