@@ -179,7 +179,7 @@ fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
     }
     // The forgotten card is in a relearning step; once ten minutes pass it is back.
     app.session
-        .advance_clock(NOON + crate::clock::LEARNING_STEP_MS);
+        .advance_clock(NOON + typr_core::clock::LEARNING_STEP_MS);
     app.session.reveal();
     let (card, grade) = app.session.grade(Grade::Remembered).unwrap();
     let id = app.submit_grade(card, grade).expect("sent");

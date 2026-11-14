@@ -574,7 +574,7 @@ impl Db {
         // Stable sort by overdue study days, so equal days keep the query's order until shuffled.
         due.sort_by_key(|prompt| -(today - crate::day::study_day(prompt.due_at, offset_ms)));
 
-        let mut shuffle = crate::shuffle::Shuffle::new(seed);
+        let mut shuffle = typr_core::shuffle::Shuffle::new(seed);
         let mut ordered = Vec::with_capacity(due.len());
         let mut rest = due.as_slice();
         while let Some(first) = rest.first() {
@@ -641,7 +641,7 @@ impl Db {
         let learned = self.learned_on(today, offset_ms)? as usize;
         let room = allowance.saturating_sub(learned);
 
-        let mut shuffle = crate::shuffle::Shuffle::new(seed);
+        let mut shuffle = typr_core::shuffle::Shuffle::new(seed);
         let mut waiting = waiting;
         shuffle.reorder(&mut waiting);
         waiting.truncate(room);
@@ -789,7 +789,7 @@ impl Db {
 }
 
 fn sides_of(markdown: &str) -> usize {
-    crate::sides::split(markdown).len()
+    typr_core::sides::split(markdown).len()
 }
 
 /// The form search and tag matching compare in: no case, no accents.

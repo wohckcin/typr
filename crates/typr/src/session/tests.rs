@@ -1,5 +1,5 @@
 use super::{Entry, Session};
-use crate::clock::LEARNING_STEP_MS;
+use typr_core::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
 use crate::store::Grade;
 

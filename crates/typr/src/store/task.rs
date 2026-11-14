@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 
 use rune::Waker;
 
-use crate::clock::{Clock, SystemClock};
+use typr_core::clock::{Clock, SystemClock};
 
 use super::{Command, Db, Event, Grade, Id, Outcome, Snapshot, Store, StoreError};
 

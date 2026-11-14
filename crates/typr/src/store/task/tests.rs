@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use crate::clock::SystemClock;
+use typr_core::clock::SystemClock;
 use crate::store::Store;
 
 use super::{Handle, UNPROMPTED, lock};

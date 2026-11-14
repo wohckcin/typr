@@ -3,7 +3,7 @@
 use rune::tok::{self, type_};
 use rune::{AppSpec, Cx, El, Tx, Waker, col, row, text};
 use typr::attachments::Attachments;
-use typr::clock::Clock;
+use typr_core::clock::Clock;
 use typr::editor::{self, Editor};
 use typr::history::{self, History};
 use typr::library::{self, Library};
@@ -11,7 +11,8 @@ use typr::screen::{Queue, Screen};
 use typr::session::{Entry, Session};
 use typr::store::{self, CardMode, Grade, Handle, Id, Outcome, Store, StoreError};
 use typr::study::{self, Host};
-use typr::{day, sides};
+use typr::day;
+use typr_core::sides;
 
 /// A named starting state for a headless `--scene` run.
 type Scene = (&'static str, fn(&mut State));
@@ -381,7 +382,7 @@ impl State {
     /// Ask the store for the queue the user chose. The session opens when the answer arrives.
     fn start_session(&mut self, queue: Queue) {
         let Some(store) = &self.store else { return };
-        let now = typr::clock::SystemClock.now_ms();
+        let now = typr_core::clock::SystemClock.now_ms();
         let offset = day::local_offset_ms();
         let seed = now as u64;
         let due = store.due_prompts(now, offset, seed);
@@ -396,7 +397,7 @@ impl State {
     /// Open the session over the prompts the store answered with.
     fn open_session(&mut self, queue: Queue, prompts: Vec<(Id, String, Option<i64>)>) {
         let snapshot = self.store.as_ref().map(Store::snapshot).unwrap_or_default();
-        let now = typr::clock::SystemClock.now_ms();
+        let now = typr_core::clock::SystemClock.now_ms();
         let offset = day::local_offset_ms();
         let entries: Vec<Entry> = prompts
             .into_iter()
@@ -427,7 +428,7 @@ impl State {
             return false;
         };
         let events = store.poll();
-        let now = typr::clock::SystemClock.now_ms();
+        let now = typr_core::clock::SystemClock.now_ms();
         let mut changed = false;
         let mut wrote = false;
         for event in events {
@@ -533,7 +534,7 @@ fn advance_session(s: &mut State, now_ms: i64) -> (usize, Option<i64>) {
 
 fn poll(s: &mut State, _dt: f64, tx: &mut Tx) -> bool {
     let mut wake = None;
-    let changed = frame_step(s, typr::clock::SystemClock.now_ms(), &mut wake);
+    let changed = frame_step(s, typr_core::clock::SystemClock.now_ms(), &mut wake);
     if let Some(ms) = wake {
         tx.wake_after(std::time::Duration::from_millis(ms as u64));
     }

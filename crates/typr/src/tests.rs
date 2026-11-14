@@ -2,7 +2,7 @@
 
 use crate::*;
 use rune::{Key, KeyEvent, Mods};
-use typr::clock::LEARNING_STEP_MS;
+use typr_core::clock::LEARNING_STEP_MS;
 
 /// One due card, revealed to its last side, forgotten, and acknowledged.
 fn forgotten_due_card() -> State {
@@ -55,7 +55,7 @@ fn library_with_one_card(dir: &tempfile::TempDir) -> Handle {
     }
     Handle::spawn(
         typr::store::Db::open(&path).expect("open"),
-        Box::new(typr::clock::SystemClock),
+        Box::new(typr_core::clock::SystemClock),
         std::sync::Arc::new(|| {}),
     )
     .expect("spawn")
@@ -151,7 +151,7 @@ fn library_with_a_reviewed_and_a_fresh_card(dir: &tempfile::TempDir) -> (Handle,
     };
     let handle = Handle::spawn(
         typr::store::Db::open(&path).expect("open"),
-        Box::new(typr::clock::SystemClock),
+        Box::new(typr_core::clock::SystemClock),
         std::sync::Arc::new(|| {}),
     )
     .expect("spawn");
@@ -271,7 +271,7 @@ fn saving_a_new_card_stores_it_and_adopts_its_id() {
     let waker: Waker = std::sync::Arc::new(|| {});
     let handle = Handle::spawn(
         typr::store::Db::open(&path).expect("open"),
-        Box::new(typr::clock::SystemClock),
+        Box::new(typr_core::clock::SystemClock),
         waker,
     )
     .expect("spawn");

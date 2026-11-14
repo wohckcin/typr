@@ -166,7 +166,7 @@ impl Editor {
 
     /// The sides the buffer splits into right now, so the preview and the save agree.
     pub fn sides(&self) -> Vec<String> {
-        crate::sides::split(&self.buffer.text)
+        typr_core::sides::split(&self.buffer.text)
             .into_iter()
             .map(str::to_string)
             .collect()
@@ -299,7 +299,7 @@ fn source_pane<S: Host>(s: &S) -> El {
 fn preview_pane<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let editor = s.editor();
-    let sides = crate::sides::split(&editor.buffer.text).len();
+    let sides = typr_core::sides::split(&editor.buffer.text).len();
     col()
         .key("preview-pane")
         .grow(1.0)

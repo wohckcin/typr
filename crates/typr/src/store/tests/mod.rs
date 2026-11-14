@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use rusqlite::Connection;
 use tempfile::TempDir;
 
-use crate::clock::TestClock;
+use typr_core::clock::TestClock;
 
 use super::db::Record;
 use super::*;

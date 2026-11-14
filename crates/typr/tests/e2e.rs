@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use typr::clock::{Clock, TestClock};
+use typr_core::clock::{Clock, TestClock};
 use typr::day;
 use typr::store::{
     Command, Db, DuePrompt, Grade, Id, NewPrompt, Outcome, Phase, ReviewRow, StoreError,
