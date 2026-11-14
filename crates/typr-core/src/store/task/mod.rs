@@ -177,6 +177,10 @@ impl Store for Handle {
         })
     }
 
+    fn cards_for_view(&self, spec: &ViewSpec) -> Result<u64, StoreError> {
+        self.submit(Command::CardsForView { spec: spec.clone() })
+    }
+
     fn create_deck(&self, parent: Option<Id>, name: &str) -> Result<u64, StoreError> {
         self.submit(Command::CreateDeck {
             parent,

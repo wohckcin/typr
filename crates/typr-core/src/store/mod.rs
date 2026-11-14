@@ -521,6 +521,10 @@ pub enum Command {
         from_ms: i64,
         to_ms: i64,
     },
+    /// The cards the filter selects, for a cram run: the library's list without the schedule.
+    CardsForView {
+        spec: ViewSpec,
+    },
 }
 
 /// What a command did.
@@ -549,6 +553,8 @@ pub enum Outcome {
     Masks(Vec<MaskRow>),
     Draft(Option<String>),
     Stats(Stats),
+    /// The cards a filter selects, ready to be walked without regard for their schedules.
+    Cards(Vec<CardSummary>),
     Ok,
 }
 
@@ -568,7 +574,8 @@ impl Outcome {
             | Outcome::Due(_)
             | Outcome::New(_)
             | Outcome::Draft(_)
-            | Outcome::Stats(_) => false,
+            | Outcome::Stats(_)
+            | Outcome::Cards(_) => false,
         }
     }
 }
@@ -705,6 +712,9 @@ pub trait Store: Send + Sync {
         seed: u64,
         deck: Option<Id>,
     ) -> Result<u64, StoreError>;
+    /// The cards the filter `spec` selects, for a cram run: the snapshot's own filter, studyable
+    /// cards only, and neither a due date nor the new-card allowance in the way.
+    fn cards_for_view(&self, spec: &ViewSpec) -> Result<u64, StoreError>;
     fn set_setting(&self, key: &str, value: &str) -> Result<u64, StoreError>;
     fn set_card_reverse(&self, card: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
     fn set_deck_reverse(&self, deck: Id, reverse: Option<bool>) -> Result<u64, StoreError>;

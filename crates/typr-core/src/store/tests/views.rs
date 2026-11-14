@@ -320,3 +320,144 @@ fn a_pinned_card_is_listed_without_a_deck() {
     );
     assert!(!listed.contains(&neighbour));
 }
+
+/// The ids a cram run would walk for `spec`.
+fn cram_selection(db: &Db, spec: &ViewSpec) -> Vec<Id> {
+    db.cards_for_view(spec)
+        .expect("the cram selection")
+        .into_iter()
+        .map(|card| card.id)
+        .collect()
+}
+
+#[test]
+fn a_cram_selection_matches_the_list() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let spanish = deck(&mut db, "Spanish");
+    let verbs = deck(&mut db, "Verbs");
+    let perro = card(&mut db, spanish, "perro\n---\ndog");
+    let gato = card(&mut db, spanish, "gato\n---\ncat");
+    let correr = card(&mut db, verbs, "correr\n---\nto run");
+    let sol = card(&mut db, spanish, "sol");
+    db.apply(
+        &Command::SetTags {
+            card: gato,
+            tags: vec!["exam".to_string()],
+        },
+        NOON,
+    )
+    .expect("tag");
+
+    let specs = [
+        ("everything", ViewSpec::default(), 3),
+        (
+            "one word",
+            ViewSpec {
+                query: "gato".to_string(),
+                ..ViewSpec::default()
+            },
+            1,
+        ),
+        (
+            "one tag",
+            ViewSpec {
+                tags: vec!["exam".to_string()],
+                ..ViewSpec::default()
+            },
+            1,
+        ),
+        (
+            "one deck",
+            ViewSpec {
+                deck: Some(verbs),
+                ..ViewSpec::default()
+            },
+            1,
+        ),
+    ];
+    for (what, spec, selected) in specs {
+        let snapshot = db.snapshot().expect("snapshot");
+        let listed: Vec<Id> = snapshot
+            .cards_matching(&spec)
+            .into_iter()
+            .filter(|card| card.prompts > 0)
+            .map(|card| card.id)
+            .collect();
+        assert_eq!(
+            cram_selection(&db, &spec),
+            listed,
+            "the drill and the list agree on {what}"
+        );
+        assert_eq!(listed.len(), selected, "the {what} spec selects {selected}");
+    }
+
+    assert!(
+        !cram_selection(&db, &ViewSpec::default()).contains(&sol),
+        "a single-sided note is listed but has nothing to ask"
+    );
+    assert!(
+        cram_selection(&db, &ViewSpec::default()).contains(&perro),
+        "a plain two-sided card is asked"
+    );
+
+    db.apply(&Command::TrashCard { id: correr }, NOON)
+        .expect("trash");
+    let trash = ViewSpec {
+        mode: CardMode::Trash,
+        ..ViewSpec::default()
+    };
+    assert_eq!(
+        db.snapshot()
+            .expect("snapshot")
+            .cards_matching(&trash)
+            .len(),
+        1,
+        "the trash lists the card"
+    );
+    assert!(
+        cram_selection(&db, &trash).is_empty(),
+        "and nothing in the trash can be asked"
+    );
+}
+
+#[test]
+fn a_cram_selection_ignores_due_dates_and_the_cap() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    db.apply(
+        &Command::SetSetting {
+            key: "new_per_day".to_string(),
+            value: "0".to_string(),
+        },
+        NOON,
+    )
+    .expect("today's allowance is spent");
+    let biology = deck(&mut db, "Biology");
+    let first = card(&mut db, biology, "front\n---\nback");
+    let second = card(&mut db, biology, "other\n---\nthing");
+    let next_week = NOON + 7 * 24 * HOUR;
+    schedule(&mut db, first, next_week);
+    schedule(&mut db, second, next_week);
+
+    assert!(
+        db.due_prompts(NOON, 0, 1, None)
+            .expect("due queue")
+            .is_empty(),
+        "nothing is due"
+    );
+    assert!(
+        db.new_prompts(NOON, 0, 1, None)
+            .expect("new queue")
+            .is_empty(),
+        "and the cap admits nothing"
+    );
+
+    let mut crammed = cram_selection(&db, &ViewSpec::default());
+    crammed.sort_unstable();
+    assert_eq!(
+        crammed,
+        vec![first, second],
+        "the filter selects both cards, whatever the schedule says"
+    );
+}

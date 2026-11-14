@@ -452,6 +452,7 @@ impl Db {
             } => Ok(Outcome::New(
                 self.new_prompts(*now_ms, *offset_ms, *seed, *deck)?,
             )),
+            Command::CardsForView { spec } => Ok(Outcome::Cards(self.cards_for_view(spec)?)),
             Command::CreateView { spec, name } => {
                 let name = name.trim();
                 let changed = self.named_write(
@@ -1433,6 +1434,21 @@ impl Db {
             }
         }
         Ok(kept)
+    }
+
+    /// The cards a filter selects, for a cram run: the library's list, minus what cannot be asked.
+    ///
+    /// The filter is the snapshot's own, so the drill and the list it was started from can never
+    /// disagree about what is selected. Only the schedule is left out: a cram run has none, which
+    /// is the whole point of it.
+    pub fn cards_for_view(&self, spec: &ViewSpec) -> Result<Vec<CardSummary>, StoreError> {
+        let snapshot = self.snapshot()?;
+        Ok(snapshot
+            .cards_matching(spec)
+            .into_iter()
+            .filter(|card| card.prompts > 0)
+            .cloned()
+            .collect())
     }
 
     /// Grades inside one study day, so a summary and a cap agree about which day it is.
