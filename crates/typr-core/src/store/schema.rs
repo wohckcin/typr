@@ -18,10 +18,25 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12];
 
 /// The step that adds the name column, whose backfill needs more than SQL.
 const NAMES: usize = 9;
+
+/// Deck views: how a deck is read, and the order its cards are read in.
+///
+/// The view is a column rather than a settings row because it belongs to a deck: a deck of long
+/// cards wants the notebook while a deck of vocabulary wants the list. `NULL` reads as the grid,
+/// which is the only view a version-11 library had, so nothing is rewritten on upgrade.
+///
+/// `card.position` is the user's order, which is why it is not `updated_at`: reordering is a
+/// statement about the deck, not about when a card was last touched. Every existing card starts at
+/// zero and a deck with every card at zero reads in the order it read before.
+const V12: &str = r#"
+ALTER TABLE deck ADD COLUMN view TEXT;
+ALTER TABLE card ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX card_position ON card (deck_id, position, id);
+"#;
 
 /// FSRS scheduling: what the model remembers about a prompt, and the three settings that choose it.
 ///

@@ -128,6 +128,15 @@ fn schedule(db: &mut Db, card: Id, due_at: i64) {
 /// Put a file back to an older schema: the version number alone is not a simulation, because a build
 /// of that age had none of the objects later migrations added.
 pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
+    if version < 12 {
+        // A version-11 file knew no deck views and no card order.
+        conn.execute_batch("DROP INDEX IF EXISTS card_position")
+            .expect("drop the position index");
+        conn.execute_batch("ALTER TABLE card DROP COLUMN position")
+            .expect("drop the position column");
+        conn.execute_batch("ALTER TABLE deck DROP COLUMN view")
+            .expect("drop the view column");
+    }
     if version < 11 {
         // A version-10 file knew no memory and no scheduler settings.
         conn.execute_batch("ALTER TABLE prompt DROP COLUMN stability")

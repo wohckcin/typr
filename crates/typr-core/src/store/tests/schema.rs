@@ -1062,6 +1062,40 @@ fn a_library_from_before_fsrs_keeps_its_schedules() {
 }
 
 #[test]
+fn a_library_rewound_from_v11_gains_both_columns() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let before = {
+        let mut db = Db::open(&path).expect("open");
+        let deck = deck(&mut db, "Spanish");
+        card(&mut db, deck, "gato\n---\ncat");
+        rewind_for_test(db.connection_for_test(), 11);
+        assert_eq!(schema_version_at(&path), 11, "the file is a version-11 one");
+        capture(&db)
+    };
+
+    let db = Db::open(&path).expect("reopen");
+    assert!(
+        columns(&db, "deck").contains(&"view".to_string()),
+        "the deck lost its view column"
+    );
+    assert!(
+        columns(&db, "card").contains(&"position".to_string()),
+        "the card lost its position column"
+    );
+    let indexed: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'card_position'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the index lookup");
+    assert_eq!(indexed, 1, "the order the column implies has no index");
+    assert_eq!(before, capture(&db), "and every card is untouched");
+}
+
+#[test]
 fn the_scheduler_defaults_to_fixed() {
     let dir = TempDir::new().expect("temp dir");
     let db = open_temp(&dir);
