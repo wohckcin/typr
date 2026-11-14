@@ -543,7 +543,7 @@ fn archiving_a_card_and_a_deck_takes_them_out_of_the_library() {
             .store
             .as_ref()
             .expect("store")
-            .due_prompts(far, 0, 1)
+            .due_prompts(far, 0, 1, None)
             .expect("sent");
         for _ in 0..200 {
             let answer = state
@@ -1136,7 +1136,7 @@ fn a_card_moves_to_another_deck_and_keeps_its_schedule() {
         .store
         .as_ref()
         .expect("store")
-        .due_prompts(i64::MAX / 4, 0, 1)
+        .due_prompts(i64::MAX / 4, 0, 1, None)
         .expect("sent");
     let mut due = None;
     for _ in 0..200 {
@@ -1242,14 +1242,12 @@ fn a_grade_that_could_not_be_sent_is_not_waited_on() {
     };
     assert!(state.store.is_none(), "the library is not open");
 
-    // Answer the card: reveal both sides, then grade with the keyboard.
-    for _ in 0..2 {
-        let space = KeyEvent {
-            key: Key::Text(" ".into()),
-            mods: Mods::default(),
-        };
-        assert!(study::key(&mut state, &space), "the reveal key is taken");
-    }
+    // Answer the card: it opens on its first side, one reveal shows the second, then grade.
+    let space = KeyEvent {
+        key: Key::Text(" ".into()),
+        mods: Mods::default(),
+    };
+    assert!(study::key(&mut state, &space), "the reveal key is taken");
     assert!(state.session.gradeable(), "the answers are offered");
     let grade = KeyEvent {
         key: Key::Text("j".into()),
@@ -1338,4 +1336,121 @@ fn a_quiet_quit_says_so() {
         records[0].1.contains("the worker ended quietly"),
         "{records:?}"
     );
+}
+
+/// A library with two cards due now and a third that falls due two seconds from now.
+fn library_with_one_card_due_and_one_almost(dir: &tempfile::TempDir) -> Handle {
+    let path = dir.path().join("library.sqlite3");
+    {
+        let db = typr_core::store::Db::open(&path).expect("open");
+        let deck = match db
+            .apply(
+                &typr_core::store::Command::CreateDeck {
+                    parent: None,
+                    name: "Biology".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            Outcome::Deck(id) => id,
+            other => panic!("expected a deck, got {other:?}"),
+        };
+        for markdown in ["one\n---\ntwo", "three\n---\nfour", "five\n---\nsix"] {
+            db.apply(
+                &typr_core::store::Command::CreateCard {
+                    deck,
+                    markdown: markdown.to_string(),
+                },
+                0,
+            )
+            .expect("card");
+        }
+        let now = typr_core::clock::SystemClock.now_ms();
+        // A remembered grade graduates a prompt ten minutes later, so back-dating the grade is
+        // what sets the due date: an hour ago for the first two cards, and two seconds ahead for
+        // the third, which is still in the future when the session opens.
+        for (card, graded_at) in [
+            (1, now - 3_600_000),
+            (2, now - 3_600_000),
+            (3, now + 2_000 - 600_000),
+        ] {
+            db.apply(
+                &typr_core::store::Command::Grade {
+                    card,
+                    key: "fwd".to_string(),
+                    grade: Grade::Remembered,
+                    duration_ms: None,
+                },
+                graded_at,
+            )
+            .expect("grade");
+        }
+    }
+    Handle::spawn(
+        typr_core::store::Db::open(&path).expect("open"),
+        Box::new(typr_core::clock::SystemClock),
+        std::sync::Arc::new(|| {}),
+    )
+    .expect("spawn")
+}
+
+#[test]
+fn a_prompt_that_falls_due_during_a_session_joins_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card_due_and_one_almost(&dir);
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    state.start_session(Queue::Due);
+    for _ in 0..50 {
+        let mut wake = None;
+        frame_step(&mut state, 0, &mut wake);
+        if state.screen == Screen::Session {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert_eq!(state.screen, Screen::Session, "the session opened");
+    assert!(state.session.holds(1), "the first due card is queued");
+    assert!(state.session.holds(2), "the second due card is queued");
+    assert!(
+        !state.session.holds(3),
+        "the card that is not due yet stays out"
+    );
+
+    // Wait for the second card's due moment to pass, then answer the first.
+    std::thread::sleep(std::time::Duration::from_millis(2_200));
+    let mut answered = false;
+    let mut settled = 0;
+    while settled < 100 {
+        let mut wake = None;
+        frame_step(&mut state, 0, &mut wake);
+        if !answered && state.session.hidden() > 0 {
+            // The card opens on its first side; the rest are shown before it can be graded.
+            state.session.reveal();
+        }
+        if !answered && state.session.gradeable() {
+            // Grade through the keyboard path, the only one that tells the session it is waiting.
+            let remembered = KeyEvent {
+                key: Key::Text("j".into()),
+                mods: Mods::default(),
+            };
+            answered = study::key(&mut state, &remembered);
+        }
+        settled += 1;
+        if state.session.holds(3) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    assert!(answered, "the first card was answered");
+    assert!(
+        state.session.holds(3),
+        "the card that fell due mid-session joined the running queue"
+    );
+    assert!(!state.session.finished(), "and the session is still going");
 }

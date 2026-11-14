@@ -224,7 +224,7 @@ fn a_moved_card_keeps_its_prompt_and_due_date() {
         .expect("card");
     assert_eq!(moved.deck, destination);
     assert_eq!(
-        db.due_prompts(NOON, 0, 1).expect("due").len(),
+        db.due_prompts(NOON, 0, 1, None).expect("due").len(),
         1,
         "still due, now under the new deck"
     );
@@ -340,7 +340,7 @@ fn archiving_a_card_takes_it_out_of_the_queue_and_restoring_keeps_its_date() {
         NOON,
     )
     .expect("archive");
-    assert!(db.due_prompts(NOON, 0, 1).expect("due").is_empty());
+    assert!(db.due_prompts(NOON, 0, 1, None).expect("due").is_empty());
     let prompt = db
         .prompt(card, "fwd")
         .expect("prompt")
@@ -359,7 +359,7 @@ fn archiving_a_card_takes_it_out_of_the_queue_and_restoring_keeps_its_date() {
         NOON,
     )
     .expect("restore");
-    assert_eq!(db.due_prompts(NOON, 0, 1).expect("due").len(), 1);
+    assert_eq!(db.due_prompts(NOON, 0, 1, None).expect("due").len(), 1);
     assert_eq!(
         db.prompt(card, "fwd")
             .expect("prompt")
@@ -406,7 +406,7 @@ fn a_card_under_an_archived_deck_leaves_the_queues_while_a_sibling_deck_stays() 
     .expect("archive");
 
     let new: Vec<Id> = db
-        .new_prompts(NOON, 0, 1)
+        .new_prompts(NOON, 0, 1, None)
         .expect("new")
         .into_iter()
         .map(|p| p.card)
@@ -420,7 +420,7 @@ fn a_card_under_an_archived_deck_leaves_the_queues_while_a_sibling_deck_stays() 
     schedule(&mut db, hidden_card, NOON - HOUR);
     schedule(&mut db, visible_card, NOON - HOUR);
     let due: Vec<Id> = db
-        .due_prompts(NOON, 0, 1)
+        .due_prompts(NOON, 0, 1, None)
         .expect("due")
         .into_iter()
         .map(|p| p.card)
@@ -592,7 +592,7 @@ fn the_view_and_the_snapshot_agree_on_what_is_studyable() {
     let mut expected = from_snapshot.clone();
     expected.sort_unstable();
 
-    store.new_prompts(0, 0, 7).expect("sent");
+    store.new_prompts(0, 0, 7, None).expect("sent");
     let events = wait_for(&store, 1);
     let from_sql = match events.last().map(|event| &event.result) {
         Some(Ok(Outcome::New(prompts))) => {
@@ -631,5 +631,53 @@ fn a_new_card_cap_that_is_not_a_number_is_refused() {
         db.settings().expect("settings").new_per_day,
         Settings::DEFAULT_NEW_PER_DAY,
         "and nothing was stored"
+    );
+}
+
+#[test]
+fn a_queue_can_be_scoped_to_one_deck() {
+    let dir = TempDir::new().expect("tempdir");
+    let mut db = open_temp(&dir);
+    let verbs = deck(&mut db, "Verbs");
+    let nouns = deck(&mut db, "Nouns");
+    let in_verbs = card(&mut db, verbs, " hablar\n---\n to speak");
+    let in_nouns = card(&mut db, nouns, " perro\n---\n dog");
+    schedule(&mut db, in_verbs, NOON - HOUR);
+    schedule(&mut db, in_nouns, NOON - HOUR);
+
+    let cards = |prompts: Vec<super::super::DuePrompt>| -> Vec<Id> {
+        prompts.into_iter().map(|prompt| prompt.card).collect()
+    };
+    assert_eq!(
+        cards(db.due_prompts(NOON, 0, 1, Some(verbs)).expect("due")),
+        vec![in_verbs],
+        "the deck's own cards are offered"
+    );
+    assert_eq!(
+        cards(db.due_prompts(NOON, 0, 1, None).expect("due")),
+        vec![in_verbs, in_nouns],
+        "and unscoped is every deck"
+    );
+}
+
+#[test]
+fn a_search_matches_a_card_by_its_tag() {
+    let dir = TempDir::new().expect("tempdir");
+    let mut db = open_temp(&dir);
+    let subject = deck(&mut db, "Spanish");
+    let tagged = card(&mut db, subject, " subjunctive\n---\n mood");
+    db.apply(
+        &Command::SetTags {
+            card: tagged,
+            tags: vec!["Grammar".to_string()],
+        },
+        NOON,
+    )
+    .expect("tags");
+
+    assert_eq!(
+        matching(&db, "grammar", None, CardMode::Active),
+        vec![tagged],
+        "a tag is part of what a card is searched by"
     );
 }

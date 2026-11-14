@@ -46,7 +46,7 @@ impl Session {
     }
 
     pub fn new(queue: Queue, entries: Vec<Entry>) -> Session {
-        Session {
+        let mut session = Session {
             queue,
             entries,
             at: 0,
@@ -57,7 +57,16 @@ impl Session {
             waiting: Vec::new(),
             read_only: false,
             answered: HashSet::new(),
-        }
+        };
+        session.show_first_side();
+        session
+    }
+
+    /// A card opens on its first side: the reader is never staring at an empty frame wondering
+    /// which key shows the front.
+    fn show_first_side(&mut self) {
+        self.revealed = usize::from(self.current().is_some());
+        self.read_only = false;
     }
 
     /// The card on screen, if there is one.
@@ -167,10 +176,9 @@ impl Session {
     fn answer(&mut self, card: Id) {
         self.answered.insert(card);
         if self.entries.get(self.at).map(|entry| entry.card) == Some(card) {
-            self.revealed = 0;
-            self.read_only = false;
             self.at += 1;
             self.seek();
+            self.show_first_side();
         }
     }
 
@@ -192,8 +200,7 @@ impl Session {
         if index < self.at {
             self.at -= 1;
         } else if index == self.at {
-            self.revealed = 0;
-            self.read_only = false;
+            self.show_first_side();
         }
         Some(entry)
     }
@@ -201,9 +208,8 @@ impl Session {
     /// Move to the next card without answering this one; it stays queued.
     pub fn forward(&mut self) -> bool {
         if self.read_only {
-            self.read_only = false;
             self.at += 1;
-            self.revealed = 0;
+            self.show_first_side();
             return true;
         }
         if self.current().is_none() {
@@ -211,7 +217,7 @@ impl Session {
         }
         let entry = self.entries.remove(self.at);
         self.entries.push(entry);
-        self.revealed = 0;
+        self.show_first_side();
         true
     }
 
@@ -250,10 +256,9 @@ impl Session {
             shuffle.reorder(&mut self.entries[index..end]);
             index = end;
         }
-        // A different card is on screen now, so nothing has been shown of it yet.
+        // A different card is on screen now, so it opens on its own first side.
         if self.current().map(|entry| entry.card) != before {
-            self.revealed = 0;
-            self.read_only = false;
+            self.show_first_side();
         }
     }
 
@@ -266,6 +271,12 @@ impl Session {
         self.revealed = self.current().map_or(0, |entry| entry.sides.len());
         self.read_only = true;
         true
+    }
+
+    /// Whether this card is already part of the session, queued or waiting.
+    pub fn holds(&self, card: Id) -> bool {
+        self.entries.iter().any(|entry| entry.card == card)
+            || self.waiting.iter().any(|(_, entry)| entry.card == card)
     }
 
     /// A prompt that fell due while the session was running joins it.

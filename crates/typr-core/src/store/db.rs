@@ -247,12 +247,18 @@ impl Db {
                 now_ms,
                 offset_ms,
                 seed,
-            } => Ok(Outcome::Due(self.due_prompts(*now_ms, *offset_ms, *seed)?)),
+                deck,
+            } => Ok(Outcome::Due(
+                self.due_prompts(*now_ms, *offset_ms, *seed, *deck)?,
+            )),
             Command::NewPrompts {
                 now_ms,
                 offset_ms,
                 seed,
-            } => Ok(Outcome::New(self.new_prompts(*now_ms, *offset_ms, *seed)?)),
+                deck,
+            } => Ok(Outcome::New(
+                self.new_prompts(*now_ms, *offset_ms, *seed, *deck)?,
+            )),
             Command::History { card } => Ok(Outcome::History {
                 rows: self.history(*card)?,
                 reviews: self.review_count(*card)?,
@@ -598,15 +604,22 @@ impl Db {
         now_ms: i64,
         offset_ms: i64,
         seed: u64,
+        deck: Option<Id>,
     ) -> Result<Vec<DuePrompt>, StoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT card_id, key, due_at
+            "WITH RECURSIVE subtree(id) AS (
+                 SELECT ?2 WHERE ?2 IS NOT NULL
+                 UNION
+                 SELECT d.id FROM deck d JOIN subtree s ON d.parent_id = s.id
+             )
+             SELECT card_id, key, due_at
              FROM studyable_prompt
              WHERE due_at IS NOT NULL AND due_at <= ?1
+               AND (?2 IS NULL OR card_id IN (SELECT id FROM card WHERE deck_id IN (SELECT id FROM subtree)))
              ORDER BY due_at, card_id",
         )?;
         let mut due = stmt
-            .query_map(params![now_ms], |row| {
+            .query_map(params![now_ms, deck], |row| {
                 Ok(DuePrompt {
                     card: row.get(0)?,
                     key: row.get(1)?,
@@ -663,17 +676,24 @@ impl Db {
         now_ms: i64,
         offset_ms: i64,
         seed: u64,
+        deck: Option<Id>,
     ) -> Result<Vec<NewPrompt>, StoreError> {
+        // "New" is the absence of a schedule, not the absence of history: a card whose first
+        // lesson was forgotten has records and still has nothing scheduled.
         let mut stmt = self.conn.prepare(
-            "SELECT card_id, key
-             FROM studyable_prompt p
-             WHERE NOT EXISTS (
-                 SELECT 1 FROM review_log r WHERE r.card_id = p.card_id AND r.key = p.key
+            "WITH RECURSIVE subtree(id) AS (
+                 SELECT ?1 WHERE ?1 IS NOT NULL
+                 UNION
+                 SELECT d.id FROM deck d JOIN subtree s ON d.parent_id = s.id
              )
+             SELECT card_id, key
+             FROM studyable_prompt p
+             WHERE p.phase = 'learn' AND p.due_at IS NULL
+               AND (?1 IS NULL OR card_id IN (SELECT id FROM card WHERE deck_id IN (SELECT id FROM subtree)))
              ORDER BY card_id, key",
         )?;
         let waiting = stmt
-            .query_map([], |row| {
+            .query_map(params![deck], |row| {
                 Ok(NewPrompt {
                     card: row.get(0)?,
                     key: row.get(1)?,

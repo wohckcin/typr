@@ -145,19 +145,33 @@ impl Store for Handle {
         std::mem::take(&mut *lock(&self.shared.events))
     }
 
-    fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> Result<u64, StoreError> {
+    fn due_prompts(
+        &self,
+        now_ms: i64,
+        offset_ms: i64,
+        seed: u64,
+        deck: Option<Id>,
+    ) -> Result<u64, StoreError> {
         self.submit(Command::DuePrompts {
             now_ms,
             offset_ms,
             seed,
+            deck,
         })
     }
 
-    fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> Result<u64, StoreError> {
+    fn new_prompts(
+        &self,
+        now_ms: i64,
+        offset_ms: i64,
+        seed: u64,
+        deck: Option<Id>,
+    ) -> Result<u64, StoreError> {
         self.submit(Command::NewPrompts {
             now_ms,
             offset_ms,
             seed,
+            deck,
         })
     }
 

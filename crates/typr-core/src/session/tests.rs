@@ -26,8 +26,12 @@ fn answer(session: &mut Session, grade: Grade, now_ms: i64) {
 
 #[test]
 fn a_new_card_is_scheduled_only_after_its_last_side() {
-    let mut session = Session::new(Queue::New, vec![entry(1, &["front"]), entry(2, &["front"])]);
+    let mut session = Session::new(
+        Queue::New,
+        vec![entry(1, &["front", "back"]), entry(2, &["front", "back"])],
+    );
     assert_eq!(session.current().unwrap().card, 1);
+    assert_eq!(session.revealed(), 1, "the card opens on its first side");
     assert!(
         !session.gradeable(),
         "nothing is graded before the last side"
@@ -49,11 +53,11 @@ fn a_new_card_is_scheduled_only_after_its_last_side() {
 #[test]
 fn a_three_sided_card_is_one_review() {
     let mut session = Session::new(Queue::New, vec![entry(1, &["one", "two", "three"])]);
-    assert_eq!(session.next_side(), Some("one"));
-    assert!(session.reveal());
+    assert_eq!(session.revealed(), 1, "the card opens on its first side");
     assert_eq!(session.next_side(), Some("two"));
     assert!(!session.gradeable(), "a side is still hidden");
     assert!(session.reveal());
+    assert_eq!(session.next_side(), Some("three"));
     assert!(session.reveal());
     assert!(!session.reveal(), "there is no fourth side");
     assert!(session.gradeable());
@@ -201,7 +205,6 @@ fn a_grade_is_ignored_until_the_store_answers() {
 #[test]
 fn a_refused_grade_frees_the_card_again() {
     let mut session = Session::new(Queue::Due, vec![entry(1, &["front"])]);
-    assert!(session.reveal());
 
     let (_, grade) = session.grade(Grade::Remembered).expect("offered");
     assert_eq!(grade, Grade::Remembered);
@@ -217,7 +220,6 @@ fn a_refused_grade_frees_the_card_again() {
 #[test]
 fn a_grade_that_was_never_sent_can_be_taken_again() {
     let mut session = Session::new(Queue::New, vec![entry(1, &["front"])]);
-    assert!(session.reveal());
     assert!(session.grade(Grade::Forgot).is_some());
     session.refuse(0);
     assert!(session.gradeable());
@@ -283,13 +285,15 @@ fn a_grade_lands_on_the_card_it_was_given_for() {
         Queue::Due,
         vec![entry(1, &["a"]), entry(2, &["b"]), entry(3, &["c"])],
     );
-    assert!(session.reveal());
     assert_eq!(
         session.grade(Grade::Remembered),
         Some((1, Grade::Remembered))
     );
     session.sent(11);
-    assert!(session.forward(), "the user moves on before the answer lands");
+    assert!(
+        session.forward(),
+        "the user moves on before the answer lands"
+    );
 
     assert!(session.acknowledge(11, NOON));
 
@@ -303,20 +307,32 @@ fn a_grade_lands_on_the_card_it_was_given_for() {
 
 #[test]
 fn a_reshuffle_never_hands_over_a_revealed_card() {
-    let cards = || -> Vec<Entry> { (1..=8).map(|card| entry(card, &["a"])).collect() };
+    let cards = || -> Vec<Entry> { (1..=8).map(|card| entry(card, &["a", "b"])).collect() };
     let mut moved = 0;
     for seed in 1..40u64 {
         let mut session = Session::new(Queue::Due, cards());
-        assert!(session.reveal());
+        assert!(session.reveal(), "the second side is on screen");
+        assert!(session.gradeable());
         let before = session.current().map(|entry| entry.card);
         session.reshuffle(seed);
         if session.current().map(|entry| entry.card) == before {
-            assert_eq!(session.revealed(), 1, "seed {seed} kept the card and its reveal");
+            assert_eq!(
+                session.revealed(),
+                2,
+                "seed {seed} kept the card and its reveal"
+            );
             continue;
         }
         moved += 1;
-        assert_eq!(session.revealed(), 0, "seed {seed} carried the reveal along");
-        assert!(!session.gradeable(), "seed {seed} offered a grade for a side never shown");
+        assert_eq!(
+            session.revealed(),
+            1,
+            "seed {seed} opens the new card on its first side"
+        );
+        assert!(
+            !session.gradeable(),
+            "seed {seed} offered a grade for a side never shown"
+        );
     }
     assert!(moved > 0, "no seed reordered the front of the queue");
 }

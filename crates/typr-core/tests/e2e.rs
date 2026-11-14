@@ -29,11 +29,11 @@ fn grade(db: &mut Db, card: Id, grade: Grade, now: i64) -> Result<Outcome, Store
 }
 
 fn due(db: &mut Db, now: i64) -> Vec<DuePrompt> {
-    db.due_prompts(now, 0, 7).expect("the due queue")
+    db.due_prompts(now, 0, 7, None).expect("the due queue")
 }
 
 fn new(db: &mut Db, now: i64) -> Vec<NewPrompt> {
-    db.new_prompts(now, 0, 7).expect("the new queue")
+    db.new_prompts(now, 0, 7, None).expect("the new queue")
 }
 
 fn history(db: &Db, card: Id) -> Vec<ReviewRow> {

@@ -80,6 +80,10 @@ struct State {
     due_request: Option<u64>,
     /// The new-queue request in flight.
     new_request: Option<u64>,
+    /// The mid-session due request in flight, whose answer joins the running queue.
+    arrivals: Option<u64>,
+    /// The deck the running session was opened for, so arrivals stay inside it.
+    session_deck: Option<Id>,
     /// The history request in flight, with the card it was made for.
     history_request: Option<(u64, Id)>,
     /// The create-card request in flight, whose answer carries the new id.
@@ -108,6 +112,8 @@ impl Default for State {
             wanted: None,
             due_request: None,
             new_request: None,
+            arrivals: None,
+            session_deck: None,
             history_request: None,
             card_request: None,
             failure: None,
@@ -503,7 +509,8 @@ impl State {
         let now = typr_core::clock::SystemClock.now_ms();
         let offset = day_offset::local_offset_ms();
         let seed = now as u64;
-        let due = store.due_prompts(now, offset, seed);
+        let deck = self.library.selected_deck;
+        let due = store.due_prompts(now, offset, seed, deck);
         remember(
             &mut self.sent,
             "due_prompts",
@@ -512,7 +519,7 @@ impl State {
             due,
         );
         if queue == Queue::New {
-            let new = store.new_prompts(now, offset, seed);
+            let new = store.new_prompts(now, offset, seed, deck);
             remember(
                 &mut self.sent,
                 "new_prompts",
@@ -524,12 +531,12 @@ impl State {
         self.wanted = Some(queue);
     }
 
-    /// Open the session over the prompts the store answered with.
-    fn open_session(&mut self, queue: Queue, prompts: Vec<(Id, String, Option<i64>)>) {
+    /// Turn the prompts the store answered with into session entries.
+    fn session_entries(&self, prompts: Vec<(Id, String, Option<i64>)>) -> Vec<Entry> {
         let snapshot = self.store.as_ref().map(Store::snapshot).unwrap_or_default();
         let now = typr_core::clock::SystemClock.now_ms();
         let offset = day_offset::local_offset_ms();
-        let entries: Vec<Entry> = prompts
+        prompts
             .into_iter()
             .filter(|(_, key, _)| key == "fwd")
             .filter_map(|(id, _, due_at)| {
@@ -544,12 +551,33 @@ impl State {
                     overdue,
                 })
             })
-            .collect();
+            .collect()
+    }
+
+    /// Open the session over the prompts the store answered with.
+    fn open_session(&mut self, queue: Queue, prompts: Vec<(Id, String, Option<i64>)>) {
+        let entries = self.session_entries(prompts);
         if entries.is_empty() {
             return;
         }
         self.session = Session::new(queue, entries);
+        self.session_deck = self.library.selected_deck;
         self.screen = Screen::Session;
+    }
+
+    /// Ask the store what fell due since the session opened; the answer joins the queue.
+    fn ask_for_arrivals(&mut self) {
+        let Some(store) = &self.store else { return };
+        let now = typr_core::clock::SystemClock.now_ms();
+        let offset = day_offset::local_offset_ms();
+        let sent = store.due_prompts(now, offset, now as u64, self.session_deck);
+        remember(
+            &mut self.sent,
+            "due_prompts",
+            &mut self.arrivals,
+            &mut self.failure,
+            sent,
+        );
     }
 
     /// Answer what the store has said. A grade the store refused is dropped, so the card stays.
@@ -569,11 +597,25 @@ impl State {
                 Ok(Outcome::Graded { .. }) => {
                     let acknowledged = self.session.acknowledge(event.id, now);
                     // Leaving the session first must not be undone by a grade that lands after.
-                    if acknowledged
-                        && matches!(self.screen, Screen::Session)
-                        && self.session.finished()
-                    {
-                        self.screen = Screen::Summary;
+                    if acknowledged && matches!(self.screen, Screen::Session) {
+                        if self.session.finished() {
+                            self.screen = Screen::Summary;
+                        } else {
+                            // Something may have fallen due while the session was running.
+                            self.ask_for_arrivals();
+                        }
+                    }
+                }
+                Ok(Outcome::Due(prompts)) if self.arrivals == Some(event.id) => {
+                    self.arrivals = None;
+                    self.due_now = prompts.iter().filter(|prompt| prompt.key == "fwd").count();
+                    let arriving: Vec<(Id, String, Option<i64>)> = prompts
+                        .into_iter()
+                        .filter(|prompt| !self.session.holds(prompt.card))
+                        .map(|prompt| (prompt.card, prompt.key, Some(prompt.due_at)))
+                        .collect();
+                    for entry in self.session_entries(arriving) {
+                        self.session.arrive(entry);
                     }
                 }
                 Ok(Outcome::Due(prompts)) if self.due_request == Some(event.id) => {

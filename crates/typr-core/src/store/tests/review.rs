@@ -178,7 +178,7 @@ fn the_most_overdue_study_day_comes_first() {
     schedule(&mut db, an_hour_ago, NOON - HOUR);
     schedule(&mut db, two_hours_ago, NOON - 2 * HOUR);
 
-    let due = db.due_prompts(NOON, 0, 11).expect("due");
+    let due = db.due_prompts(NOON, 0, 11, None).expect("due");
     assert_eq!(due.len(), 3);
     assert_eq!(due[0].card, week_ago);
 }
@@ -195,7 +195,7 @@ fn prompts_due_on_the_same_study_day_are_ordered_by_the_shuffle() {
 
     let mut orders = std::collections::BTreeSet::new();
     for seed in 1..40 {
-        let due = db.due_prompts(NOON, 0, seed).expect("due");
+        let due = db.due_prompts(NOON, 0, seed, None).expect("due");
         orders.insert(due.iter().map(|prompt| prompt.card).collect::<Vec<_>>());
     }
     assert_eq!(
@@ -240,7 +240,7 @@ fn trashed_archived_and_note_prompts_are_never_due() {
     )
     .expect("archive");
 
-    let due = db.due_prompts(NOON, 0, 5).expect("due");
+    let due = db.due_prompts(NOON, 0, 5, None).expect("due");
     assert_eq!(
         due.iter().map(|prompt| prompt.card).collect::<Vec<_>>(),
         vec![kept]
@@ -255,9 +255,11 @@ fn a_prompt_due_tomorrow_is_not_in_todays_queue() {
     let card = card(&mut db, deck, "a\n---\nb");
     schedule(&mut db, card, NOON + 24 * HOUR);
 
-    assert!(db.due_prompts(NOON, 0, 1).expect("due").is_empty());
+    assert!(db.due_prompts(NOON, 0, 1, None).expect("due").is_empty());
     assert_eq!(
-        db.due_prompts(NOON + 25 * HOUR, 0, 1).expect("due").len(),
+        db.due_prompts(NOON + 25 * HOUR, 0, 1, None)
+            .expect("due")
+            .len(),
         1
     );
 }
@@ -309,7 +311,7 @@ fn resetting_history_makes_a_card_new_again() {
         (Phase::Learn, 0, None, 0)
     );
     assert!(
-        db.due_prompts(NOON, 0, 1).expect("due").is_empty(),
+        db.due_prompts(NOON, 0, 1, None).expect("due").is_empty(),
         "the card stops being due"
     );
 }
@@ -390,13 +392,13 @@ fn the_new_queue_stops_at_the_cap_and_resumes_the_next_day() {
     assert_eq!(db.settings().expect("settings").new_per_day, 2);
 
     assert_eq!(
-        db.new_prompts(NOON, 0, 3).expect("new").len(),
+        db.new_prompts(NOON, 0, 3, None).expect("new").len(),
         2,
         "the queue stops at the cap"
     );
 
     // Learning two of them spends today's allowance.
-    let waiting = db.new_prompts(NOON, 0, 3).expect("new");
+    let waiting = db.new_prompts(NOON, 0, 3, None).expect("new");
     for prompt in waiting {
         db.apply(
             &Command::Grade {
@@ -410,13 +412,15 @@ fn the_new_queue_stops_at_the_cap_and_resumes_the_next_day() {
         .expect("grade");
     }
     assert!(
-        db.new_prompts(NOON + HOUR, 0, 3).expect("new").is_empty(),
+        db.new_prompts(NOON + HOUR, 0, 3, None)
+            .expect("new")
+            .is_empty(),
         "the day is spent"
     );
 
     let tomorrow = NOON + 24 * HOUR;
     assert_eq!(
-        db.new_prompts(tomorrow, 0, 3).expect("new").len(),
+        db.new_prompts(tomorrow, 0, 3, None).expect("new").len(),
         1,
         "the last card waits for tomorrow"
     );
@@ -468,4 +472,34 @@ fn statistics_are_counted_per_study_day() {
     let tomorrow_stats = db.stats_for_day(today + 1, 0).expect("stats");
     assert_eq!(tomorrow_stats.reviews, 1);
     assert_eq!(tomorrow_stats.lapses, 1);
+}
+
+#[test]
+fn a_new_card_forgotten_while_learning_is_still_new() {
+    let dir = TempDir::new().expect("tempdir");
+    let mut db = open_temp(&dir);
+    let subject = deck(&mut db, "Biology");
+    let failed = card(&mut db, subject, " mitosis\n---\n cell division");
+    db.apply(
+        &Command::Grade {
+            card: failed,
+            key: "fwd".to_string(),
+            grade: Grade::Forgot,
+            duration_ms: None,
+        },
+        NOON,
+    )
+    .expect("grade");
+
+    let new: Vec<Id> = db
+        .new_prompts(NOON, 0, 1, None)
+        .expect("new")
+        .into_iter()
+        .map(|prompt| prompt.card)
+        .collect();
+    assert_eq!(new, vec![failed], "a failed first lesson is still new");
+    assert!(
+        db.due_prompts(NOON, 0, 1, None).expect("due").is_empty(),
+        "and it is not due, because nothing was scheduled"
+    );
 }

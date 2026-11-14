@@ -123,16 +123,15 @@ fn the_answers_are_offered_only_after_the_last_side() {
     rt.frame(0.0);
     assert!(
         rt.find("remembered").is_none(),
-        "no grade before the last side"
+        "the card opens on its first side, so the grade is not offered yet"
     );
 
     press(&mut rt, Key::Text(" ".into()));
     rt.frame(0.0);
-    assert!(rt.find("remembered").is_none(), "one side is still hidden");
-
-    press(&mut rt, Key::Text(" ".into()));
-    rt.frame(0.0);
-    assert!(rt.find("remembered").is_some(), "and now it is offered");
+    assert!(
+        rt.find("remembered").is_some(),
+        "the last side is shown and the grade is offered"
+    );
     assert!(rt.find("bindings").is_some(), "the keys are on screen");
 }
 

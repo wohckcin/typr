@@ -213,7 +213,11 @@ impl Snapshot {
                     .as_ref()
                     .is_none_or(|tag| card.tags.iter().any(|own| folded(own) == *tag))
             })
-            .filter(|card| needle.is_empty() || card.search_text.contains(&needle))
+            .filter(|card| {
+                needle.is_empty()
+                    || card.search_text.contains(&needle)
+                    || card.tags.iter().any(|own| folded(own).contains(&needle))
+            })
             .collect()
     }
 }
@@ -321,12 +325,14 @@ pub enum Command {
         now_ms: i64,
         offset_ms: i64,
         seed: u64,
+        deck: Option<Id>,
     },
     /// The new-card queue, capped by what the study day still allows.
     NewPrompts {
         now_ms: i64,
         offset_ms: i64,
         seed: u64,
+        deck: Option<Id>,
     },
     SetSetting {
         key: String,
@@ -477,9 +483,21 @@ pub trait Store: Send + Sync {
     fn reset_history(&self, card: Id, key: &str) -> Result<u64, StoreError>;
 
     /// The due queue as the scheduler would serve it: most overdue first, ties shuffled.
-    fn due_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> Result<u64, StoreError>;
+    fn due_prompts(
+        &self,
+        now_ms: i64,
+        offset_ms: i64,
+        seed: u64,
+        deck: Option<Id>,
+    ) -> Result<u64, StoreError>;
     /// The new-card queue, capped by what this study day still allows.
-    fn new_prompts(&self, now_ms: i64, offset_ms: i64, seed: u64) -> Result<u64, StoreError>;
+    fn new_prompts(
+        &self,
+        now_ms: i64,
+        offset_ms: i64,
+        seed: u64,
+        deck: Option<Id>,
+    ) -> Result<u64, StoreError>;
     fn set_setting(&self, key: &str, value: &str) -> Result<u64, StoreError>;
     fn history(&self, card: Id) -> Result<u64, StoreError>;
     fn stats(&self, from_ms: i64, to_ms: i64) -> Result<u64, StoreError>;
