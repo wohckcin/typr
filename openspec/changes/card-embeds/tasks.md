@@ -20,7 +20,7 @@
       *Verification*: an embed naming an absent card draws the marker and the card's other
       text.
 
-- [ ] 2.3 Stop at one level: an embed inside an embedded card draws `Name (embedded card)`.
+- [x] 2.3 Stop at one level: an embed inside an embedded card draws `Name (embedded card)`.
       *Verification*: a self-embedding card and an A-embeds-B-embeds-A pair both draw one
       marker and no repeated body.
 

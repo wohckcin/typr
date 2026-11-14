@@ -57,6 +57,11 @@ fn snapshot(cards: Vec<CardSummary>) -> std::sync::Arc<Snapshot> {
 
 /// An editor on card 10, with the embed's target one name away.
 fn editor_state(text: &str) -> State {
+    editor_state_with(text, embedding_library())
+}
+
+/// An editor on card 10 drawn against exactly these cards.
+fn editor_state_with(text: &str, cards: Vec<CardSummary>) -> State {
     let mut editor = Editor::new(Some(10), text.to_string());
     editor.settle();
     let mut state = State {
@@ -64,7 +69,7 @@ fn editor_state(text: &str) -> State {
         editor,
         ..State::default()
     };
-    state.library.set_snapshot(snapshot(embedding_library()));
+    state.library.set_snapshot(snapshot(cards));
     state
 }
 
@@ -160,5 +165,64 @@ fn an_embed_draws_on_a_review_face() {
     assert!(
         drawn.iter().any(|text| text == "Mitosis"),
         "the review face does not caption the inset: {drawn:?}"
+    );
+}
+
+/// How many drawn texts contain `needle`, which counts a body that got drawn twice.
+fn appearances(drawn: &[String], needle: &str) -> usize {
+    drawn.iter().filter(|text| text.contains(needle)).count()
+}
+
+/// A card that embeds itself draws its body once, then the marker that says it stopped.
+#[test]
+fn a_self_embed_draws_one_body_and_one_marker() {
+    let cards = vec![named(
+        10,
+        "Self",
+        "Self body line\n\n![[Self]]\n---\nSelf back",
+    )];
+    let drawn = drawn_text(editor_state_with(
+        "Here:\n\n![[Self]]\n---\nSelf back",
+        cards,
+    ));
+    assert_eq!(
+        appearances(&drawn, "Self body line"),
+        1,
+        "the body was drawn more than once: {drawn:?}"
+    );
+    assert_eq!(
+        appearances(&drawn, "Self (embedded card)"),
+        1,
+        "the depth-one marker is missing or repeated: {drawn:?}"
+    );
+}
+
+/// A embeds B and B embeds A: the lens stops after B's body, and A is only named there.
+#[test]
+fn an_embed_chain_stops_after_one_level() {
+    let cards = vec![
+        named(10, "A", "![[B]]\n---\nA back"),
+        named(11, "B", "B body text\n\n![[A]]"),
+    ];
+    let drawn = drawn_text(editor_state_with("Start:\n\n![[B]]\n---\nA back", cards));
+    assert_eq!(
+        appearances(&drawn, "B body text"),
+        1,
+        "B's body was drawn more than once: {drawn:?}"
+    );
+    assert_eq!(
+        appearances(&drawn, "A (embedded card)"),
+        1,
+        "the marker naming A at depth one is missing or repeated: {drawn:?}"
+    );
+    assert_eq!(
+        appearances(&drawn, "B (embedded card)"),
+        0,
+        "the chain went back into B, which would repeat its body: {drawn:?}"
+    );
+    assert_eq!(
+        appearances(&drawn, "(embedded card)"),
+        1,
+        "more than one embed was replaced by a marker: {drawn:?}"
     );
 }
