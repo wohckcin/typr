@@ -1,5 +1,7 @@
 //! One study session: the queue it walks, what has been shown, and what has been graded.
 
+use std::collections::HashSet;
+
 use crate::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
 use crate::store::{Grade, Id};
@@ -23,14 +25,18 @@ pub struct Session {
     revealed: usize,
     /// Grades recorded in this session, in the order they were answered.
     pub grades: Vec<Grade>,
-    /// The grade sent to the store and not yet acknowledged.
-    awaiting: Option<(u64, Grade)>,
+    /// The grade sent to the store and not yet acknowledged, with the card it was given for: the
+    /// answer names a card, never a position, because the user may move on before it lands.
+    awaiting: Option<(u64, Id, Grade)>,
     /// A grade chosen but not yet sent.
-    pending: Option<Grade>,
+    pending: Option<(Id, Grade)>,
     /// Cards whose relearning step is still in the future, and when it lands.
     waiting: Vec<(i64, Entry)>,
     /// Whether the current card is being revisited read-only.
     pub read_only: bool,
+    /// Cards answered in this session. They stay in the queue so `backward` can show them again,
+    /// and are skipped everywhere the queue is read forward.
+    answered: HashSet<Id>,
 }
 
 impl Session {
@@ -50,6 +56,7 @@ impl Session {
             pending: None,
             waiting: Vec::new(),
             read_only: false,
+            answered: HashSet::new(),
         }
     }
 
@@ -99,14 +106,15 @@ impl Session {
         if !self.gradeable() || self.pending.is_some() {
             return None;
         }
-        self.pending = Some(grade);
-        Some((self.current()?.card, grade))
+        let card = self.current()?.card;
+        self.pending = Some((card, grade));
+        Some((card, grade))
     }
 
     /// The store has taken the grade under `id`.
     pub fn sent(&mut self, id: u64) {
-        if let Some(grade) = self.pending.take() {
-            self.awaiting = Some((id, grade));
+        if let Some((card, grade)) = self.pending.take() {
+            self.awaiting = Some((id, card, grade));
         }
     }
 
@@ -118,7 +126,7 @@ impl Session {
 
     /// The store did not take the grade: the card stays as it was, so it can be answered again.
     pub fn refuse(&mut self, id: u64) {
-        if let Some((awaiting, _)) = self.awaiting {
+        if let Some((awaiting, _, _)) = self.awaiting {
             if awaiting != id {
                 return;
             }
@@ -129,7 +137,7 @@ impl Session {
 
     /// The store has answered `id`; the session can move on.
     pub fn acknowledge(&mut self, id: u64, now_ms: i64) -> bool {
-        let Some((awaiting, grade)) = self.awaiting else {
+        let Some((awaiting, card, grade)) = self.awaiting else {
             return false;
         };
         if awaiting != id {
@@ -138,28 +146,56 @@ impl Session {
         self.awaiting = None;
         self.grades.push(grade);
         match (self.queue, grade) {
-            // A forgotten new card goes back in the queue: nothing is scheduled yet.
+            // A forgotten card is not answered: one leaves the queue for later, the other comes
+            // straight back, and neither counts as done.
             (Queue::New, Grade::Forgot) => {
-                if self.at < self.entries.len() {
-                    let entry = self.entries.remove(self.at);
+                if let Some(entry) = self.take(card) {
                     self.entries.push(entry);
                 }
-                self.revealed = 0;
             }
-            // A forgotten due card is in a relearning step: it comes back when that step lands.
             (Queue::Due, Grade::Forgot) => {
-                if self.at < self.entries.len() {
-                    let entry = self.entries.remove(self.at);
+                if let Some(entry) = self.take(card) {
                     self.waiting.push((now_ms + LEARNING_STEP_MS, entry));
                 }
-                self.revealed = 0;
             }
-            _ => {
-                self.at += 1;
-                self.revealed = 0;
-            }
+            _ => self.answer(card),
         }
         true
+    }
+
+    /// Record that `card` is answered, and step over it if the cursor is on it.
+    fn answer(&mut self, card: Id) {
+        self.answered.insert(card);
+        if self.entries.get(self.at).map(|entry| entry.card) == Some(card) {
+            self.revealed = 0;
+            self.read_only = false;
+            self.at += 1;
+            self.seek();
+        }
+    }
+
+    /// Skip answered cards: they are history, not something to offer again.
+    fn seek(&mut self) {
+        while self
+            .entries
+            .get(self.at)
+            .is_some_and(|entry| self.answered.contains(&entry.card))
+        {
+            self.at += 1;
+        }
+    }
+
+    /// Lift a card out of the queue wherever it sits, leaving the cursor on the card the user sees.
+    fn take(&mut self, card: Id) -> Option<Entry> {
+        let index = self.entries.iter().position(|entry| entry.card == card)?;
+        let entry = self.entries.remove(index);
+        if index < self.at {
+            self.at -= 1;
+        } else if index == self.at {
+            self.revealed = 0;
+            self.read_only = false;
+        }
+        Some(entry)
     }
 
     /// Move to the next card without answering this one; it stays queued.
@@ -185,6 +221,7 @@ impl Session {
             .get(self.at.min(self.entries.len())..)
             .unwrap_or_default()
             .iter()
+            .filter(|entry| !self.answered.contains(&entry.card))
             .map(|entry| entry.card)
             .collect()
     }
@@ -194,16 +231,29 @@ impl Session {
     /// Only cards sharing the same overdue day may swap places, which is what keeps a reshuffle
     /// from breaking the order the scheduler asked for.
     pub fn reshuffle(&mut self, seed: u64) {
+        let before = self.current().map(|entry| entry.card);
         let mut shuffle = crate::shuffle::Shuffle::new(seed);
         let mut index = self.at;
         while index < self.entries.len() {
+            if self.answered.contains(&self.entries[index].card) {
+                index += 1;
+                continue;
+            }
             let overdue = self.entries[index].overdue;
             let mut end = index;
-            while end < self.entries.len() && self.entries[end].overdue == overdue {
+            while end < self.entries.len()
+                && !self.answered.contains(&self.entries[end].card)
+                && self.entries[end].overdue == overdue
+            {
                 end += 1;
             }
             shuffle.reorder(&mut self.entries[index..end]);
             index = end;
+        }
+        // A different card is on screen now, so nothing has been shown of it yet.
+        if self.current().map(|entry| entry.card) != before {
+            self.revealed = 0;
+            self.read_only = false;
         }
     }
 
@@ -249,12 +299,12 @@ impl Session {
 
     /// Cards left to answer, including those still in a relearning step.
     pub fn remaining(&self) -> usize {
-        self.entries.len().saturating_sub(self.at) + self.waiting.len()
+        self.order().len() + self.waiting.len()
     }
 
     /// Whether the session has walked everything that was queued.
     pub fn finished(&self) -> bool {
-        self.at >= self.entries.len() && self.waiting.is_empty()
+        self.order().is_empty() && self.waiting.is_empty()
     }
 }
 
