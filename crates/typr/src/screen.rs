@@ -8,4 +8,5 @@ pub enum Screen {
     Editor,
     Session,
     Summary,
+    Settings,
 }

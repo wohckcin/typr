@@ -53,6 +53,7 @@ pub fn build<S: Host>(s: &S, layer: &mut Vec<El>) {
         Surface::Editor,
         Surface::Session,
         Surface::Summary,
+        Surface::Settings,
     ] {
         let mut group = col().key("group").gap(4.0);
         let mut shown = 0;

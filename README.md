@@ -149,18 +149,30 @@ prompt and schedules from them against a target recall; a card it has never seen
 has an interval keeps that interval by deriving its stability from it, so switching does not reset
 what the fixed scheduler learned.
 
-Both are set in the `settings` table, which the settings screen (a later change) will expose:
+Both are set in the `settings` table, which the settings screen (`,` from the library or a session)
+exposes. Every key, its range and its default:
 
 | Key | Values | Default | What it does |
 | --- | --- | --- | --- |
+| `new_per_day` | 0 to 1000 | `20` | new cards a new-card session offers |
+| `learning_step_minutes` | 1 to 1440 | `10` | how long a missed card waits before it comes back |
+| `max_interval_days` | 1 to 3650 | `365` | the longest interval either scheduler will set |
 | `scheduler` | `fixed`, `fsrs` | `fixed` | which scheduler answers a grade |
 | `retention` | 70 to 97 | `90` | the recall FSRS aims at; higher means sooner |
 | `fsrs_weights` | nineteen positive numbers | the FSRS-5 defaults | what the optimiser produced |
+| `reverse_default` | `0`, `1` | `0` | whether a new card is reviewed both ways |
+| `theme` | `dark`, `light` | `dark` | the window's appearance |
+| `scale` | 0.80 to 1.50 | `1.0` | interface scale; layout is laid out in window/scale points |
+| `preview_font_size` | 10 to 28 | `14` | body text size in the editor's Markdown preview |
 
-The store writes these through `set_scheduler`, `set_retention` and `set_weights`, which refuse a
-value the reader would refuse: an unknown scheduler, a target outside seventy to ninety-seven, or a
-weight list that is not nineteen positive numbers leaves the old setting in place. Nothing is
-written on a refusal, so a library never holds a value that would stop it opening.
+A value is validated before it is written: a number outside its range, a theme or scheduler the
+reader does not know, a scale that is not a positive number, or a weight list that is not nineteen
+positive numbers is refused, the screen says which setting and which value, and the old setting
+stays. Nothing is written on a refusal, so a library never holds a value that would stop it
+opening. A value edited into the file by hand is read through the same validators, so a library
+with a bad row reports the key and text instead of silently replacing it.
+
+A scheduler change takes effect on the next grade; the other keys apply on the next frame.
 
 FSRS state lives beside the prompt, in two nullable columns: a prompt that has not been through
 FSRS has no memory rather than a made-up one, and grading it under the fixed scheduler leaves those
@@ -254,6 +266,7 @@ points, and the action stays.
 | Library | `n` | Review the new cards |
 | Library | `c` | New card |
 | Library | `x` | Cram the cards the filter selects |
+| Library | `,` | Open settings |
 | Editor | `s` | Save the card |
 | Editor | `h` | Show the card's history |
 | Editor | `Alt+N` | Add a rectangle to a diagram |
@@ -265,8 +278,10 @@ points, and the action stays.
 | Session | `f` | Forgot |
 | Session | `Right` / `Left` | Next card / back, read-only |
 | Session | `r` | Shuffle the cards still to answer |
+| Session | `,` | Open settings |
 | Session | `Esc` | Back to the library |
 | Summary | `Esc` | Start a session from the list |
+| Settings | `Esc` | Close settings and return to the screen that opened them |
 | Every screen | `?` | Keyboard shortcuts |
 | Every screen | `⌘K` | Command palette |
 

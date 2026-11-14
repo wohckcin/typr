@@ -90,7 +90,7 @@ impl Group {
 
 /// One setting, named. The stored spelling is [`SettingKey::as_str`]; the text of a value is
 /// [`SettingValue::text`], and the pair is the only thing the store writes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SettingKey {
     NewPerDay,
     LearningStepMinutes,

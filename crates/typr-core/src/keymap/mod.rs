@@ -13,6 +13,7 @@ pub enum Surface {
     Editor,
     Session,
     Summary,
+    Settings,
 }
 
 impl Surface {
@@ -22,6 +23,7 @@ impl Surface {
             Surface::Editor => "Editor",
             Surface::Session => "Review",
             Surface::Summary => "Summary",
+            Surface::Settings => "Settings",
         }
     }
 }
@@ -49,6 +51,7 @@ pub enum Command {
     TallerRectangle,
     ShorterRectangle,
     CramSession,
+    Settings,
 }
 
 impl Command {
@@ -74,6 +77,7 @@ impl Command {
             Command::TallerRectangle => "Make the rectangle taller",
             Command::ShorterRectangle => "Make the rectangle shorter",
             Command::CramSession => "Cram the cards the filter selects",
+            Command::Settings => "Settings",
         }
     }
 }
@@ -325,6 +329,17 @@ const TABLE: &[Binding] = &[
         Command::CramSession,
         Chord::key(Key::Char('x')),
     ),
+    row(
+        Surface::Library,
+        Command::Settings,
+        Chord::key(Key::Char(',')),
+    ),
+    row(
+        Surface::Session,
+        Command::Settings,
+        Chord::key(Key::Char(',')),
+    ),
+    row(Surface::Settings, Command::Leave, Chord::key(Key::Escape)),
 ];
 
 /// The table, as a slice.

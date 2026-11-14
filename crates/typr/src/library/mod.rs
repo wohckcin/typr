@@ -75,6 +75,9 @@ pub fn tile_width(width: f32, columns: usize) -> f32 {
 /// type, so the screen cannot name one implementation.
 pub trait Host: 'static {
     fn library(&self) -> &Library;
+
+    /// Open the settings screen from the library.
+    fn open_settings(&mut self) {}
     fn library_mut(&mut self) -> &mut Library;
 
     /// Whether the window has room for a keycap beside a control's label.
@@ -1477,6 +1480,13 @@ fn filter_bar<S: Host>(s: &S) -> El {
                 .key("archive-deck"),
         );
     }
+    bar = bar.child(
+        Button::new("Settings")
+            .variant(ButtonVariant::Ghost)
+            .on_press(|s: &mut S| s.open_settings())
+            .build(&KIT)
+            .key("settings"),
+    );
     bar = bar.child(
         Button::new("Import")
             .variant(ButtonVariant::Ghost)

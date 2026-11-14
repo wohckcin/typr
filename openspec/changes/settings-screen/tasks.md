@@ -12,7 +12,7 @@ Depends on `review-reverse` and `fsrs-scheduling` for the keys it exposes.
 
 ## 2. Screen
 
-- [ ] 2.1 `Screen::Settings` and `crates/typr/src/settings.rs` with three sections; opened from the library and from a session, returning to the card that was up.
+- [x] 2.1 `Screen::Settings` and `crates/typr/src/settings.rs` with three sections; opened from the library and from a session, returning to the card that was up.
   - **Verification**: `settings_open_from_a_session_and_return_to_the_card` drives the key path in `rune::Runtime` and asserts the session's card is unchanged.
 - [ ] 2.2 Appearance reaches the theme and the scale on the next frame, with a reset control.
   - **Verification**: `a_scale_change_is_drawn_on_the_next_frame` compares element geometry before and after; `a_the_theme_change_repaints` reads the kit's dark flag.

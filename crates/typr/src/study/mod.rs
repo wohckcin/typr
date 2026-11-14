@@ -14,6 +14,9 @@ use typr_core::store::{Grade, Id, StoreError};
 /// What the study screen needs from the app.
 pub trait Host: 'static {
     fn session(&self) -> &Session;
+
+    /// Leave the card where it is and open the settings screen.
+    fn open_settings(&mut self) {}
     fn session_mut(&mut self) -> &mut Session;
     /// Send the grade to the store and answer the id it was sent under. The key names the prompt
     /// being answered: a card may hold a forward prompt, a reverse one, or a group apiece.
@@ -276,6 +279,13 @@ pub fn view<S: Host>(s: &S) -> El {
     }
 
     let mut answers = row().key("answers").gap(8.0).justify_end().child(
+        Button::new("Settings")
+            .variant(ButtonVariant::Ghost)
+            .on_press(|s: &mut S| s.open_settings())
+            .build(&rune_kit::Kit::neutral(true))
+            .key("settings"),
+    );
+    answers = answers.child(
         with_key(s, Command::Shuffle, "Shuffle", ButtonVariant::Ghost)
             .on_press(|s: &mut S| s.reshuffle())
             .build(&rune_kit::Kit::neutral(true))

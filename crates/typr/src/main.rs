@@ -15,6 +15,7 @@ use typr::library::{self, Library};
 use typr::logging;
 use typr::paths;
 use typr::screen::Screen;
+use typr::settings;
 use typr::study::{self, Host};
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Command, Surface};
@@ -22,7 +23,8 @@ use typr_core::screen::Queue;
 use typr_core::session::{Entry, Mode, Session};
 use typr_core::store::{
     CardKind, CardMode, CardRef, CardSummary, Deck, Grade, Handle, Id, MaskRect, MaskRow, Outcome,
-    SavedView, Snapshot, Sort, SortDir, Store, StoreError, ViewSpec, WorkerStatus,
+    SavedView, SettingKey, SettingValue, Settings, Sort, SortDir, Store, StoreError, ViewSpec,
+    WorkerStatus,
 };
 use typr_core::{day, hidden};
 
@@ -133,6 +135,10 @@ struct State {
     cram_save_request: Option<u64>,
     /// Whether the filter has been saved, so a second press creates no second view.
     cram_saved: bool,
+    /// The text each setting row is editing, so a refusal can leave it on screen.
+    setting_inputs: HashMap<SettingKey, TextEdit>,
+    /// The screen to go back to when settings closes.
+    settings_from: Option<Screen>,
 }
 
 impl Default for State {
@@ -171,6 +177,11 @@ impl Default for State {
             cram_name: TextEdit::default(),
             cram_save_request: None,
             cram_saved: false,
+            setting_inputs: SettingKey::ALL
+                .into_iter()
+                .map(|key| (key, TextEdit::default()))
+                .collect(),
+            settings_from: None,
         }
     }
 }
@@ -331,6 +342,39 @@ impl State {
     }
 
     /// Note when a command went out, or say why it could not.
+    /// Open the settings screen, remembering the screen it was opened from.
+    fn open_settings(&mut self) {
+        if self.screen != Screen::Settings {
+            self.settings_from = Some(self.screen);
+        }
+        let settings = self.library.snapshot().settings.clone();
+        for key in SettingKey::ALL {
+            let text = settings.value(key).text();
+            self.setting_inputs
+                .entry(key)
+                .or_default()
+                .replace_text(text);
+        }
+        self.screen = Screen::Settings;
+    }
+
+    /// Close settings and return to whatever was on screen, with a session at the card it was on.
+    fn leave_settings(&mut self) {
+        self.screen = self.settings_from.take().unwrap_or(Screen::Library);
+    }
+
+    /// Store a value the screen has already parsed; a refusal stays on the failure line.
+    fn store_setting(&mut self, key: SettingKey, value: SettingValue) {
+        if let Some(input) = self.setting_inputs.get_mut(&key) {
+            input.replace_text(value.text());
+        }
+        let sent = match &self.store {
+            Some(store) => store.set_setting(key, value),
+            None => Err(StoreError::Closed),
+        };
+        self.track("settings", sent);
+    }
+
     fn track(&mut self, name: &'static str, result: Result<u64, StoreError>) {
         match result {
             Ok(id) => {
@@ -475,6 +519,10 @@ impl State {
 }
 
 impl library::Host for State {
+    fn open_settings(&mut self) {
+        State::open_settings(self);
+    }
+
     fn keycaps(&self) -> bool {
         keymap::Host::wide_enough(self)
     }
@@ -726,6 +774,10 @@ impl history::Host for State {
 }
 
 impl study::Host for State {
+    fn open_settings(&mut self) {
+        State::open_settings(self);
+    }
+
     fn keycaps(&self) -> bool {
         keymap::Host::wide_enough(self)
     }
@@ -1433,12 +1485,15 @@ impl State {
     }
 }
 
-fn view(s: &State, _: &mut Cx<State>) -> El {
+fn view(s: &State, cx: &mut Cx<State>) -> El {
+    // The interface scale is part of the next frame: a value stored this frame lays out the next.
+    cx.zoom(s.library.snapshot().settings.scale);
     let screen = match s.screen {
         Screen::Library => library::view::<State>(s),
         Screen::Editor => editor::view::<State>(s),
         Screen::Session => study::view::<State>(s),
         Screen::Summary => study::summary::<State>(s),
+        Screen::Settings => settings::view::<State>(s),
     };
     let body = match &s.failure {
         None => screen,
@@ -1497,6 +1552,18 @@ impl State {
             Screen::Editor => self.run_editor(command),
             Screen::Session => study::run(self, command) || self.run_common(command),
             Screen::Summary => self.run_summary(command),
+            Screen::Settings => self.run_settings(command),
+        }
+    }
+
+    /// Settings answers Leave, and the panel and palette it shares with every screen.
+    fn run_settings(&mut self, command: Command) -> bool {
+        match command {
+            Command::Leave => {
+                self.leave_settings();
+                true
+            }
+            _ => self.run_common(command),
         }
     }
 
@@ -1509,6 +1576,10 @@ impl State {
             }
             Command::ShowPalette => {
                 keymap::palette::open(&mut self.palette);
+                true
+            }
+            Command::Settings => {
+                self.open_settings();
                 true
             }
             _ => false,
@@ -1628,6 +1699,32 @@ impl State {
     }
 }
 
+impl settings::Host for State {
+    fn settings(&self) -> &Settings {
+        &self.library.snapshot().settings
+    }
+
+    fn setting_input(&self, key: SettingKey) -> &TextEdit {
+        &self.setting_inputs[&key]
+    }
+
+    fn setting_input_mut(&mut self, key: SettingKey) -> &mut TextEdit {
+        self.setting_inputs.entry(key).or_default()
+    }
+
+    fn set_setting(&mut self, key: SettingKey, value: SettingValue) {
+        self.store_setting(key, value);
+    }
+
+    fn refuse(&mut self, error: &StoreError) {
+        self.fail(error);
+    }
+
+    fn leave_settings(&mut self) {
+        State::leave_settings(self);
+    }
+}
+
 impl keymap::Host for State {
     fn surface(&self) -> Surface {
         match self.screen {
@@ -1635,6 +1732,7 @@ impl keymap::Host for State {
             Screen::Editor => Surface::Editor,
             Screen::Session => Surface::Session,
             Screen::Summary => Surface::Summary,
+            Screen::Settings => Surface::Settings,
         }
     }
 
@@ -1674,6 +1772,7 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
         Screen::Editor => Surface::Editor,
         Screen::Session => Surface::Session,
         Screen::Summary => Surface::Summary,
+        Screen::Settings => Surface::Settings,
     };
     match typr::keymap::command_for(surface, event) {
         Some(command) => s.run_command(command),

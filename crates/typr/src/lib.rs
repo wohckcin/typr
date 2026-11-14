@@ -10,4 +10,5 @@ pub mod library;
 pub mod logging;
 pub mod paths;
 pub mod screen;
+pub mod settings;
 pub mod study;

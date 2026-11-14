@@ -15,6 +15,7 @@ mod editor_flow;
 mod embeds;
 mod library_flow;
 mod session_flow;
+mod settings_flow;
 
 /// A clock that panics the first time the worker reads it, which is how a stoppage starts.
 struct Stops(AtomicUsize);
