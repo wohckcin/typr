@@ -14,6 +14,7 @@ mod cards;
 mod protocol;
 mod review;
 mod schema;
+mod views;
 
 /// Noon on a fixed day, so a study day and its bounds are unambiguous in tests.
 const NOON: i64 = 1_768_089_600_000 + 13 * 60 * 60 * 1000;

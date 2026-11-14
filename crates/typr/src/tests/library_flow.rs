@@ -434,7 +434,7 @@ fn decks_are_created_renamed_and_moved_from_the_sidebar() {
         state
             .failure
             .as_deref()
-            .is_some_and(|why| why.contains("is already under that parent")),
+            .is_some_and(|why| why.contains("a deck called") && why.contains("already exists")),
         "a duplicate name is refused out loud, got {:?}",
         state.failure
     );

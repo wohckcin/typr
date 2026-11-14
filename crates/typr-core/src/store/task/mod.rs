@@ -14,7 +14,9 @@ use std::thread::JoinHandle;
 
 use crate::clock::Clock;
 
-use super::{Command, Db, Event, Grade, Id, MaskRect, Outcome, Snapshot, Store, StoreError};
+use super::{
+    Command, Db, Event, Grade, Id, MaskRect, Outcome, Snapshot, Store, StoreError, ViewSpec,
+};
 
 /// What the worker calls once its answer is published and readable.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
@@ -349,6 +351,35 @@ impl Store for Handle {
 
     fn masks(&self, card: Id) -> Result<u64, StoreError> {
         self.submit(Command::Masks { card })
+    }
+
+    fn create_view(&self, spec: &ViewSpec, name: &str) -> Result<u64, StoreError> {
+        self.submit(Command::CreateView {
+            spec: spec.clone(),
+            name: name.to_string(),
+        })
+    }
+
+    fn rename_view(&self, id: Id, name: &str) -> Result<u64, StoreError> {
+        self.submit(Command::RenameView {
+            id,
+            name: name.to_string(),
+        })
+    }
+
+    fn delete_view(&self, id: Id) -> Result<u64, StoreError> {
+        self.submit(Command::DeleteView { id })
+    }
+
+    fn update_view(&self, id: Id, spec: &ViewSpec) -> Result<u64, StoreError> {
+        self.submit(Command::UpdateView {
+            id,
+            spec: spec.clone(),
+        })
+    }
+
+    fn set_pinned(&self, card: Id, pinned: bool) -> Result<u64, StoreError> {
+        self.submit(Command::SetPinned { card, pinned })
     }
 
     fn history(&self, card: Id) -> Result<u64, StoreError> {

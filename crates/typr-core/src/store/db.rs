@@ -13,8 +13,9 @@ use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
 use crate::template;
 
 use super::{
-    CardKind, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow, NewPrompt,
-    Outcome, Phase, ReviewRow, Settings, Snapshot, Stats, StoreError,
+    CardKind, CardMode, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow,
+    NewPrompt, Outcome, Phase, ReviewRow, SavedView, Settings, Snapshot, Sort, SortDir, Stats,
+    StoreError, ViewSpec,
     schema::{self, SchemaFacts},
 };
 use unicode_normalization::UnicodeNormalization;
@@ -113,19 +114,22 @@ impl Db {
         Ok(outcome)
     }
 
-    /// Write a deck name, turning SQLite's unique refusal into something the reader understands.
+    /// Write a row whose name is unique, turning SQLite's refusal into something the reader
+    /// understands: "a view called X already exists" is a sentence, the constraint is not.
     ///
     /// Only the extended code for a unique violation is translated: a foreign key or a check
     /// failure stays a database error, because it means the caller asked for something else.
-    fn deck_write(
+    fn named_write(
         &self,
         sql: &str,
         params: impl rusqlite::Params,
+        what: &'static str,
         name: &str,
     ) -> Result<usize, StoreError> {
         self.conn.execute(sql, params).map_err(|error| {
             if error.sqlite_extended_error_code() == Some(rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE) {
                 StoreError::DuplicateName {
+                    what,
                     name: name.to_string(),
                 }
             } else {
@@ -138,17 +142,19 @@ impl Db {
     fn dispatch(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
         match command {
             Command::CreateDeck { parent, name } => {
-                self.deck_write(
+                self.named_write(
                     "INSERT INTO deck (parent_id, name) VALUES (?1, ?2)",
                     params![parent, name],
+                    "deck",
                     name,
                 )?;
                 Ok(Outcome::Deck(self.conn.last_insert_rowid()))
             }
             Command::RenameDeck { id, name } => {
-                let changed = self.deck_write(
+                let changed = self.named_write(
                     "UPDATE deck SET name = ?2 WHERE id = ?1",
                     params![id, name],
+                    "deck",
                     name,
                 )?;
                 // `<<Deck>>` is the card's own deck name, so every card under this one says
@@ -446,6 +452,60 @@ impl Db {
             } => Ok(Outcome::New(
                 self.new_prompts(*now_ms, *offset_ms, *seed, *deck)?,
             )),
+            Command::CreateView { spec, name } => {
+                let name = name.trim();
+                let changed = self.named_write(
+                    "INSERT INTO view (name, deck, query, tags, mode, pinned_only, sort_key, sort_dir)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![
+                        name,
+                        spec.deck,
+                        spec.query,
+                        encode_tags(&spec.tags),
+                        mode_text(spec.mode),
+                        i64::from(spec.pinned_only),
+                        spec.sort.as_str(),
+                        spec.dir.as_str(),
+                    ],
+                    "view",
+                    name,
+                )?;
+                debug_assert_eq!(changed, 1, "one row is one view");
+                Ok(Outcome::View(self.conn.last_insert_rowid()))
+            }
+            Command::RenameView { id, name } => {
+                let name = name.trim();
+                let changed = self.named_write(
+                    "UPDATE view SET name = ?2 WHERE id = ?1",
+                    params![id, name],
+                    "view",
+                    name,
+                )?;
+                Ok(Outcome::Changed(changed))
+            }
+            Command::DeleteView { id } => Ok(Outcome::Changed(
+                self.conn
+                    .execute("DELETE FROM view WHERE id = ?1", params![id])?,
+            )),
+            Command::UpdateView { id, spec } => Ok(Outcome::Changed(self.conn.execute(
+                "UPDATE view SET deck = ?2, query = ?3, tags = ?4, mode = ?5, pinned_only = ?6,
+                                sort_key = ?7, sort_dir = ?8
+                 WHERE id = ?1",
+                params![
+                    id,
+                    spec.deck,
+                    spec.query,
+                    encode_tags(&spec.tags),
+                    mode_text(spec.mode),
+                    i64::from(spec.pinned_only),
+                    spec.sort.as_str(),
+                    spec.dir.as_str(),
+                ],
+            )?)),
+            Command::SetPinned { card, pinned } => Ok(Outcome::Changed(self.conn.execute(
+                "UPDATE card SET pinned = ?2 WHERE id = ?1",
+                params![card, i64::from(*pinned)],
+            )?)),
             Command::History { card } => Ok(Outcome::History {
                 rows: self.history(*card)?,
                 reviews: self.review_count(*card)?,
@@ -477,7 +537,8 @@ impl Db {
             let mut stmt = self.conn.prepare(
                 "SELECT c.id, c.deck_id, c.sides, c.archived, c.trashed_at, c.updated_at, c.markdown,
                         c.search_text, COUNT(sp.card_id), SUM(sp.card_id IS NOT NULL AND sp.due_at IS NULL), MIN(sp.due_at),
-                        c.reverse, c.kind, c.image, c.caption, c.template
+                        c.reverse, c.kind, c.image, c.caption, c.template, c.pinned, c.created_at,
+                        (SELECT COUNT(*) FROM review_log r WHERE r.card_id = c.id AND r.phase <> 'learn')
                  FROM card c
                  LEFT JOIN studyable_prompt sp ON sp.card_id = c.id
                  GROUP BY c.id
@@ -497,9 +558,9 @@ impl Db {
                     reverse: flag(row.get(11)?),
                     trashed_at: row.get(4)?,
                     updated_at: row.get(5)?,
-                    created_at: 0,
-                    reviews: 0,
-                    pinned: false,
+                    created_at: row.get(17)?,
+                    reviews: count_of(row.get(18)?),
+                    pinned: row.get::<_, i64>(16)? != 0,
                     preview: preview(&row.get::<_, String>(6)?),
                     markdown: row.get(6)?,
                     search_text: row.get(7)?,
@@ -608,10 +669,32 @@ impl Db {
             }
             cards
         };
+        let views = {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, name, deck, query, tags, mode, pinned_only, sort_key, sort_dir
+                 FROM view ORDER BY name COLLATE NOCASE, id",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok(SavedView {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    spec: ViewSpec {
+                        deck: row.get(2)?,
+                        query: row.get(3)?,
+                        tags: decode_tags(&row.get::<_, String>(4)?),
+                        mode: mode_parse(&row.get::<_, String>(5)?),
+                        pinned_only: row.get::<_, i64>(6)? != 0,
+                        sort: Sort::parse(&row.get::<_, String>(7)?).unwrap_or_default(),
+                        dir: SortDir::parse(&row.get::<_, String>(8)?).unwrap_or_default(),
+                    },
+                })
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
         Ok(Snapshot {
             decks,
             cards,
-            views: Vec::new(),
+            views,
             settings: self.settings()?,
             revision: 0,
         })
@@ -1507,6 +1590,43 @@ pub fn folded(text: &str) -> String {
         .filter(|character| !is_combining_mark(*character))
         .flat_map(char::to_lowercase)
         .collect()
+}
+
+/// The separator a view's tag set is stored with: ASCII unit separator, which a tag typed by hand
+/// cannot hold, so no tag can be confused with two.
+const TAG_SEPARATOR: char = '\u{1f}';
+
+fn encode_tags(tags: &[String]) -> String {
+    let separator = TAG_SEPARATOR.to_string();
+    tags.iter()
+        .map(|tag| tag.trim())
+        .filter(|tag| !tag.is_empty())
+        .collect::<Vec<_>>()
+        .join(&separator)
+}
+
+fn decode_tags(text: &str) -> Vec<String> {
+    text.split(TAG_SEPARATOR)
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn mode_text(mode: CardMode) -> &'static str {
+    match mode {
+        CardMode::Active => "active",
+        CardMode::Archived => "archived",
+        CardMode::Trash => "trash",
+    }
+}
+
+fn mode_parse(text: &str) -> CardMode {
+    match text {
+        "archived" => CardMode::Archived,
+        "trash" => CardMode::Trash,
+        _ => CardMode::Active,
+    }
 }
 
 /// The first line of a card, cut to what a list row can show.

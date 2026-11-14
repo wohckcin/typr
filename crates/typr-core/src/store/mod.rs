@@ -493,6 +493,27 @@ pub enum Command {
         deck: Id,
         reverse: Option<bool>,
     },
+    /// Save the current filter under a name.
+    CreateView {
+        spec: ViewSpec,
+        name: String,
+    },
+    RenameView {
+        id: Id,
+        name: String,
+    },
+    DeleteView {
+        id: Id,
+    },
+    UpdateView {
+        id: Id,
+        spec: ViewSpec,
+    },
+    /// Whether a card is pinned, which a view can ask to list alone.
+    SetPinned {
+        card: Id,
+        pinned: bool,
+    },
     History {
         card: Id,
     },
@@ -507,6 +528,7 @@ pub enum Command {
 pub enum Outcome {
     Deck(Id),
     Card(Id),
+    View(Id),
     /// How many rows changed; zero means the id did not exist.
     Changed(usize),
     /// Where the grade left the prompt.
@@ -537,6 +559,7 @@ impl Outcome {
         match self {
             Outcome::Deck(_)
             | Outcome::Card(_)
+            | Outcome::View(_)
             | Outcome::Changed(_)
             | Outcome::Graded { .. }
             | Outcome::Ok => true,
@@ -590,8 +613,8 @@ pub enum StoreError {
     /// A deck name another deck under the same parent already uses.
     #[error("{what} {id} does not exist")]
     Missing { what: &'static str, id: Id },
-    #[error("a deck called {name:?} is already under that parent")]
-    DuplicateName { name: String },
+    #[error("a {what} called {name:?} already exists")]
+    DuplicateName { what: &'static str, name: String },
     /// A move that would put a deck inside itself.
     #[error("deck {deck} cannot be moved inside itself")]
     Cycle { deck: Id },
@@ -693,6 +716,13 @@ pub trait Store: Send + Sync {
     fn merge_masks(&self, card: Id, rects: &[MaskRect], group: u32) -> Result<u64, StoreError>;
     fn mask_groups(&self, card: Id) -> Result<u64, StoreError>;
     fn masks(&self, card: Id) -> Result<u64, StoreError>;
+    /// Save the filter `spec` under `name`. A name already in use is refused.
+    fn create_view(&self, spec: &ViewSpec, name: &str) -> Result<u64, StoreError>;
+    fn rename_view(&self, id: Id, name: &str) -> Result<u64, StoreError>;
+    fn delete_view(&self, id: Id) -> Result<u64, StoreError>;
+    /// Replace every part of a saved view's filter, keeping its name and id.
+    fn update_view(&self, id: Id, spec: &ViewSpec) -> Result<u64, StoreError>;
+    fn set_pinned(&self, card: Id, pinned: bool) -> Result<u64, StoreError>;
     fn history(&self, card: Id) -> Result<u64, StoreError>;
     fn stats(&self, from_ms: i64, to_ms: i64) -> Result<u64, StoreError>;
 }
