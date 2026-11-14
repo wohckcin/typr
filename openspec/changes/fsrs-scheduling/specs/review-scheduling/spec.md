@@ -58,13 +58,14 @@ reject a value outside that range, and SHALL use it only for interval length.
 
 ### Requirement: The review history can be exported for tuning
 
-The system SHALL produce the review history as a table of card, review time, grade and the schedule the
-review produced, in a shape an external FSRS optimiser reads, and SHALL NOT run the optimiser itself.
+The system SHALL produce the review history as a table of card, review time, rating, the state the
+prompt was in before the grade and how long the review took, in the schema an external FSRS optimiser
+reads, and SHALL NOT run the optimiser itself.
 
 #### Scenario: An exported history is complete
 
 - **WHEN** a library with a hundred records is exported
-- **THEN** the export holds one row per record with its grade and timestamp, and no records are lost
+- **THEN** the export holds one row per record with its rating and timestamp, and no records are lost
 
 #### Scenario: Weights can be replaced
 
