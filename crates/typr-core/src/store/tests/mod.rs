@@ -127,6 +127,17 @@ fn schedule(db: &mut Db, card: Id, due_at: i64) {
 /// Put a file back to an older schema: the version number alone is not a simulation, because a build
 /// of that age had none of the objects later migrations added.
 pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
+    if version < 11 {
+        // A version-10 file knew no memory and no scheduler settings.
+        conn.execute_batch("ALTER TABLE prompt DROP COLUMN stability")
+            .expect("drop the stability column");
+        conn.execute_batch("ALTER TABLE prompt DROP COLUMN difficulty")
+            .expect("drop the difficulty column");
+        conn.execute_batch(
+            "DELETE FROM settings WHERE key IN ('scheduler', 'retention', 'fsrs_weights')",
+        )
+        .expect("drop the scheduler settings");
+    }
     if version < 10 {
         // A version-9 file knew no references between cards.
         conn.execute_batch("DROP TABLE IF EXISTS reference")

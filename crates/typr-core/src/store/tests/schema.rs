@@ -1015,3 +1015,81 @@ fn columns(db: &Db, table: &str) -> Vec<String> {
         .collect::<Result<Vec<String>, _>>()
         .expect("rows")
 }
+
+#[test]
+fn a_library_from_before_fsrs_keeps_its_schedules() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let before = {
+        let mut db = Db::open(&path).expect("open");
+        let deck = deck(&mut db, "Spanish");
+        let card = card(&mut db, deck, "gato\n---\ncat");
+        // Written before V11 existed: no memory, and the fixed scheduler is the only one.
+        db.apply(
+            &Command::Grade {
+                card,
+                key: "fwd".to_string(),
+                grade: Grade::Remembered,
+                duration_ms: None,
+            },
+            1_700_000_000_000,
+        )
+        .expect("grade");
+        rewind_for_test(db.connection_for_test(), 10);
+        assert_eq!(schema_version_at(&path), 10, "the file is a version-10 one");
+        capture(&db)
+    };
+
+    let db = Db::open(&path).expect("reopen");
+    assert!(
+        columns(&db, "prompt").contains(&"stability".to_string()),
+        "the prompt lost its stability column"
+    );
+    assert!(columns(&db, "prompt").contains(&"difficulty".to_string()));
+    let settings = db.settings().expect("settings");
+    assert_eq!(
+        settings.scheduler,
+        crate::store::SchedulerKind::Fixed,
+        "a library that never chose still schedules as it did"
+    );
+    assert_eq!(settings.retention, 90);
+    assert_eq!(settings.weights, crate::fsrs::DEFAULT_WEIGHTS.to_vec());
+    assert_eq!(
+        before,
+        capture(&db),
+        "and every schedule it had is untouched"
+    );
+}
+
+#[test]
+fn the_scheduler_defaults_to_fixed() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    let settings = db.settings().expect("settings");
+    assert_eq!(settings.scheduler, crate::store::SchedulerKind::Fixed);
+    assert_eq!(settings.retention, 90, "the model's default target");
+    assert_eq!(
+        settings.weights.len(),
+        crate::fsrs::WEIGHT_COUNT,
+        "with the published weights, not an empty list"
+    );
+}
+
+#[test]
+fn the_default_weights_are_what_the_migration_wrote() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    let written: String = db
+        .connection_for_test()
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'fsrs_weights'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the migrated row");
+    assert_eq!(
+        written,
+        crate::fsrs::weight_text(&crate::fsrs::DEFAULT_WEIGHTS),
+        "the migration's literal and the algorithm's constant have drifted apart"
+    );
+}

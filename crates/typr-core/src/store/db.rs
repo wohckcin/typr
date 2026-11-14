@@ -15,8 +15,8 @@ use crate::transfer::{self, mochi};
 
 use super::{
     CardKind, CardMode, CardRef, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect,
-    MaskRow, NewPrompt, Outcome, Phase, ReviewRow, SavedView, Settings, Snapshot, Sort, SortDir,
-    Stats, StoreError, ViewSpec,
+    MaskRow, NewPrompt, Outcome, Phase, ReviewRow, SavedView, SchedulerKind, Settings, Snapshot,
+    Sort, SortDir, Stats, StoreError, ViewSpec,
     schema::{self, SchemaFacts},
 };
 use unicode_normalization::UnicodeNormalization;
@@ -826,10 +826,56 @@ impl Db {
                 });
             }
         };
+        let kind: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'scheduler'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let scheduler = match kind {
+            None => SchedulerKind::default(),
+            Some(value) => SchedulerKind::parse(&value).ok_or(StoreError::Setting {
+                key: "scheduler".to_string(),
+                value,
+            })?,
+        };
+        let retention = match self.setting_text("retention")? {
+            None => Settings::DEFAULT_RETENTION,
+            Some(value) => match value.parse::<u32>() {
+                Ok(percent) if (1..=100).contains(&percent) => percent,
+                _ => {
+                    return Err(StoreError::Setting {
+                        key: "retention".to_string(),
+                        value,
+                    });
+                }
+            },
+        };
+        let weights = match self.setting_text("fsrs_weights")? {
+            None => crate::fsrs::DEFAULT_WEIGHTS.to_vec(),
+            Some(value) => crate::fsrs::weights(&value)?,
+        };
         Ok(Settings {
             new_per_day,
             reverse_default,
+            scheduler,
+            retention,
+            weights,
         })
+    }
+
+    /// One settings row as text, or `None` when nothing has written it.
+    fn setting_text(&self, key: &str) -> Result<Option<String>, StoreError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()?)
     }
 
     /// The text as it was left, if it was left unsaved.

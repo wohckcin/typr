@@ -225,16 +225,52 @@ impl CardSummary {
     }
 }
 
-/// Settings the user can change. Only the new-card cap exists in v1.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Settings the user can change.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     pub new_per_day: u32,
     /// Whether a card is reviewed from its last side unless a deck or the card says otherwise.
     pub reverse_default: bool,
+    /// Which scheduler answers a grade.
+    pub scheduler: SchedulerKind,
+    /// The chance of recall FSRS aims at, as a whole percentage; the fixed scheduler ignores it.
+    pub retention: u32,
+    /// FSRS's weights, already checked to be the nineteen numbers it expects.
+    pub weights: Vec<f64>,
+}
+
+/// The two schedulers a library can choose between.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SchedulerKind {
+    /// Mochi's entry steps with a fixed multiplier after them: the default, and the one every
+    /// library that has never touched the setting uses.
+    #[default]
+    Fixed,
+    /// Stability, difficulty and a target retention.
+    Fsrs,
+}
+
+impl SchedulerKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SchedulerKind::Fixed => "fixed",
+            SchedulerKind::Fsrs => "fsrs",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "fixed" => Some(SchedulerKind::Fixed),
+            "fsrs" => Some(SchedulerKind::Fsrs),
+            _ => None,
+        }
+    }
 }
 
 impl Settings {
     pub const DEFAULT_NEW_PER_DAY: u32 = 20;
+    /// The retention FSRS aims at before anyone sets one, as a percentage.
+    pub const DEFAULT_RETENTION: u32 = 90;
 }
 
 impl Default for Settings {
@@ -242,6 +278,9 @@ impl Default for Settings {
         Self {
             new_per_day: Self::DEFAULT_NEW_PER_DAY,
             reverse_default: false,
+            scheduler: SchedulerKind::default(),
+            retention: Self::DEFAULT_RETENTION,
+            weights: crate::fsrs::DEFAULT_WEIGHTS.to_vec(),
         }
     }
 }

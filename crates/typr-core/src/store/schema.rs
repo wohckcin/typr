@@ -18,10 +18,27 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
 
 /// The step that adds the name column, whose backfill needs more than SQL.
 const NAMES: usize = 9;
+
+/// FSRS scheduling: what the model remembers about a prompt, and the three settings that choose it.
+///
+/// The memory columns are nullable because a prompt graded by the fixed scheduler has no memory,
+/// and the first FSRS grade bootstraps one from the interval it already reached. The settings rows
+/// are written here so a fresh library and a migrated one read the same values back; a missing row
+/// still reads as the default, so a hand-edited file cannot make the scheduler unknown.
+///
+/// The weights text duplicates `crate::fsrs::DEFAULT_WEIGHTS` because a migration is one SQL string
+/// and `concat!` takes literals only; a test pins the two together.
+const V11: &str = r#"
+ALTER TABLE prompt ADD COLUMN stability REAL;
+ALTER TABLE prompt ADD COLUMN difficulty REAL;
+INSERT OR IGNORE INTO settings (key, value) VALUES ('scheduler', 'fixed');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('retention', '90');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('fsrs_weights', '0.40255,1.18385,3.173,15.69105,7.1949,0.5345,1.4604,0.0046,1.54575,0.1192,1.01925,1.9395,0.11,0.29605,2.2698,0.2315,2.9898,0.51655,0.6621');
+"#;
 
 /// Card names: the line a list shows and a `[[reference]]` resolves against.
 ///
