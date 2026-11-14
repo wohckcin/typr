@@ -2,6 +2,7 @@
 
 pub mod clock;
 pub mod day;
+pub mod fsrs;
 pub mod hidden;
 pub mod keymap;
 pub mod name;
