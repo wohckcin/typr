@@ -741,3 +741,51 @@ fn the_note_says_which_deck_the_template_came_from() {
         "a card carrying its own template says so: {note}"
     );
 }
+
+#[test]
+fn the_table_lists_a_computed_field_read_only() {
+    let mut editor = Editor::new(Some(7), String::new());
+    let summary = typr_core::store::CardSummary {
+        id: 7,
+        deck: 2,
+        template: Some("<<Word>>\n---\nfrom <<Deck>>".to_string()),
+        template_from: Some(2),
+        fields: vec![("Word".to_string(), "gato".to_string())],
+        ..typr_core::store::CardSummary::default()
+    };
+    editor.load(&summary, Some("Spanish"));
+    let runtime = render(editor);
+    let elements = runtime.elements();
+
+    let keys: Vec<&str> = elements
+        .iter()
+        .filter_map(|element| element.key.as_deref())
+        .collect();
+    assert!(keys.contains(&"field-0"), "the typed field has an input");
+    assert!(
+        keys.contains(&"field-value-1"),
+        "the computed field is shown as a value: {keys:?}"
+    );
+    assert!(
+        !keys.contains(&"field-1"),
+        "and offers nothing to type into: {keys:?}"
+    );
+    let shown = elements
+        .iter()
+        .find(|element| element.key.as_deref() == Some("field-value-1"))
+        .and_then(|element| element.text.clone())
+        .expect("the computed value");
+    assert_eq!(shown, "Spanish");
+    assert_eq!(
+        runtime.state.fields[1].name, "Deck",
+        "the row says which field it is"
+    );
+    assert!(
+        runtime
+            .state
+            .field_pairs()
+            .iter()
+            .all(|(name, _)| name != "Deck"),
+        "a computed value is never stored as one the user typed"
+    );
+}

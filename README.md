@@ -80,7 +80,8 @@ A card is markdown. Two things give it structure:
 
 A card whose deck (or its own settings) carries a template is rendered from it: its text is the
 template with the fields filled in, stored as it renders, so a review never re-derives it. `Name`
-and `Deck` are computed — the card's first side and its deck's name — and cannot be typed over.
+and `Deck` are computed — the card's first side and its deck's name — and appear in the field table
+as read-only rows, so what the card will say is visible before it is saved.
 Clearing a template leaves every card saying what it last rendered.
 
 While you type, the preview masks every answer and names the group it belongs to — `[1 … ]` for a

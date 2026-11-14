@@ -130,6 +130,8 @@ pub struct Editor {
 pub struct FieldRow {
     pub name: String,
     pub value: TextEdit,
+    /// Whether the card computes this value, which is what makes the row read-only.
+    pub computed: bool,
 }
 
 /// A change to the rectangles on a diagram card, sent to the store.
@@ -230,8 +232,10 @@ impl Editor {
             .map(|name| FieldRow {
                 name,
                 value: TextEdit::default(),
+                computed: false,
             })
             .collect();
+        self.add_computed_rows();
         self.saved_fields = self.field_pairs();
         self.refresh();
     }
@@ -269,9 +273,14 @@ impl Editor {
                     .unwrap_or_default();
                 let mut edit = TextEdit::default();
                 edit.replace_text(stored.to_string());
-                FieldRow { name, value: edit }
+                FieldRow {
+                    name,
+                    value: edit,
+                    computed: false,
+                }
             })
             .collect();
+        self.add_computed_rows();
         self.saved_fields = self.field_pairs();
         self.refresh();
         self.kind = card.kind;
@@ -294,8 +303,29 @@ impl Editor {
     pub fn field_pairs(&self) -> Vec<(String, String)> {
         self.fields
             .iter()
+            .filter(|row| !row.computed)
             .map(|row| (row.name.clone(), row.value.text.trim().to_string()))
             .collect()
+    }
+
+    /// Append a read-only row for each field the card computes: a template that reads `<<Deck>>`
+    /// shows where that word comes from, and the row cannot be typed into because nothing stores it.
+    fn add_computed_rows(&mut self) {
+        let Some(template) = self.template.clone() else {
+            return;
+        };
+        let pairs = self.field_pairs();
+        for name in template::computed_used(&template) {
+            let shown = template::computed(name, &template, &pairs, self.deck_name.as_deref())
+                .unwrap_or_default();
+            let mut value = TextEdit::default();
+            value.replace_text(shown);
+            self.fields.push(FieldRow {
+                name: name.to_string(),
+                value,
+                computed: true,
+            });
+        }
     }
 
     /// Re-render the card from its template and fields, and re-key the preview's parse.
@@ -729,28 +759,35 @@ fn field_pane<S: Host>(s: &S) -> El {
     };
     let mut rows = col().key("field-table").w_full().gap(6.0);
     for (index, field) in editor.fields.iter().enumerate() {
+        let label = text(&field.name)
+            .key(format!("field-label-{index}"))
+            .font(type_::MONO_CAPTION)
+            .color(t.text_secondary);
+        // A computed field is shown, because the template reads it, and cannot be typed into,
+        // because the card supplies it: no input means nothing to store and nothing to lose.
+        let entry = if field.computed {
+            text(field.value.text.clone())
+                .key(format!("field-value-{index}"))
+                .font(type_::BODY.lh(20.0))
+                .color(t.text_secondary)
+        } else {
+            text_input(&field.value, type_::BODY.lh(20.0))
+                .key(format!("field-{index}"))
+                .w_full()
+                .single_line()
+                .on_edit(move |s: &mut S| &mut s.editor_mut().fields[index].value)
+                .on_input_change(|s: &mut S, _| {
+                    s.editor_mut().refresh();
+                    s.note_typing();
+                })
+        };
         rows = rows.child(
             col()
                 .key(format!("field-row-{index}"))
                 .w_full()
                 .gap(2.0)
-                .child(
-                    text(&field.name)
-                        .key(format!("field-label-{index}"))
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_secondary),
-                )
-                .child(
-                    text_input(&field.value, type_::BODY.lh(20.0))
-                        .key(format!("field-{index}"))
-                        .w_full()
-                        .single_line()
-                        .on_edit(move |s: &mut S| &mut s.editor_mut().fields[index].value)
-                        .on_input_change(|s: &mut S, _| {
-                            s.editor_mut().refresh();
-                            s.note_typing();
-                        }),
-                ),
+                .child(label)
+                .child(entry),
         );
     }
     col()

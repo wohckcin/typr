@@ -84,6 +84,44 @@ pub fn render_card(template: &str, fields: &[(String, String)], deck: Option<&st
     )
 }
 
+/// The value the card gives a computed field, or `None` when the name is not computed.
+///
+/// `Name` is the card's first side as read without it, which is the same value `render_card` fills
+/// in, so a table showing it and a card rendering it cannot disagree.
+pub fn computed(
+    name: &str,
+    template: &str,
+    fields: &[(String, String)],
+    deck: Option<&str>,
+) -> Option<String> {
+    if !is_dynamic(name) {
+        return None;
+    }
+    if name == "Deck" {
+        return Some(deck.unwrap_or_default().to_string());
+    }
+    let fields = Fields::new(fields);
+    let without_name = render(template, &fields, &Context { name: None, deck });
+    let first = crate::sides::split(&without_name)
+        .first()
+        .map(|side| side.trim())
+        .unwrap_or_default()
+        .to_string();
+    Some(first)
+}
+
+/// The computed fields a template uses, in `DYNAMIC` order: a name the template never mentions is
+/// not worth a row.
+pub fn computed_used(template: &str) -> Vec<&'static str> {
+    DYNAMIC
+        .into_iter()
+        .filter(|name| {
+            template.contains(&format!("<<{name}>>"))
+                || template.contains(&format!("{{{{#{name}}}}}"))
+        })
+        .collect()
+}
+
 /// The field names a template asks the user to fill, in the order they first appear.
 ///
 /// A computed name is left out: `Name` and `Deck` are rendered from the card, so a table that let
@@ -420,6 +458,46 @@ mod card_tests {
             "gato\n---\ngato, and it means cat",
             "a name that does not change the first side is simply filled"
         );
+    }
+}
+
+#[cfg(test)]
+mod computed_tests {
+    use super::{computed, computed_used};
+
+    #[test]
+    fn only_the_computed_names_a_template_asks_for_are_listed() {
+        assert_eq!(
+            computed_used("<<Word>>\n---\nfrom <<Deck>>"),
+            vec!["Deck"],
+            "a template that never says <<Name>> asks for no name row"
+        );
+        assert_eq!(
+            computed_used("{{#Name}}<<Name>>{{/Name}}"),
+            vec!["Name"],
+            "a section counts as asking for it"
+        );
+        assert!(computed_used("<<Word>>").is_empty());
+    }
+
+    #[test]
+    fn a_computed_value_is_the_one_the_card_renders() {
+        let fields = [("Word".to_string(), "gato".to_string())];
+        assert_eq!(
+            computed("Name", "<<Word>>\n---\n<<Meaning>>", &fields, None).as_deref(),
+            Some("gato"),
+            "the name is the first side of the card"
+        );
+        assert_eq!(
+            computed("Deck", "<<Word>>", &fields, Some("Spanish")).as_deref(),
+            Some("Spanish")
+        );
+        assert_eq!(
+            computed("Deck", "<<Word>>", &fields, None).as_deref(),
+            Some(""),
+            "an unknown deck renders empty rather than failing"
+        );
+        assert_eq!(computed("Word", "<<Word>>", &fields, None), None);
     }
 }
 
