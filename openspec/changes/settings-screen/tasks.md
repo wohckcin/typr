@@ -14,7 +14,7 @@ Depends on `review-reverse` and `fsrs-scheduling` for the keys it exposes.
 
 - [x] 2.1 `Screen::Settings` and `crates/typr/src/settings.rs` with three sections; opened from the library and from a session, returning to the card that was up.
   - **Verification**: `settings_open_from_a_session_and_return_to_the_card` drives the key path in `rune::Runtime` and asserts the session's card is unchanged.
-- [ ] 2.2 Appearance reaches the theme and the scale on the next frame, with a reset control.
+- [x] 2.2 Appearance reaches the theme and the scale on the next frame, with a reset control.
   - **Verification**: `a_scale_change_is_drawn_on_the_next_frame` compares element geometry before and after; `a_the_theme_change_repaints` reads the kit's dark flag.
 - [ ] 2.3 Library section shows the database path, schema version and migration note, size, attachments and log paths, plus import and export.
   - **Verification**: `the_settings_screen_reports_the_files_schema` seeds a rewound library and reads the drawn text; the reveal control is covered by a scene and by hand, and its headless gap is stated in the task note.
