@@ -36,4 +36,4 @@
 
 ## Workflow follow-up
 
-- [ ] 4.1 Archive with `openspec archive card-embeds --yes` once the tasks are checked.
+- [x] 4.1 Archive with `openspec archive card-embeds --yes` once the tasks are checked.
