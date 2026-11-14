@@ -995,7 +995,7 @@ fn the_row_toggles_reverse_for_one_card() {
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("typr.sqlite3");
     let store = {
-        let mut db = Db::open(&path).expect("open");
+        let db = Db::open(&path).expect("open");
         let deck = match db
             .apply(
                 &typr_core::store::Command::CreateDeck {
@@ -1028,7 +1028,12 @@ fn the_row_toggles_reverse_for_one_card() {
             0,
         )
         .expect("reverse on for the deck");
-        Handle::spawn(db, Box::new(typr_core::clock::SystemClock), std::sync::Arc::new(|| {})).expect("spawn")
+        Handle::spawn(
+            db,
+            Box::new(typr_core::clock::SystemClock),
+            std::sync::Arc::new(|| {}),
+        )
+        .expect("spawn")
     };
 
     let mut state = State {
@@ -1037,7 +1042,11 @@ fn the_row_toggles_reverse_for_one_card() {
         ..State::default()
     };
     refresh_library(&mut state);
-    assert_eq!(reverse_queue(&path), vec![1, 2], "the deck turns both cards around");
+    assert_eq!(
+        reverse_queue(&path),
+        vec![1, 2],
+        "the deck turns both cards around"
+    );
 
     // What the tile's menu button calls.
     library::Host::set_card_reverse(&mut state, 1, Some(false));
@@ -1096,7 +1105,7 @@ fn a_deck_can_be_set_back_to_inherit() {
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("typr.sqlite3");
     let store = {
-        let mut db = Db::open(&path).expect("open");
+        let db = Db::open(&path).expect("open");
         let parent = match db
             .apply(
                 &typr_core::store::Command::CreateDeck {
@@ -1139,8 +1148,12 @@ fn a_deck_can_be_set_back_to_inherit() {
             0,
         )
         .expect("reverse on for the parent");
-        Handle::spawn(db, Box::new(typr_core::clock::SystemClock), std::sync::Arc::new(|| {}))
-            .expect("spawn")
+        Handle::spawn(
+            db,
+            Box::new(typr_core::clock::SystemClock),
+            std::sync::Arc::new(|| {}),
+        )
+        .expect("spawn")
     };
 
     let mut state = State {

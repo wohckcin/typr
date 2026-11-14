@@ -47,7 +47,7 @@
 
 - [x] 5.1 Refresh the `library-5000` scene so it includes one reverse-enabled deck, and add `review-reverse` snapping a card asked from its answer side.
   - **Verification**: `--list-scenes` lists it and its `--snap` is non-blank.
-- [ ] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
+- [x] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.
 
 ## Workflow follow-up

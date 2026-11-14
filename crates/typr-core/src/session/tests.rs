@@ -469,5 +469,9 @@ fn a_forward_entry_says_which_way_it_is_asked() {
     );
 
     assert_eq!(session.direction(), "forward");
-    assert_eq!(Session::empty().direction(), "", "nothing on screen says nothing");
+    assert_eq!(
+        Session::empty().direction(),
+        "",
+        "nothing on screen says nothing"
+    );
 }

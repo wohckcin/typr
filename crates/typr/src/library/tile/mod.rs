@@ -105,7 +105,11 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
     let sides = hidden_sides(card);
     let (word, kicker) = words(state(card, now_ms));
     // A card asked from both ends shows it where the card's other states are named.
-    let kicker = if asks_both_ways(card) { "BOTH WAYS" } else { kicker };
+    let kicker = if asks_both_ways(card) {
+        "BOTH WAYS"
+    } else {
+        kicker
+    };
 
     // No `grow` here: in an auto-height column a grown child contributes no height to its parent,
     // which left the tile box shorter than its own content and put the footer out of its hit area.
@@ -213,7 +217,11 @@ fn action_menu<S: Host>(card: &CardSummary, mode: CardMode) -> El {
                 },
             ))
             .child(action::<S>(
-                if reverse { "Ask one way" } else { "Ask both ways" },
+                if reverse {
+                    "Ask one way"
+                } else {
+                    "Ask both ways"
+                },
                 format!("reverse-{id}"),
                 t.text,
                 move |s: &mut S| {

@@ -695,8 +695,18 @@ fn deck_reverse<S: Host>(s: &S) -> El {
                 .color(tok::theme(true).text_secondary),
         )
         .child(deck_reverse_button::<S>("On", "reverse-on", id, Some(true)))
-        .child(deck_reverse_button::<S>("Off", "reverse-off", id, Some(false)))
-        .child(deck_reverse_button::<S>("Inherit", "reverse-inherit", id, None))
+        .child(deck_reverse_button::<S>(
+            "Off",
+            "reverse-off",
+            id,
+            Some(false),
+        ))
+        .child(deck_reverse_button::<S>(
+            "Inherit",
+            "reverse-inherit",
+            id,
+            None,
+        ))
 }
 
 fn deck_reverse_button<S: Host>(label: &str, key: &str, deck: Id, reverse: Option<bool>) -> El {
