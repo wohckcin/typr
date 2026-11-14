@@ -8,8 +8,8 @@
 
 ## 2. Dispatch
 
-- [ ] 2.1 Replace `State::on_key`, `study::key` and the editor's `Escape` arm with `keymap::dispatch(surface, chord)` plus one executor per surface. Verification: the existing keyboard tests (`a_whole_queue_is_answered_with_no_pointer`, `escaping_the_editor_returns_to_the_library_and_asks_first_when_dirty`) still pass unchanged.
-- [ ] 2.2 Delete the hand-written `study::BINDINGS` row and draw it from the table. Verification: `the_session_draws_the_bindings_the_table_holds` compares rendered text against `bindings()`.
+- [x] 2.1 Replace `State::on_key`, `study::key` and the editor's `Escape` arm with `keymap::dispatch(surface, chord)` plus one executor per surface. Verification: the existing keyboard tests (`a_whole_queue_is_answered_with_no_pointer`, `escaping_the_editor_returns_to_the_library_and_asks_first_when_dirty`) still pass unchanged.
+- [x] 2.2 Delete the hand-written `study::BINDINGS` row and draw it from the table. Verification: `the_session_draws_the_bindings_the_table_holds` compares rendered text against `bindings()`.
 
 ## 3. Panel and keycaps
 

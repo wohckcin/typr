@@ -5,6 +5,7 @@ use rune::tok::{self, type_};
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Markdown, MarkdownStyle, root};
 
+use typr_core::keymap::{Command, Surface};
 use typr_core::session::{Face, Session};
 use typr_core::store::{Grade, Id, StoreError};
 
@@ -23,18 +24,42 @@ pub trait Host: 'static {
     fn reshuffle(&mut self);
 }
 
-/// The answers a session offers, and the keys that give them.
-pub const BINDINGS: &[(&str, &str)] = &[
-    ("Space", "Reveal"),
-    ("J", "Remembered"),
-    ("F", "Forgot"),
-    ("Right", "Forward"),
-    ("Left", "Back"),
-    ("R", "Shuffle"),
-    ("Esc", "Library"),
-];
+/// Run a command the table bound to the session surface. Answers whether it was used.
+pub fn run<S: Host>(s: &mut S, command: Command) -> bool {
+    match command {
+        Command::Reveal => s.session_mut().reveal(),
+        Command::GradeRemembered => {
+            answer(s, Grade::Remembered);
+            true
+        }
+        Command::GradeForgot => {
+            answer(s, Grade::Forgot);
+            true
+        }
+        Command::Forward => s.session_mut().forward(),
+        Command::Back => s.session_mut().backward(),
+        Command::Shuffle => {
+            s.reshuffle();
+            true
+        }
+        Command::Leave => {
+            s.leave_session();
+            true
+        }
+        _ => false,
+    }
+}
 
-fn answer<S: Host>(s: &mut S, grade: Grade) {
+/// The session's keyboard: the table names the command, [`run`] carries it out.
+pub fn key<S: Host>(s: &mut S, event: &KeyEvent) -> bool {
+    match crate::keymap::command_for(Surface::Session, event) {
+        Some(command) => run(s, command),
+        None => false,
+    }
+}
+
+/// Give the card on screen the grade the review offers.
+pub fn answer<S: Host>(s: &mut S, grade: Grade) {
     let Some((card, grade)) = s.session_mut().grade(grade) else {
         return;
     };
@@ -44,49 +69,18 @@ fn answer<S: Host>(s: &mut S, grade: Grade) {
     }
 }
 
-/// The session's keyboard. Answers whether the key was used.
-pub fn key<S: Host>(s: &mut S, event: &KeyEvent) -> bool {
-    if event.mods.cmd || event.mods.ctrl {
-        return false;
-    }
-    match &event.key {
-        Key::Text(t) if t == " " => s.session_mut().reveal(),
-        Key::Enter => s.session_mut().reveal(),
-        Key::Escape => {
-            s.leave_session();
-            true
-        }
-        Key::Right => s.session_mut().forward(),
-        Key::Left => s.session_mut().backward(),
-        Key::Text(t) => match t.to_ascii_lowercase().as_str() {
-            "j" => {
-                answer(s, Grade::Remembered);
-                true
-            }
-            "f" => {
-                answer(s, Grade::Forgot);
-                true
-            }
-            "r" => {
-                s.reshuffle();
-                true
-            }
-            _ => false,
-        },
-        _ => false,
-    }
-}
-
 fn bindings() -> El {
     let t = tok::theme(true);
     row()
         .key("bindings")
         .gap(12.0)
-        .children(BINDINGS.iter().map(|(key, action)| {
-            text(format!("{key}  {action}"))
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-        }))
+        .children(
+            typr_core::keymap::bindings_of(Surface::Session).map(|binding| {
+                text(format!("{}  {}", binding.chord, binding.command.label()))
+                    .font(type_::LABEL)
+                    .color(t.text_secondary)
+            }),
+        )
         .gap(12.0)
 }
 

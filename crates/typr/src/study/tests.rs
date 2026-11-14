@@ -1,6 +1,7 @@
 use rune::{Env, Key, KeyEvent, Mods, Runtime, Tx};
 
 use super::{Host, key, summary, view};
+use typr_core::keymap::{Surface, bindings_of};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{Grade, Id, StoreError};
@@ -219,4 +220,26 @@ fn the_shuffle_key_reorders_without_answering() {
         "shuffling records no grade"
     );
     assert!(app.sent.is_empty(), "and sends nothing to the store");
+}
+
+#[test]
+fn the_session_draws_the_bindings_the_table_holds() {
+    fn draw(s: &App, _: &mut rune::Cx<App>) -> rune::El {
+        view::<App>(s)
+    }
+    let app = App::with(Queue::New, &[(1, &["a", "b"])]);
+    let mut runtime = Runtime::new(app, draw, (900.0, 600.0), Env::new(true, 1.0));
+    runtime.frame(0.1);
+    let drawn: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    for binding in bindings_of(Surface::Session) {
+        let row = format!("{}  {}", binding.chord, binding.command.label());
+        assert!(
+            drawn.contains(&row),
+            "the session does not draw {row:?}; it draws {drawn:?}"
+        );
+    }
 }

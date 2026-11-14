@@ -16,6 +16,7 @@ use typr::paths;
 use typr::screen::Screen;
 use typr::study::{self, Host};
 use typr_core::clock::{Clock, SystemClock};
+use typr_core::keymap::{Command, Surface};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{CardMode, Grade, Handle, Id, Outcome, Store, StoreError, WorkerStatus};
@@ -105,6 +106,8 @@ struct State {
     deck_request: Option<u64>,
     /// Every command that went out and has not been answered: what it was, and when it left.
     sent: HashMap<u64, (&'static str, Instant)>,
+    /// The shortcut panel is open.
+    shortcuts_open: bool,
 }
 
 impl Default for State {
@@ -132,6 +135,7 @@ impl Default for State {
             pending_new_card: None,
             deck_request: None,
             sent: HashMap::new(),
+            shortcuts_open: false,
         }
     }
 }
@@ -872,55 +876,94 @@ fn frame_step(s: &mut State, now_ms: i64, wake: &mut Option<i64>) -> bool {
     s.drain() || landed > 0
 }
 
-fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
-    match s.screen {
-        Screen::Session => study::key(s, event),
-        Screen::Summary => {
-            if event.key == rune::Key::Escape {
-                s.leave_session();
-                true
-            } else {
-                false
-            }
+impl State {
+    /// Run the command a key asked for, on the surface it was pressed on.
+    fn run_command(&mut self, command: Command) -> bool {
+        match self.screen {
+            Screen::Library => self.run_library(command),
+            Screen::Editor => self.run_editor(command),
+            Screen::Session => study::run(self, command),
+            Screen::Summary => self.run_summary(command),
         }
-        // Two ways into a session from the library, so the keyboard can start one.
-        Screen::Editor => match &event.key {
-            // Escape leaves, asking first when the buffer has unsaved work.
-            rune::Key::Escape => {
-                editor::Host::leave_editor(s);
+    }
+
+    fn run_library(&mut self, command: Command) -> bool {
+        match command {
+            Command::ShowShortcuts => {
+                self.shortcuts_open = !self.shortcuts_open;
                 true
             }
-            // `h` shows this card's review history beside the preview, or hides it again.
-            rune::Key::Text(t) if t == "h" => {
-                s.editor.showing_history = !s.editor.showing_history;
-                if s.editor.showing_history
-                    && let (Some(card), Some(store)) = (s.editor.card, &s.store)
+            // A session starts from a settled library, so the keys do nothing while one is running.
+            _ if !self.session.finished() => false,
+            Command::StartDueSession => {
+                self.start_session(Queue::Due);
+                true
+            }
+            Command::StartNewSession => {
+                self.start_session(Queue::New);
+                true
+            }
+            Command::NewCard => {
+                library::Host::new_card(self);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn run_editor(&mut self, command: Command) -> bool {
+        match command {
+            // Leaving asks first when the buffer holds work that is not on disk.
+            Command::Leave => {
+                editor::Host::leave_editor(self);
+                true
+            }
+            Command::Save => self.persist(),
+            Command::ToggleHistory => {
+                self.editor.showing_history = !self.editor.showing_history;
+                if self.editor.showing_history
+                    && let (Some(card), Some(store)) = (self.editor.card, &self.store)
                 {
                     match store.history(card) {
-                        Ok(id) => s.history_request = Some((id, card)),
-                        Err(error) => s.fail(&error),
+                        Ok(id) => self.history_request = Some((id, card)),
+                        Err(error) => self.fail(&error),
                     }
                 }
                 true
             }
-            _ if event.is_command('s') => {
-                s.persist();
+            Command::ShowShortcuts => {
+                self.shortcuts_open = !self.shortcuts_open;
                 true
             }
             _ => false,
-        },
-        Screen::Library if s.session.finished() => match &event.key {
-            rune::Key::Text(t) if t == "s" => {
-                s.start_session(Queue::Due);
+        }
+    }
+
+    fn run_summary(&mut self, command: Command) -> bool {
+        match command {
+            Command::Leave => {
+                self.leave_session();
                 true
             }
-            rune::Key::Text(t) if t == "n" => {
-                s.start_session(Queue::New);
+            Command::ShowShortcuts => {
+                self.shortcuts_open = !self.shortcuts_open;
                 true
             }
             _ => false,
-        },
-        _ => false,
+        }
+    }
+}
+
+fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
+    let surface = match s.screen {
+        Screen::Library => Surface::Library,
+        Screen::Editor => Surface::Editor,
+        Screen::Session => Surface::Session,
+        Screen::Summary => Surface::Summary,
+    };
+    match typr::keymap::command_for(surface, event) {
+        Some(command) => s.run_command(command),
+        None => false,
     }
 }
 
