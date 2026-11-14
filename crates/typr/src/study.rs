@@ -5,7 +5,7 @@ use rune::tok::{self, type_};
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Markdown, MarkdownStyle, root};
 
-use typr_core::session::Session;
+use typr_core::session::{Face, Session};
 use typr_core::store::{Grade, Id, StoreError};
 
 /// What the study screen needs from the app.
@@ -92,10 +92,14 @@ fn bindings() -> El {
 
 fn side_heading<S: Host>(s: &S) -> String {
     let session = s.session();
-    let sides = session.current().map_or(0, |entry| entry.sides.len());
-    match (session.read_only, session.revealed()) {
-        (true, _) => format!("Answer · {sides} sides · you have answered this card"),
-        (_, revealed) => format!("Side {revealed} of {sides}"),
+    let faces = session.current().map_or(0, |entry| entry.faces.len());
+    let masked = session
+        .current()
+        .is_some_and(|entry| entry.faces.iter().any(Face::unmasks));
+    match (session.read_only, masked, session.revealed()) {
+        (true, _, _) => format!("Answer · {faces} face(s) · you have answered this card"),
+        (_, true, _) => "Hidden text".to_string(),
+        (_, false, revealed) => format!("Side {revealed} of {faces}"),
     }
 }
 
@@ -103,20 +107,10 @@ fn side_heading<S: Host>(s: &S) -> String {
 pub fn view<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let session = s.session();
-    let entry = session.current();
-    let shown: Vec<String> = entry
-        .map(|entry| {
-            entry
-                .sides
-                .iter()
-                .take(session.revealed())
-                .cloned()
-                .collect()
-        })
-        .unwrap_or_default();
-    let body = shown
-        .iter()
-        .map(|side| Markdown::new(side.clone()).render(&MarkdownStyle::neutral(true)));
+    let body = session
+        .lines()
+        .into_iter()
+        .map(|(line, _)| Markdown::new(line).render(&MarkdownStyle::neutral(true)));
 
     let mut card = col()
         .key("session-card")
@@ -131,7 +125,7 @@ pub fn view<S: Host>(s: &S) -> El {
     }
     if session.hidden() > 0 {
         card = card.child(
-            text(format!("{} side(s) still hidden", session.hidden()))
+            text(format!("{} face(s) still hidden", session.hidden()))
                 .key("hidden")
                 .color(t.text_secondary)
                 .font(type_::LABEL),

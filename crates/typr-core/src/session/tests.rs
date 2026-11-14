@@ -6,11 +6,11 @@ use crate::store::Grade;
 const NOON: i64 = 1_760_000_000_000;
 
 fn entry(card: i64, sides: &[&str]) -> Entry {
-    Entry {
-        card: card as crate::store::Id,
-        sides: sides.iter().map(|s| s.to_string()).collect(),
-        overdue: 0,
-    }
+    Entry::sides(
+        card as crate::store::Id,
+        sides.iter().map(|s| s.to_string()),
+        0,
+    )
 }
 
 /// Answers the card on screen: reveal everything, grade, and acknowledge.
@@ -226,11 +226,7 @@ fn a_grade_that_was_never_sent_can_be_taken_again() {
 }
 
 fn overdue_entry(card: i64, overdue: i64) -> Entry {
-    Entry {
-        card: card as crate::store::Id,
-        sides: vec!["front".to_string(), "back".to_string()],
-        overdue,
-    }
+    Entry::sides(card as crate::store::Id, ["front", "back"], overdue)
 }
 
 #[test]
@@ -341,17 +337,9 @@ fn a_reshuffle_never_hands_over_a_revealed_card() {
 fn a_card_that_arrives_with_a_schedule_waits_out_its_learning_step() {
     let mut session = Session::new(
         Queue::New,
-        vec![Entry {
-            card: 1,
-            sides: vec!["a".to_string(), "b".to_string()],
-            overdue: 0,
-        }],
+        vec![Entry::sides(1, ["a".to_string(), "b".to_string()], 0)],
     );
-    session.arrive(Entry {
-        card: 2,
-        sides: vec!["a".to_string(), "b".to_string()],
-        overdue: 0,
-    });
+    session.arrive(Entry::sides(2, ["a".to_string(), "b".to_string()], 0));
 
     // The card the session opened with is new, so a lapse sends it straight back.
     session.reveal();
@@ -379,11 +367,7 @@ fn a_card_that_arrives_with_a_schedule_waits_out_its_learning_step() {
 fn a_card_landing_at_an_empty_cursor_shows_its_first_side() {
     // Arriving while nothing is on screen.
     let mut session = Session::new(Queue::Due, Vec::new());
-    session.arrive(Entry {
-        card: 7,
-        sides: vec!["a".to_string(), "b".to_string()],
-        overdue: 0,
-    });
+    session.arrive(Entry::sides(7, ["a".to_string(), "b".to_string()], 0));
     assert_eq!(
         session.revealed(),
         1,
@@ -393,11 +377,7 @@ fn a_card_landing_at_an_empty_cursor_shows_its_first_side() {
     // A relearning step landing while nothing is on screen.
     let mut waiting = Session::new(
         Queue::Due,
-        vec![Entry {
-            card: 3,
-            sides: vec!["a".to_string(), "b".to_string()],
-            overdue: 0,
-        }],
+        vec![Entry::sides(3, ["a".to_string(), "b".to_string()], 0)],
     );
     waiting.reveal();
     assert!(waiting.grade(Grade::Forgot).is_some());
@@ -414,11 +394,7 @@ fn a_card_landing_at_an_empty_cursor_shows_its_first_side() {
     // Forgetting the last new card while nothing is on screen.
     let mut last = Session::new(
         Queue::New,
-        vec![Entry {
-            card: 4,
-            sides: vec!["a".to_string(), "b".to_string()],
-            overdue: 0,
-        }],
+        vec![Entry::sides(4, ["a".to_string(), "b".to_string()], 0)],
     );
     last.reveal();
     assert!(last.grade(Grade::Forgot).is_some());
@@ -429,4 +405,34 @@ fn a_card_landing_at_an_empty_cursor_shows_its_first_side() {
         1,
         "the card that came straight back shows its first side"
     );
+}
+
+#[test]
+fn a_hidden_text_face_unmasks_on_one_reveal() {
+    let mut session = Session::new(
+        Queue::Due,
+        vec![Entry::masked(
+            1,
+            "cloze:0",
+            "The [ … ] is small.",
+            "The gland is small.",
+            0,
+        )],
+    );
+
+    assert_eq!(
+        session.lines(),
+        vec![("The [ … ] is small.", false)],
+        "the masked sentence is the question, and it is on screen"
+    );
+    assert_eq!(session.hidden(), 1);
+    assert!(
+        !session.gradeable(),
+        "a mask cannot be graded before it lifts"
+    );
+
+    assert!(session.reveal());
+    assert_eq!(session.lines(), vec![("The gland is small.", true)]);
+    assert!(session.gradeable(), "one reveal is the whole card");
+    assert_eq!(session.hidden(), 0, "nothing is left masked");
 }

@@ -19,7 +19,7 @@ use typr_core::clock::{Clock, SystemClock};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{CardMode, Grade, Handle, Id, Outcome, Store, StoreError, WorkerStatus};
-use typr_core::{day, sides};
+use typr_core::{day, hidden};
 
 /// A named starting state for a headless `--scene` run.
 type Scene = (&'static str, fn(&mut State));
@@ -651,17 +651,19 @@ impl State {
         let offset = day_offset::local_offset_ms();
         prompts
             .into_iter()
-            .filter(|(_, key, _)| key == "fwd")
-            .filter_map(|(id, _, due_at)| {
+            .filter_map(|(id, key, due_at)| {
                 let card = snapshot.cards.iter().find(|card| card.id == id)?;
                 let overdue = due_at.map_or(0, |due_at| overdue_days(now, due_at, offset));
-                Some(Entry {
-                    card: card.id,
-                    sides: sides::split(&card.markdown)
-                        .into_iter()
-                        .map(str::to_string)
-                        .collect(),
-                    overdue,
+                let shape = hidden::shape(&card.markdown);
+                Some(match &shape {
+                    hidden::Shape::Sides(sides) => Entry::sides(card.id, sides.clone(), overdue),
+                    hidden::Shape::Hidden { text, .. } => Entry::masked(
+                        card.id,
+                        key.as_str(),
+                        hidden::masked(text, &shape, &key),
+                        hidden::shown(text, &shape),
+                        overdue,
+                    ),
                 })
             })
             .collect()
@@ -999,35 +1001,18 @@ fn main() {
             );
         }),
         ("session-new", |state: &mut State| {
-            let entries = vec![Entry {
-                card: 4,
-                sides: vec![
-                    "What is **osmosis**?".to_string(),
-                    "Water across a membrane.".to_string(),
-                ],
-                overdue: 0,
-            }];
+            let entries = vec![Entry::sides(
+                4,
+                ["What is **osmosis**?", "Water across a membrane."],
+                0,
+            )];
             state.session = Session::new(Queue::New, entries);
             state.screen = Screen::Session;
         }),
         ("session", |state: &mut State| {
             let entries = vec![
-                Entry {
-                    card: 1,
-                    sides: vec![
-                        "What is **mitosis**?".to_string(),
-                        "Cell division.".to_string(),
-                    ],
-                    overdue: 1,
-                },
-                Entry {
-                    card: 2,
-                    sides: vec![
-                        "What is **osmosis**?".to_string(),
-                        "Water across a membrane.".to_string(),
-                    ],
-                    overdue: 1,
-                },
+                Entry::sides(1, ["What is **mitosis**?", "Cell division."], 1),
+                Entry::sides(2, ["What is **osmosis**?", "Water across a membrane."], 1),
             ];
             state.session = Session::new(Queue::Due, entries);
             state.session.reveal();
@@ -1042,6 +1027,19 @@ fn main() {
             state.library = Library::seeded(3);
             state.seeded = true;
             state.failure = Some("The library stopped: a command panicked".to_string());
+        }),
+        ("review-cloze", |state: &mut State| {
+            state.screen = Screen::Session;
+            state.session = Session::new(
+                Queue::New,
+                vec![Entry::masked(
+                    1,
+                    "cloze:0",
+                    "The [ … ] is the gland that makes insulin.",
+                    "The pancreas is the gland that makes insulin.",
+                    0,
+                )],
+            );
         }),
         ("editor-leave", |state: &mut State| {
             state.screen = Screen::Editor;

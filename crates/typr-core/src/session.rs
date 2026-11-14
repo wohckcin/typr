@@ -6,14 +6,81 @@ use crate::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
 use crate::store::{Grade, Id};
 
-/// A card waiting its turn, with the sides as they will be revealed.
+/// One face of a card: what is on screen before it is unmasked, and what it reads as afterwards.
+///
+/// A side is its own question, so both strings hold the same text. Hidden text differs: the hidden
+/// form carries a mask where the answer would be.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Face {
+    pub hidden: String,
+    pub shown: String,
+}
+
+impl Face {
+    /// A face that asks a question by being itself: a side, or a whole hidden-text sentence.
+    pub fn question(text: impl Into<String>) -> Face {
+        let text = text.into();
+        Face {
+            hidden: text.clone(),
+            shown: text,
+        }
+    }
+
+    /// Whether unmasking this face changes what is on screen.
+    pub fn unmasks(&self) -> bool {
+        self.hidden != self.shown
+    }
+}
+
+/// A card waiting its turn, with the faces its prompt asks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     pub card: Id,
-    pub sides: Vec<String>,
+    /// The prompt this entry reviews, such as `fwd` or `cloze:1`.
+    pub prompt: String,
+    pub faces: Vec<Face>,
     /// How many study days overdue this card was when the session started. Entries with a larger
     /// number stay in front of the others, so a reshuffle never promotes a card that is not due.
     pub overdue: i64,
+}
+
+impl Entry {
+    /// A two-or-more-sided card: every side is its own question.
+    pub fn sides<I, T>(card: Id, sides: I, overdue: i64) -> Entry
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<String>,
+    {
+        Entry {
+            card,
+            prompt: "fwd".to_string(),
+            faces: sides.into_iter().map(Face::question).collect(),
+            overdue,
+        }
+    }
+
+    /// A hidden-text group: one face, masked until it is unmasked.
+    pub fn masked<H, S>(
+        card: Id,
+        prompt: impl Into<String>,
+        hidden: H,
+        shown: S,
+        overdue: i64,
+    ) -> Entry
+    where
+        H: Into<String>,
+        S: Into<String>,
+    {
+        Entry {
+            card,
+            prompt: prompt.into(),
+            faces: vec![Face {
+                hidden: hidden.into(),
+                shown: shown.into(),
+            }],
+            overdue,
+        }
+    }
 }
 
 /// The cards this session is walking, in order.
@@ -69,7 +136,13 @@ impl Session {
     /// A card opens on its first side: the reader is never staring at an empty frame wondering
     /// which key shows the front.
     fn show_first_side(&mut self) {
-        self.revealed = usize::from(self.current().is_some());
+        // A masked face is on screen before it is unmasked, so it starts with nothing revealed; a side
+        // is its own question, so it starts shown. Both are on screen either way.
+        self.revealed = match self.current() {
+            Some(entry) if entry.faces.first().is_some_and(Face::unmasks) => 0,
+            Some(_) => 1,
+            None => 0,
+        };
         self.read_only = false;
     }
 
@@ -83,23 +156,46 @@ impl Session {
         self.revealed
     }
 
-    /// The sides still hidden.
+    /// The faces still hidden.
     pub fn hidden(&self) -> usize {
         self.current()
-            .map_or(0, |entry| entry.sides.len().saturating_sub(self.revealed))
+            .map_or(0, |entry| entry.faces.len().saturating_sub(self.revealed))
     }
 
-    /// The next side, which revealing would show.
+    /// The next face, which revealing would show.
     pub fn next_side(&self) -> Option<&str> {
         let entry = self.current()?;
-        entry.sides.get(self.revealed).map(String::as_str)
+        entry
+            .faces
+            .get(self.revealed)
+            .map(|face| face.shown.as_str())
+    }
+
+    /// The faces to draw, in order, with whether each is the unmasked answer.
+    ///
+    /// A masked face is drawn in its hidden form while it is the one being asked, which is what makes
+    /// one reveal unmask it; a side is never drawn ahead of its turn, because its question and its
+    /// answer are the same string and drawing it early would hand over the answer to the side before.
+    pub fn lines(&self) -> Vec<(&str, bool)> {
+        let Some(entry) = self.current() else {
+            return Vec::new();
+        };
+        let mut lines = Vec::new();
+        for (index, face) in entry.faces.iter().enumerate() {
+            if index < self.revealed {
+                lines.push((face.shown.as_str(), true));
+            } else if index == self.revealed && face.unmasks() {
+                lines.push((face.hidden.as_str(), false));
+            }
+        }
+        lines
     }
 
     /// Whether the grade is offered: only after the last side, and not while revisiting.
     pub fn gradeable(&self) -> bool {
         match self.current() {
             Some(entry) => {
-                !self.read_only && self.revealed >= entry.sides.len() && self.awaiting.is_none()
+                !self.read_only && self.revealed >= entry.faces.len() && self.awaiting.is_none()
             }
             None => false,
         }
@@ -283,7 +379,7 @@ impl Session {
             return false;
         }
         self.at -= 1;
-        self.revealed = self.current().map_or(0, |entry| entry.sides.len());
+        self.revealed = self.current().map_or(0, |entry| entry.faces.len());
         self.read_only = true;
         true
     }

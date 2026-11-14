@@ -19,11 +19,7 @@ impl App {
     fn with(queue: Queue, cards: &[(i64, &[&str])]) -> App {
         let entries = cards
             .iter()
-            .map(|(card, sides)| Entry {
-                card: *card as Id,
-                sides: sides.iter().map(|s| s.to_string()).collect(),
-                overdue: 0,
-            })
+            .map(|(card, sides)| Entry::sides(*card as Id, sides.iter().map(|s| s.to_string()), 0))
             .collect();
         App {
             session: Session::new(queue, entries),

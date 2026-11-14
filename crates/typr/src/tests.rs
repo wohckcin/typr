@@ -61,11 +61,11 @@ fn a_panicked_worker_is_named_in_the_quit_record() {
 fn forgotten_due_card() -> State {
     let mut session = Session::new(
         Queue::Due,
-        vec![Entry {
-            card: 7,
-            sides: vec!["front".to_string(), "back".to_string()],
-            overdue: 0,
-        }],
+        vec![Entry::sides(
+            7,
+            ["front".to_string(), "back".to_string()],
+            0,
+        )],
     );
     while session.next_side().is_some() {
         session.reveal();
@@ -116,14 +116,7 @@ fn library_with_one_card(dir: &tempfile::TempDir) -> Handle {
 
 /// A session showing the library's only card, revealed to its last side.
 fn session_on(card: Id) -> Session {
-    let mut session = Session::new(
-        Queue::Due,
-        vec![Entry {
-            card,
-            sides: vec!["front".to_string(), "back".to_string()],
-            overdue: 0,
-        }],
-    );
+    let mut session = Session::new(Queue::Due, vec![Entry::sides(card, ["front", "back"], 0)]);
     while session.next_side().is_some() {
         session.reveal();
     }
@@ -1288,21 +1281,9 @@ fn the_session_screen_offers_a_shuffle() {
         session: Session::new(
             Queue::Due,
             vec![
-                Entry {
-                    card: 1,
-                    sides: vec!["a".to_string(), "b".to_string()],
-                    overdue: 0,
-                },
-                Entry {
-                    card: 2,
-                    sides: vec!["c".to_string(), "d".to_string()],
-                    overdue: 0,
-                },
-                Entry {
-                    card: 3,
-                    sides: vec!["e".to_string(), "f".to_string()],
-                    overdue: 3,
-                },
+                Entry::sides(1, ["a".to_string(), "b".to_string()], 0),
+                Entry::sides(2, ["c".to_string(), "d".to_string()], 0),
+                Entry::sides(3, ["e".to_string(), "f".to_string()], 3),
             ],
         ),
         ..State::default()
@@ -1340,11 +1321,11 @@ fn a_grade_that_could_not_be_sent_is_not_waited_on() {
     let mut state = State {
         session: Session::new(
             Queue::Due,
-            vec![Entry {
-                card: 1,
-                sides: vec!["front".to_string(), "back".to_string()],
-                overdue: 0,
-            }],
+            vec![Entry::sides(
+                1,
+                ["front".to_string(), "back".to_string()],
+                0,
+            )],
         ),
         screen: Screen::Session,
         ..State::default()
@@ -2049,4 +2030,121 @@ fn an_arrivals_answer_that_lands_after_leaving_is_not_taken() {
         "an answer is only taken while a session is on screen"
     );
     assert!(state.session.finished(), "with nothing left to answer");
+}
+
+/// A library holding one card with the given markdown, already open.
+fn library_with_markdown(dir: &tempfile::TempDir, markdown: &str) -> Handle {
+    let path = dir.path().join("library.sqlite3");
+    {
+        let db = typr_core::store::Db::open(&path).expect("open");
+        let deck = match db
+            .apply(
+                &typr_core::store::Command::CreateDeck {
+                    parent: None,
+                    name: "Biology".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            Outcome::Deck(id) => id,
+            other => panic!("expected a deck, got {other:?}"),
+        };
+        db.apply(
+            &typr_core::store::Command::CreateCard {
+                deck,
+                markdown: markdown.to_string(),
+            },
+            0,
+        )
+        .expect("card");
+    }
+    Handle::spawn(
+        typr_core::store::Db::open(&path).expect("open"),
+        Box::new(typr_core::clock::SystemClock),
+        std::sync::Arc::new(|| {}),
+    )
+    .expect("spawn")
+}
+
+#[test]
+fn a_hidden_text_prompt_shows_a_masked_sentence() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_markdown(&dir, "The {{gland}} is small.");
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    settle(&mut state, 0);
+    refresh_library(&mut state);
+
+    // `rune::Runtime::new` installs no `poll`, so the app's own frame step has to be driven here.
+    state.start_session(Queue::New);
+    let mut wake = None;
+    for _ in 0..200 {
+        crate::frame_step(
+            &mut state,
+            typr_core::clock::SystemClock.now_ms(),
+            &mut wake,
+        );
+        if matches!(state.screen, Screen::Session) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        matches!(state.screen, Screen::Session),
+        "the session opened on the hidden-text card"
+    );
+
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.1);
+    let drawn = |runtime: &rune::Runtime<State>| -> String {
+        runtime
+            .elements()
+            .into_iter()
+            .filter_map(|element| element.text)
+            .collect::<Vec<String>>()
+            .join("\n")
+    };
+    let masked = drawn(&runtime);
+    assert!(masked.contains("[ … ]"), "the answer is masked: {masked}");
+    assert!(
+        !masked.contains("gland"),
+        "the answer is nowhere on the screen: {masked}"
+    );
+
+    let mut state = std::mem::take(&mut runtime.state);
+    drop(runtime);
+    study::key(
+        &mut state,
+        &rune::KeyEvent {
+            key: rune::Key::Text(" ".to_string()),
+            mods: rune::Mods::default(),
+        },
+    );
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.1);
+
+    let unmasked = drawn(&runtime);
+    assert!(
+        unmasked.contains("gland"),
+        "one press shows the answer: {unmasked}"
+    );
+    assert!(
+        runtime.find("remembered").is_some(),
+        "and the grade is offered"
+    );
+    assert!(runtime.find("forgot").is_some());
 }
