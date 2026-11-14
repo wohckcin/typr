@@ -2,7 +2,7 @@
 
 ## 1. Schema and prompts
 
-- [ ] 1.1 Migration V5: add `deck.reverse INTEGER` and `card.reverse INTEGER` (NULL inherits), insert `reverse_default` into `settings` with value `0`, and recreate `studyable_prompt` from the body migration V4 left, verbatim, adding the `deck_reverse`
+- [x] 1.1 Migration V5: add `deck.reverse INTEGER` and `card.reverse INTEGER` (NULL inherits), insert `reverse_default` into `settings` with value `0`, and recreate `studyable_prompt` from the body migration V4 left, verbatim, adding the `deck_reverse`
       recursive CTE and one disjunct `OR (p.key = 'rev' AND c.sides >= 2 AND <effective reverse>)`.
       There is no `p.key <> 'rev'` filter to add: V4 is key-aware, so `fwd` and `cloze:%` are already
       named and `rev` is simply not one of them until this migration names it.

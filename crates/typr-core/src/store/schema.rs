@@ -16,7 +16,54 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5];
+
+/// Reverse reviews: a `rev` prompt queues only where the card, its nearest deck or the library
+/// default turns reverse on, and NULL means "inherit".
+///
+/// The view is V4's body again, widened by one disjunct. V4 is key-aware, so `rev` is admitted by
+/// nothing until this clause names it, and no exclusion filter is needed. `deck_reverse` walks in
+/// the opposite direction to `archived_deck` — from the roots down — because a value is inherited
+/// downwards; a deck no root reaches inherits nothing and falls back to the library default.
+const V5: &str = r#"
+ALTER TABLE deck ADD COLUMN reverse INTEGER;
+ALTER TABLE card ADD COLUMN reverse INTEGER;
+INSERT OR IGNORE INTO settings (key, value) VALUES ('reverse_default', '0');
+DROP VIEW IF EXISTS studyable_prompt;
+CREATE VIEW studyable_prompt AS
+WITH RECURSIVE archived_deck(id) AS (
+    SELECT id FROM deck WHERE archived = 1
+    UNION
+    SELECT d.id FROM deck d JOIN archived_deck a ON d.parent_id = a.id
+),
+deck_reverse(id, inherited) AS (
+    SELECT id, COALESCE(reverse, (SELECT COALESCE(CAST(value AS INTEGER), 0) FROM settings WHERE key = 'reverse_default'))
+    FROM deck WHERE parent_id IS NULL
+    UNION
+    SELECT d.id, COALESCE(d.reverse, r.inherited)
+    FROM deck d JOIN deck_reverse r ON d.parent_id = r.id
+)
+SELECT p.card_id, p.key, p.phase, p.due_at, p.interval_ms
+FROM prompt p
+JOIN card c ON c.id = p.card_id
+WHERE c.trashed_at IS NULL
+  AND c.archived = 0
+  AND p.retired = 0
+  AND (
+        (p.key = 'fwd' AND c.sides >= 2)
+        OR (p.key LIKE 'cloze:%' AND c.has_cloze = 1)
+        OR (
+            p.key = 'rev'
+            AND c.sides >= 2
+            AND COALESCE(
+                    c.reverse,
+                    (SELECT inherited FROM deck_reverse WHERE id = c.deck_id),
+                    0
+                ) = 1
+        )
+    )
+  AND c.deck_id NOT IN (SELECT id FROM archived_deck);
+"#;
 
 /// Hidden text makes a one-sided card studyable, so the view's last predicate stops resting on sides
 /// alone. Everything else about the view is V3's: a trashed card, an archived card and a card under an
@@ -71,6 +118,15 @@ WHERE c.trashed_at IS NULL
 /// V3's view, for tests that put a file back to the schema a version-3 build left.
 #[cfg(test)]
 pub(crate) const V3_SQL: &str = V3;
+
+/// V4's view, for tests that put a file back to the schema a version-4 build left. Quoted out of
+/// [`V4`] rather than copied, so the two cannot drift apart.
+#[cfg(test)]
+pub(crate) fn v4_view_sql() -> &'static str {
+    const MARKER: &str = "DROP VIEW IF EXISTS studyable_prompt;";
+    let at = V4.find(MARKER).expect("V4 drops the view") + MARKER.len();
+    &V4[at..]
+}
 
 /// Drafts belong to a card, or to the card that has not been saved yet, so the key needs no
 /// foreign key: `0` stands for the new card.

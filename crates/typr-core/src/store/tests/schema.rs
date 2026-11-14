@@ -406,7 +406,11 @@ fn a_stale_prompt_on_a_one_sided_card_is_not_studyable() {
     }
 
     let db = Db::open(&path).expect("reopen");
-    assert_eq!(schema_version_at(&path), 4, "the migration ran");
+    assert_eq!(
+        schema_version_at(&path),
+        crate::store::schema::CURRENT_VERSION,
+        "every later step ran"
+    );
 
     assert!(
         db.new_prompts(0, 0, 1, None).expect("new").is_empty(),
@@ -416,4 +420,171 @@ fn a_stale_prompt_on_a_one_sided_card_is_not_studyable() {
         db.due_prompts(0, 0, 1, None).expect("due").is_empty(),
         "and it is never due either"
     );
+}
+
+#[test]
+fn a_library_from_before_reverse_gains_the_columns() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    {
+        let db = Db::open(&path).expect("open");
+        db.apply(
+            &Command::CreateDeck {
+                parent: None,
+                name: "Deck".to_string(),
+            },
+            0,
+        )
+        .expect("deck");
+        rewind_for_test(db.connection_for_test(), 4);
+    }
+
+    let db = Db::open(&path).expect("reopen");
+    let deck_columns = columns(&db, "deck");
+    assert!(
+        deck_columns.contains(&"reverse".to_string()),
+        "{deck_columns:?}"
+    );
+    let card_columns = columns(&db, "card");
+    assert!(
+        card_columns.contains(&"reverse".to_string()),
+        "{card_columns:?}"
+    );
+
+    let default: String = db
+        .connection_for_test()
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'reverse_default'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the library default");
+    assert_eq!(default, "0", "reverse is off until asked for");
+}
+
+#[test]
+fn a_reverse_prompt_queues_only_where_reverse_is_on() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let db = open_temp(&dir);
+    let conn = db.connection_for_test();
+    // A library default of off, one deck on, one deck off under it, and deck 3 and 4 inheriting.
+    conn.execute_batch(
+        "INSERT INTO deck (id, parent_id, name, archived, reverse) VALUES
+            (1, NULL, 'library', 0, NULL),
+            (2, 1,    'on',      0, 1),
+            (3, 2,    'inherits on',  0, NULL),
+            (4, 2,    'off',     0, 0),
+            (5, 1,    'inherits the default', 0, NULL);
+         INSERT INTO card
+            (id, deck_id, markdown, search_text, sides, has_cloze, created_at, updated_at)
+         VALUES
+            (1, 2, 'front\n---\nback', '', 2, 0, 0, 0),
+            (2, 2, 'front\n---\nback', '', 2, 0, 0, 0),
+            (3, 3, 'front\n---\nback', '', 2, 0, 0, 0),
+            (4, 4, 'front\n---\nback', '', 2, 0, 0, 0),
+            (5, 5, 'front\n---\nback', '', 2, 0, 0, 0);
+         UPDATE card SET reverse = 0 WHERE id = 2;
+         INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+         SELECT id, 'rev', 'learn', NULL, 0, 0, 0 FROM card;",
+    )
+    .expect("rows");
+
+    assert_eq!(
+        reverse_prompts(&db),
+        vec![1, 3],
+        "a deck that turns reverse on reaches its inheriting children, not its overridden one"
+    );
+
+    conn.execute_batch("UPDATE card SET reverse = 1 WHERE id = 4")
+        .expect("the card setting wins");
+    assert_eq!(reverse_prompts(&db), vec![1, 3, 4]);
+
+    conn.execute_batch("UPDATE settings SET value = '1' WHERE key = 'reverse_default'")
+        .expect("the library default");
+    assert_eq!(
+        reverse_prompts(&db),
+        vec![1, 3, 4, 5],
+        "the library default reaches the deck that inherits it, not the card that says off"
+    );
+
+    conn.execute_batch("UPDATE settings SET value = '0' WHERE key = 'reverse_default'")
+        .expect("the default again");
+    assert_eq!(reverse_prompts(&db), vec![1, 3, 4]);
+}
+
+#[test]
+fn a_hidden_text_card_still_queues_after_the_reverse_migration() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    {
+        let db = Db::open(&path).expect("open");
+        db.apply(
+            &Command::CreateDeck {
+                parent: None,
+                name: "Deck".to_string(),
+            },
+            0,
+        )
+        .expect("deck");
+        // A one-sided card holding hidden text: studyable through its group, never through `rev`,
+        // which needs two sides whatever the reverse settings say.
+        db.apply(
+            &Command::CreateCard {
+                deck: 1,
+                markdown: "The {{1::gland}} is small.".to_string(),
+            },
+            0,
+        )
+        .expect("card");
+        db.connection_for_test()
+            .execute_batch("UPDATE settings SET value = '1' WHERE key = 'reverse_default'")
+            .expect("reverse on for the whole library");
+        rewind_for_test(db.connection_for_test(), 4);
+    }
+
+    let db = Db::open(&path).expect("reopen");
+    assert_eq!(
+        keys_for(&db, 1),
+        vec!["cloze:1".to_string()],
+        "the migration keeps the hidden-text clause it copies"
+    );
+}
+
+/// The `reverse` prompt card ids the view admits, in id order.
+fn reverse_prompts(db: &Db) -> Vec<Id> {
+    let mut statement = db
+        .connection_for_test()
+        .prepare("SELECT card_id FROM studyable_prompt WHERE key = 'rev' ORDER BY card_id")
+        .expect("prepare");
+    statement
+        .query_map([], |row| row.get(0))
+        .expect("query")
+        .collect::<Result<Vec<Id>, _>>()
+        .expect("rows")
+}
+
+/// Every key the view admits for one card, in key order.
+fn keys_for(db: &Db, card: Id) -> Vec<String> {
+    let mut statement = db
+        .connection_for_test()
+        .prepare("SELECT key FROM studyable_prompt WHERE card_id = ?1 ORDER BY key")
+        .expect("prepare");
+    statement
+        .query_map([card], |row| row.get(0))
+        .expect("query")
+        .collect::<Result<Vec<String>, _>>()
+        .expect("rows")
+}
+
+/// The column names of one table, as SQLite reports them.
+fn columns(db: &Db, table: &str) -> Vec<String> {
+    let mut statement = db
+        .connection_for_test()
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .expect("prepare");
+    statement
+        .query_map([], |row| row.get(1))
+        .expect("query")
+        .collect::<Result<Vec<String>, _>>()
+        .expect("rows")
 }
