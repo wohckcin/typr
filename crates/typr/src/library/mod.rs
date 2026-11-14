@@ -419,6 +419,21 @@ impl Library {
         self.refresh();
     }
 
+    /// Drop everything a view was filtering by, so deleting one leaves the whole library.
+    pub fn forget_filters(&mut self) {
+        self.query = TextEdit::default();
+        self.tag = None;
+        self.mode = CardMode::Active;
+        self.pinned_only = false;
+        self.sort = Sort::default();
+        self.dir = self.sort.natural();
+        self.shuffle = None;
+        self.selected_deck = None;
+        self.view_scope = None;
+        self.selected_view = None;
+        self.refresh();
+    }
+
     /// Open the name field on a deck, holding what the deck is called now.
     pub fn start_rename(&mut self, deck: Id) {
         if let Some(found) = self.snapshot.decks.iter().find(|own| own.id == deck) {

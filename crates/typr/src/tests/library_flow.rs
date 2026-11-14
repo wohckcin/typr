@@ -434,7 +434,8 @@ fn decks_are_created_renamed_and_moved_from_the_sidebar() {
         state
             .failure
             .as_deref()
-            .is_some_and(|why| why.contains("a deck called") && why.contains("already exists")),
+            .is_some_and(|why| why.contains("a deck under that parent called")
+                && why.contains("already exists")),
         "a duplicate name is refused out loud, got {:?}",
         state.failure
     );
@@ -1557,4 +1558,30 @@ fn the_pin_button_pins_and_unpins_a_card() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     assert!(pinned(&runtime), "the press pinned the card in the store");
+}
+
+#[test]
+fn deleting_the_view_that_is_showing_returns_to_the_whole_library() {
+    let (dir, view) = view_fixture();
+    let mut state = view_state(&dir);
+    state.library.select_view(view);
+    assert_eq!(state.library.cards().len(), 1, "the view narrows the list");
+
+    state.delete_view(view);
+    for _ in 0..200 {
+        state.drain();
+        if state.library.snapshot().views.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+
+    assert!(
+        state.library.snapshot().views.is_empty(),
+        "the view is gone"
+    );
+    assert_eq!(state.library.query.text, "", "the search went with it");
+    assert_eq!(state.library.tag, None, "the tag went with it");
+    assert!(!state.library.pinned_only, "the pin filter went with it");
+    assert_eq!(state.library.cards().len(), 2, "every card is listed again");
 }

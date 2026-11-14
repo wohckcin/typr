@@ -479,7 +479,9 @@ impl library::Host for State {
         // pressed would read as a lost click.
         self.library.close_view_name();
         if self.library.selected_view == Some(id) {
-            self.library.select_deck(None);
+            // The view's own filter goes with it; keeping the search and the mode would leave a
+            // list that no row on screen explains.
+            self.library.forget_filters();
         }
         self.track("delete_view", sent);
     }

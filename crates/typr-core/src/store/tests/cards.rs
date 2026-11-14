@@ -176,7 +176,7 @@ fn deck_names_are_unique_under_one_parent_and_free_elsewhere() {
         )
         .expect_err("duplicate");
     assert!(
-        matches!(&error, StoreError::DuplicateName { what: "deck", name } if name == "JAPANESE"),
+        matches!(&error, StoreError::DuplicateName { what: "deck under that parent", name } if name == "JAPANESE"),
         "{error:?}"
     );
 

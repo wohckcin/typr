@@ -145,7 +145,7 @@ impl Db {
                 self.named_write(
                     "INSERT INTO deck (parent_id, name) VALUES (?1, ?2)",
                     params![parent, name],
-                    "deck",
+                    "deck under that parent",
                     name,
                 )?;
                 Ok(Outcome::Deck(self.conn.last_insert_rowid()))
@@ -154,7 +154,7 @@ impl Db {
                 let changed = self.named_write(
                     "UPDATE deck SET name = ?2 WHERE id = ?1",
                     params![id, name],
-                    "deck",
+                    "deck under that parent",
                     name,
                 )?;
                 // `<<Deck>>` is the card's own deck name, so every card under this one says

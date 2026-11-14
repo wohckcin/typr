@@ -628,3 +628,29 @@ fn the_pinned_only_control_filters_the_list() {
         "pressing it again shows all"
     );
 }
+
+#[test]
+fn the_views_scene_shows_a_pinned_card_under_its_view() {
+    use typr_core::store::{SavedView, Sort, SortDir, ViewSpec};
+    let mut library = Library::seeded_nested();
+    library.seed_views(vec![SavedView {
+        id: 1,
+        name: "Exam week".to_string(),
+        spec: ViewSpec {
+            pinned_only: true,
+            sort: Sort::FirstSide,
+            dir: SortDir::Ascending,
+            ..ViewSpec::default()
+        },
+    }]);
+    library.pin(2);
+    library.select_view(1);
+
+    let shown: Vec<Id> = library.cards().iter().map(|card| card.id).collect();
+    assert_eq!(
+        shown,
+        vec![2],
+        "the scene's view leaves the pinned card alone"
+    );
+    assert!(library.pinned_only, "the pinned-only row reads as chosen");
+}
