@@ -1,8 +1,62 @@
 //! The binary's behaviour: what a frame, a key and a click do to the whole app.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::time::Duration;
+
 use crate::*;
+use log::LevelFilter;
 use rune::{Key, KeyEvent, Mods};
-use typr_core::clock::LEARNING_STEP_MS;
+use typr_core::clock::{Clock, LEARNING_STEP_MS};
+use typr_core::store::Db;
+
+/// A clock that panics the first time the worker reads it, which is how a stoppage starts.
+struct Stops(AtomicUsize);
+
+impl Clock for Stops {
+    fn now_ms(&self) -> i64 {
+        if self.0.fetch_add(1, AtomicOrdering::SeqCst) == 0 {
+            panic!("the clock fell over");
+        }
+        0
+    }
+}
+
+#[test]
+fn a_slow_answer_is_recorded_and_a_quick_one_is_not() {
+    assert!(slow_record("due_prompts", Duration::from_millis(249)).is_none());
+    let line = slow_record("due_prompts", Duration::from_millis(300)).expect("recorded");
+    assert!(line.contains("due_prompts"), "{line}");
+    assert!(line.contains("300 ms"), "{line}");
+}
+
+#[test]
+fn a_panicked_worker_is_written_down_at_quit() {
+    let logs = tempfile::tempdir().expect("temp dir");
+    let path = logging::install(logs.path(), LevelFilter::Warn).expect("installed");
+    let library = tempfile::tempdir().expect("temp dir");
+    let db = Db::open(&library.path().join("typr.sqlite3")).expect("open");
+    let waker: Waker = Arc::new(|| {});
+    let handle = Handle::spawn(db, Box::new(Stops(AtomicUsize::new(0))), waker).expect("spawn");
+    let status = handle.status();
+    let _ = handle.history(1);
+    for _ in 0..200 {
+        if !handle.poll().is_empty() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    drop(handle);
+
+    finish(Some(&status));
+
+    let written = std::fs::read_to_string(&path).expect("read the log");
+    assert!(
+        written.contains("the library worker ended badly"),
+        "the end reached the log: {written}"
+    );
+    assert!(written.contains("the clock fell over"), "{written}");
+}
 
 /// One due card, revealed to its last side, forgotten, and acknowledged.
 fn forgotten_due_card() -> State {

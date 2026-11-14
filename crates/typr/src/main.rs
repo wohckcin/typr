@@ -27,6 +27,26 @@ type Scene = (&'static str, fn(&mut State));
 /// How long a command may take before its answer is worth a record.
 const SLOW_COMMAND: Duration = Duration::from_millis(250);
 
+/// What to record about a command that took long enough to matter, and nothing when it did not.
+fn slow_record(name: &str, elapsed: Duration) -> Option<String> {
+    (elapsed > SLOW_COMMAND).then(|| format!("{name} answered after {} ms", elapsed.as_millis()))
+}
+
+/// Record the worker's end, then reach the log file one last time.
+///
+/// Runs in `main` after the run loop, never from `Drop`: the handle is dropped during teardown
+/// inside `rune::run`, and a flush there would come before its own record.
+fn finish(status: Option<&WorkerStatus>) {
+    if let Some(error) = status.and_then(WorkerStatus::ended) {
+        log::error!(
+            target: "typr",
+            "the library worker ended badly: {}",
+            logging::describe(&*error)
+        );
+    }
+    logging::shutdown();
+}
+
 /// The worker's end, kept where it outlives the state that owns the handle.
 static WORKER: OnceLock<WorkerStatus> = OnceLock::new();
 
@@ -148,15 +168,10 @@ impl State {
 
     /// Record a command whose answer took long enough to matter, then forget it.
     fn note_round_trip(&mut self, id: u64) {
-        if let Some((name, started)) = self.sent.remove(&id) {
-            let elapsed = started.elapsed();
-            if elapsed > SLOW_COMMAND {
-                log::warn!(
-                    target: "typr",
-                    "{name} answered after {} ms",
-                    elapsed.as_millis()
-                );
-            }
+        if let Some((name, started)) = self.sent.remove(&id)
+            && let Some(line) = slow_record(name, started.elapsed())
+        {
+            log::warn!(target: "typr", "{line}");
         }
     }
 
@@ -829,16 +844,7 @@ fn main() {
     });
 
     // The worker's end is only knowable after its handle went with the state, inside `rune::run`.
-    if let Some(status) = WORKER.get()
-        && let Some(error) = status.ended()
-    {
-        log::error!(
-            target: "typr",
-            "the library worker ended badly: {}",
-            logging::describe(&*error)
-        );
-    }
-    logging::shutdown();
+    finish(WORKER.get());
 }
 
 #[cfg(test)]
