@@ -601,3 +601,63 @@ fn a_narrow_window_keeps_the_labels_without_the_keycaps() {
         "a narrow window still drew a keycap: {drawn:?}"
     );
 }
+
+#[test]
+fn a_reverse_review_says_so() {
+    let mut state = State {
+        session: Session::new(
+            Queue::Due,
+            vec![Entry::reverse(
+                1,
+                ["What is mitosis?".to_string(), "Cell division".to_string()],
+                0,
+            )],
+        ),
+        ..State::default()
+    };
+    state.screen = Screen::Session;
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.1);
+    let drawn: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    assert!(
+        drawn.iter().any(|line| line.starts_with("Reverse")),
+        "a card asked from its answer says which way it is being asked: {drawn:?}"
+    );
+
+    let forward = State {
+        session: Session::new(
+            Queue::Due,
+            vec![Entry::sides(
+                1,
+                ["What is mitosis?".to_string(), "Cell division".to_string()],
+                0,
+            )],
+        ),
+        ..State::default()
+    };
+    let mut runtime = rune::Runtime::new(
+        forward,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.1);
+    let drawn: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    assert!(
+        drawn.iter().all(|line| !line.contains("Reverse")),
+        "and a forward one does not: {drawn:?}"
+    );
+}

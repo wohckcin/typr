@@ -106,10 +106,16 @@ fn side_heading<S: Host>(s: &S) -> String {
     let masked = session
         .current()
         .is_some_and(|entry| entry.faces.iter().any(Face::unmasks));
-    match (session.read_only, masked, session.revealed()) {
+    let heading = match (session.read_only, masked, session.revealed()) {
         (true, _, _) => format!("Answer · {faces} face(s) · you have answered this card"),
         (_, true, _) => "Hidden text".to_string(),
         (_, false, revealed) => format!("Side {revealed} of {faces}"),
+    };
+    // Which way the card is being asked is part of the question, not a decoration: "Cell division"
+    // as a prompt means something different from the same card asked forward.
+    match session.direction() {
+        "reverse" => format!("Reverse · {heading}"),
+        _ => heading,
     }
 }
 

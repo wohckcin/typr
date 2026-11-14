@@ -298,6 +298,22 @@ impl library::Host for State {
         self.track("archive_card", sent);
     }
 
+    fn set_card_reverse(&mut self, card: Id, reverse: Option<bool>) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.set_card_reverse(card, reverse),
+            None => Err(StoreError::Closed),
+        };
+        self.track("set_card_reverse", sent);
+    }
+
+    fn set_deck_reverse(&mut self, deck: Id, reverse: Option<bool>) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.set_deck_reverse(deck, reverse),
+            None => Err(StoreError::Closed),
+        };
+        self.track("set_deck_reverse", sent);
+    }
+
     fn trash_card(&mut self, card: Id) {
         let sent = match self.store.as_ref() {
             Some(store) => store.trash_card(card),
@@ -319,6 +335,7 @@ impl library::Host for State {
         };
         self.editor = Editor::new(Some(card), summary.markdown.clone());
         self.editor.load_tags(&summary.tags);
+        self.editor.set_reverse(summary.reverse);
         self.last_draft = summary.markdown.clone();
         self.pending_tags.clear();
         self.screen = Screen::Editor;
@@ -673,11 +690,16 @@ impl State {
                 let shape = hidden::shape(&card.markdown);
                 // A prompt the card's shape does not claim cannot be asked: masking it would hide
                 // nothing, so the question would show the answer. A one-sided card is a note, which
-                // is the same rule with an empty key list.
-                if !shape.prompt_keys().contains(&key) {
+                // is the same rule with an empty key list. The reverse prompt is the one exception:
+                // it is claimed by a card with two sides rather than by the shape's own key list.
+                let reverse = key == "rev" && shape.claims_reverse();
+                if !reverse && !shape.prompt_keys().contains(&key) {
                     return None;
                 }
                 Some(match &shape {
+                    hidden::Shape::Sides(sides) if reverse => {
+                        Entry::reverse(card.id, sides.clone(), overdue)
+                    }
                     hidden::Shape::Sides(sides) => Entry::sides(card.id, sides.clone(), overdue),
                     hidden::Shape::Hidden { text, .. } => Entry::masked(
                         card.id,
@@ -1170,6 +1192,16 @@ fn main() {
             let entries = vec![
                 Entry::sides(1, ["What is **mitosis**?", "Cell division."], 1),
                 Entry::sides(2, ["What is **osmosis**?", "Water across a membrane."], 1),
+            ];
+            state.session = Session::new(Queue::Due, entries);
+            state.session.reveal();
+            state.screen = Screen::Session;
+        }),
+        ("session-reverse", |state: &mut State| {
+            // The same cards asked from their answers: the side that was the answer is the question.
+            let entries = vec![
+                Entry::reverse(1, ["What is **mitosis**?", "Cell division."], 1),
+                Entry::reverse(2, ["What is **osmosis**?", "Water across a membrane."], 1),
             ];
             state.session = Session::new(Queue::Due, entries);
             state.session.reveal();

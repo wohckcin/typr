@@ -59,6 +59,23 @@ impl Entry {
         }
     }
 
+    /// A two-or-more-sided card asked from its last side: the same faces, read the other way round,
+    /// so the side that was the answer is the question.
+    pub fn reverse<I, T>(card: Id, sides: I, overdue: i64) -> Entry
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<String>,
+    {
+        let mut faces: Vec<Face> = sides.into_iter().map(Face::question).collect();
+        faces.reverse();
+        Entry {
+            card,
+            prompt: "rev".to_string(),
+            faces,
+            overdue,
+        }
+    }
+
     /// A hidden-text group: one face, masked until it is unmasked.
     pub fn masked<H, S>(
         card: Id,
@@ -149,6 +166,16 @@ impl Session {
     /// The card on screen, if there is one.
     pub fn current(&self) -> Option<&Entry> {
         self.entries.get(self.at)
+    }
+
+    /// Which way the card on screen is being asked: `"forward"`, or `"reverse"` when its prompt is
+    /// the one read from the last side. Empty when nothing is on screen.
+    pub fn direction(&self) -> &'static str {
+        match self.current() {
+            Some(entry) if entry.prompt == "rev" => "reverse",
+            Some(_) => "forward",
+            None => "",
+        }
     }
 
     /// How many sides of the current card have been shown.

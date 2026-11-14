@@ -436,3 +436,38 @@ fn a_hidden_text_face_unmasks_on_one_reveal() {
     assert!(session.gradeable(), "one reveal is the whole card");
     assert_eq!(session.hidden(), 0, "nothing is left masked");
 }
+
+#[test]
+fn a_reverse_entry_shows_the_last_side_first() {
+    let mut session = Session::new(
+        Queue::Due,
+        vec![Entry::reverse(1, ["What is mitosis?", "Cell division"], 0)],
+    );
+
+    assert_eq!(session.direction(), "reverse");
+    assert_eq!(
+        session.lines(),
+        vec![("Cell division", true)],
+        "the answer is the question, and the question is what has to be revealed"
+    );
+    assert_eq!(session.hidden(), 1, "one side is still behind the request");
+
+    assert!(session.reveal());
+    assert_eq!(
+        session.lines(),
+        vec![("Cell division", true), ("What is mitosis?", true)],
+        "the sides are revealed in reverse order"
+    );
+    assert!(session.gradeable(), "grading waits for the second side");
+}
+
+#[test]
+fn a_forward_entry_says_which_way_it_is_asked() {
+    let session = Session::new(
+        Queue::Due,
+        vec![Entry::sides(1, ["What is mitosis?", "Cell division"], 0)],
+    );
+
+    assert_eq!(session.direction(), "forward");
+    assert_eq!(Session::empty().direction(), "", "nothing on screen says nothing");
+}
