@@ -1,6 +1,7 @@
 //! The binary's behaviour: what a frame, a key and a click do to the whole app.
 
 use crate::*;
+use rune::{Key, KeyEvent, Mods};
 use typr::clock::LEARNING_STEP_MS;
 
 /// One due card, revealed to its last side, forgotten, and acknowledged.
@@ -1154,5 +1155,74 @@ fn the_session_screen_offers_a_shuffle() {
     assert!(
         runtime.find("shuffle").is_some(),
         "the screen offers the shuffle"
+    );
+}
+
+#[test]
+fn a_grade_that_could_not_be_sent_is_not_waited_on() {
+    let mut state = State {
+        session: Session::new(
+            Queue::Due,
+            vec![Entry {
+                card: 1,
+                sides: vec!["front".to_string(), "back".to_string()],
+                overdue: 0,
+            }],
+        ),
+        screen: Screen::Session,
+        ..State::default()
+    };
+    assert!(state.store.is_none(), "the library is not open");
+
+    // Answer the card: reveal both sides, then grade with the keyboard.
+    for _ in 0..2 {
+        let space = KeyEvent {
+            key: Key::Text(" ".into()),
+            mods: Mods::default(),
+        };
+        assert!(study::key(&mut state, &space), "the reveal key is taken");
+    }
+    assert!(state.session.gradeable(), "the answers are offered");
+    let grade = KeyEvent {
+        key: Key::Text("j".into()),
+        mods: Mods::default(),
+    };
+    assert!(study::key(&mut state, &grade), "the grade key is taken");
+
+    assert!(
+        state.session.gradeable(),
+        "a grade that never left the app leaves the card answerable"
+    );
+    assert!(
+        !state.session.finished(),
+        "and the session does not silently end"
+    );
+    assert_eq!(
+        state.failure.as_deref(),
+        Some("the library is closed"),
+        "while saying why nothing was recorded"
+    );
+
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    assert!(
+        runtime.find("failure").is_some(),
+        "the status line is drawn for a failure"
+    );
+    let drawn: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    assert!(
+        drawn
+            .iter()
+            .any(|line| line.contains("the library is closed")),
+        "and the reason is on screen, got {drawn:?}"
     );
 }
