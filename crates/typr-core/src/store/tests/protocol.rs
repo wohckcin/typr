@@ -182,6 +182,25 @@ fn a_read_only_command_leaves_the_revision_alone() {
 }
 
 #[test]
+fn an_export_leaves_the_revision_alone() {
+    let dir = TempDir::new().expect("temp dir");
+    let store = spawn_temp(&dir);
+    store.create_deck(None, "Biology").expect("sent");
+    wait_for(&store, 1);
+
+    let before = store.snapshot().revision;
+    let target = dir.path().join("exported.typr");
+    store.export_library(&target).expect("the export lands");
+    wait_for(&store, 1);
+    assert!(target.is_file(), "the export names one file");
+    assert_eq!(
+        before,
+        store.snapshot().revision,
+        "an export reads the library, so nothing was republished"
+    );
+}
+
+#[test]
 fn reading_the_snapshot_twice_shares_one_allocation() {
     let dir = TempDir::new().expect("temp dir");
     let store = spawn_temp(&dir);

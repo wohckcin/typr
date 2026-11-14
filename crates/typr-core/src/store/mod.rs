@@ -625,9 +625,8 @@ impl Outcome {
             | Outcome::Changed(_)
             | Outcome::Graded { .. }
             | Outcome::Imported(_)
-            | Outcome::Exported
             | Outcome::Ok => true,
-            Outcome::MaskGroups(_) | Outcome::Masks(_) => false,
+            Outcome::MaskGroups(_) | Outcome::Masks(_) | Outcome::Exported => false,
             Outcome::History { .. }
             | Outcome::Due(_)
             | Outcome::New(_)

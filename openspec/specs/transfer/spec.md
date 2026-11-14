@@ -8,14 +8,21 @@ Owns moving material in and out of a library: the library itself as one file tha
 ### Requirement: A library exports as one file that reopens
 
 The system SHALL export the whole library as one file that opens as a library on another machine,
-including decks, cards, fields, masks, tags, images and every review record, and SHALL NOT alter the
-exporting library.
+including decks, cards, fields, masks, tags and every review record, SHALL name the pictures its cards
+use without carrying their bytes, and SHALL NOT alter the exporting library.
 
 #### Scenario: The round trip is lossless
 
 - **WHEN** a library holding two decks, twenty cards, three images and fifty review records is exported
   and the export is opened
-- **THEN** every card, image, prompt, due date and record is present and equal
+- **THEN** every card, prompt, due date, field, mask and record is present and equal, and each picture a
+  card names still shows if the attachments folder travelled beside the file
+
+#### Scenario: A picture doesn't travel inside the file
+
+- **WHEN** an export is opened on a machine without the attachments folder
+- **THEN** its cards and their pictures' names are there, the pictures themselves are not, and the
+  screen says so rather than drawing an empty picture
 
 #### Scenario: Exporting does not write to the library
 
