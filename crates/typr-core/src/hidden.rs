@@ -94,9 +94,20 @@ pub fn masked(text: &str, shape: &Shape, key: &str) -> String {
     match shape {
         Shape::Sides(_) => text.to_string(),
         Shape::Hidden { .. } => match group_of(key) {
-            Some(group) => render(text, &spans(text), Some(group)),
+            Some(group) => render(text, &spans(text), &|span| {
+                (span.group == group).then(|| MASK.to_string())
+            }),
             None => shown(text, shape),
         },
+    }
+}
+
+/// The text with every hidden span masked and its group named, which is what the editor previews: a
+/// writer sees which answers are hidden and which prompt each belongs to, and sees none of them.
+pub fn masked_all(text: &str, shape: &Shape) -> String {
+    match shape {
+        Shape::Sides(_) => text.to_string(),
+        Shape::Hidden { .. } => render(text, &spans(text), &|span| Some(label(span.group))),
     }
 }
 
@@ -104,25 +115,33 @@ pub fn masked(text: &str, shape: &Shape, key: &str) -> String {
 pub fn shown(text: &str, shape: &Shape) -> String {
     match shape {
         Shape::Sides(_) => text.to_string(),
-        Shape::Hidden { .. } => render(text, &spans(text), None),
+        Shape::Hidden { .. } => render(text, &spans(text), &|_| None),
     }
 }
 
 /// Copy `text` into its rendered form, masking the spans of `hiding` when one is given.
-fn render(text: &str, spans: &[Span], hiding: Option<u32>) -> String {
+fn render(text: &str, spans: &[Span], hide: &dyn Fn(&Span) -> Option<String>) -> String {
     let mut out = String::with_capacity(text.len());
     let mut copied = 0;
     for span in spans {
         out.push_str(&text[copied..span.whole.start]);
-        if hiding == Some(span.group) {
-            out.push_str(MASK);
-        } else {
-            out.push_str(&text[span.content.clone()]);
+        match hide(span) {
+            Some(mask) => out.push_str(&mask),
+            None => out.push_str(&text[span.content.clone()]),
         }
         copied = span.whole.end;
     }
     out.push_str(&text[copied..]);
     out
+}
+
+/// What a masked span of `group` reads as. Only a numbered group is labelled, because the plain form
+/// is one group and has nothing to tell apart.
+fn label(group: u32) -> String {
+    match group {
+        0 => MASK.to_string(),
+        n => format!("[{n} … ]"),
+    }
 }
 
 /// Every hidden span in `markdown`, outside fenced blocks and inline code.

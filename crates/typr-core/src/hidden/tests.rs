@@ -1,4 +1,4 @@
-use super::{Shape, group_of, masked, shape, shown};
+use super::{Shape, group_of, masked, masked_all, shape, shown};
 
 fn keys(markdown: &str) -> Vec<String> {
     shape(markdown).prompt_keys()
@@ -111,4 +111,30 @@ fn the_shown_form_masks_nothing_even_when_it_is_asked_for_another_group() {
     let shape = shape(text);
     assert_eq!(shown(text, &shape), "A b c d e");
     assert_eq!(masked(text, &shape, "cloze:2"), "A b c [ … ] e");
+}
+
+#[test]
+fn masking_every_group_names_each_numbered_span() {
+    let text = "Our lungs pull {{2::oxygen}} from the {{1::air}}.";
+    let shape = shape(text);
+    assert_eq!(
+        masked_all(text, &shape),
+        "Our lungs pull [2 … ] from the [1 … ]."
+    );
+}
+
+#[test]
+fn masking_every_group_leaves_the_plain_form_unlabelled() {
+    let text = "The hormone {{insulin}} is made by the {{pancreas}}.";
+    let shape = shape(text);
+    assert_eq!(
+        masked_all(text, &shape),
+        "The hormone [ … ] is made by the [ … ]."
+    );
+}
+
+#[test]
+fn masking_every_group_leaves_a_card_without_hidden_text_alone() {
+    let text = "front\n---\nback";
+    assert_eq!(masked_all(text, &shape(text)), text);
 }

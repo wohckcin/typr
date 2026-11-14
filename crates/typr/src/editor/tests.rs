@@ -1,4 +1,5 @@
 use super::{Editor, caption, preview_body, preview_key, view};
+use typr_core::hidden;
 use typr_core::store::Id;
 
 #[test]
@@ -372,13 +373,18 @@ fn a_card_that_hides_text_previews_with_its_first_group_masked() {
 }
 
 #[test]
-fn a_numbered_group_is_masked_only_when_it_is_the_group_being_asked() {
+fn the_preview_masks_every_group_while_a_review_masks_only_the_one_asked_for() {
     let text = "Our lungs pull {{2::oxygen}} from the {{1::air}}";
 
     assert_eq!(
         preview_body(text),
+        "Our lungs pull [2 … ] from the [1 … ]",
+        "the preview hides every answer and names the group each mask belongs to"
+    );
+    assert_eq!(
+        hidden::masked(text, &hidden::shape(text), "cloze:1"),
         "Our lungs pull oxygen from the [ … ]",
-        "the first numbered group is masked and later ones stay readable"
+        "a review hides only the group it asks about"
     );
 }
 
@@ -421,4 +427,13 @@ fn the_preview_says_prompts_on_screen_for_a_hidden_text_card() {
         "the preview counts prompts, not sides"
     );
     assert_eq!(runtime.state.prompts(), 2);
+}
+
+#[test]
+fn the_preview_masks_every_group_and_names_the_one_it_hides() {
+    let body = preview_body("Our lungs pull {{2::oxygen}} from the {{1::air}}.");
+    assert!(body.contains("[1 … ]"), "the first group is named: {body}");
+    assert!(body.contains("[2 … ]"), "the second group is named: {body}");
+    assert!(!body.contains("oxygen"), "no answer is readable: {body}");
+    assert!(!body.contains("air."), "no answer is readable: {body}");
 }

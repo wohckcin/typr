@@ -338,11 +338,12 @@ fn chip_row(tags: Vec<String>, width: f32) -> El {
 pub fn first_side(card: &CardSummary) -> String {
     let shape = typr_core::hidden::shape(&card.markdown);
     match &shape {
-        // A tile shows the question, so a card that hides its answer is drawn masked.
-        typr_core::hidden::Shape::Hidden { .. } => match shape.prompt_keys().first() {
-            Some(key) => typr_core::hidden::masked(&card.markdown, &shape, key),
-            None => String::new(),
-        },
+        // A tile shows the question, so every answer the card hides is drawn masked and labelled by
+        // group. Masking only the first group would leave the other prompts' answers readable in the
+        // grid, which is where they are easiest to see by accident.
+        typr_core::hidden::Shape::Hidden { .. } => {
+            typr_core::hidden::masked_all(&card.markdown, &shape)
+        }
         // A split side keeps its trailing newline, which would read as an empty line in a tile.
         typr_core::hidden::Shape::Sides(_) => typr_core::sides::split(&card.markdown)
             .first()

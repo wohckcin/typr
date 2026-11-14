@@ -249,3 +249,28 @@ fn a_tile_shows_the_masked_question_of_a_card_that_hides_its_answer() {
 fn a_tile_shows_the_first_side_of_a_card_with_sides() {
     assert_eq!(first_side(&card(2, "front\n---\nback")), "front");
 }
+
+#[test]
+fn a_tile_hides_every_answer_a_hidden_text_card_holds() {
+    let library = Library::seeded(1);
+    let mut card = library.cards().first().expect("one card").clone();
+    card.markdown = "Our lungs pull {{2::oxygen}} from the {{1::air}}.".to_string();
+    let (_, strings) = Probe::new(card, 245.0).measure();
+    let drawn = strings.join(" ");
+    assert!(
+        drawn.contains("[1 … ]"),
+        "the first group is named: {strings:?}"
+    );
+    assert!(
+        drawn.contains("[2 … ]"),
+        "the second group is named: {strings:?}"
+    );
+    assert!(
+        !drawn.contains("oxygen"),
+        "no answer is readable: {strings:?}"
+    );
+    assert!(
+        !drawn.contains("air."),
+        "no answer is readable: {strings:?}"
+    );
+}

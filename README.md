@@ -70,8 +70,8 @@ A card is markdown. Two things give it structure:
   many lines of `---` it holds.
 - Spans inside fenced code blocks and inside `backticks` are literal text, not hidden text.
 
-While you type, the preview shows `[ … ]` where an answer is masked, and the caption counts
-prompts rather than sides — so a card with two numbered groups reports two prompts, not two
+While you type, the preview masks every answer and names the group it belongs to — `[1 … ]` for a
+numbered span, `[ … ]` for the plain form — and the caption counts prompts rather than sides — so a card with two numbered groups reports two prompts, not two
 sides.
 
 ## Dependencies

@@ -300,13 +300,7 @@ impl Editor {
 /// author sees the question a session will ask, not the answer.
 pub fn preview_body(text: &str) -> String {
     let shape = hidden::shape(text);
-    match &shape {
-        Shape::Hidden { .. } => match shape.prompt_keys().first() {
-            Some(key) => hidden::masked(text, &shape, key),
-            None => text.to_string(),
-        },
-        Shape::Sides(_) => text.to_string(),
-    }
+    hidden::masked_all(text, &shape)
 }
 
 /// The line under the preview: prompts for a card that hides text, sides for a card that does
