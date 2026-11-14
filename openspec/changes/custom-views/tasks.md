@@ -14,7 +14,7 @@ if the user prefers.
 
 - [x] 2.1 Commands `CreateView { spec: ViewSpec, name: String }`, `RenameView { id, name }`, `DeleteView { id }`, `UpdateView { id, spec }`, `SetPinned { card, pinned }`; `Snapshot` gains `views: Vec<SavedView>`; a duplicate name is `StoreError::DuplicateName`.
   - **Verification**: `a_view_round_trips_through_the_store` and `two_views_cannot_share_a_name`.
-- [ ] 2.2 A view whose deck has been deleted reports a missing scope and applies the whole library.
+- [x] 2.2 A view whose deck has been deleted reports a missing scope and applies the whole library.
   - **Verification**: `a_view_whose_deck_is_gone_falls_back_to_every_card`.
 
 ## 3. Library

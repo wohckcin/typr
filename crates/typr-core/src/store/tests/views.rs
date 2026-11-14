@@ -182,3 +182,37 @@ fn the_snapshot_carries_what_the_orders_rank_by() {
     assert_eq!(of(second).reviews, 1, "a review is counted for the order");
     assert_eq!(of(first).reviews, 0);
 }
+
+#[test]
+fn a_view_whose_deck_is_gone_falls_back_to_every_card() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    card(&mut db, deck, "gato\n---\ncat");
+    card(&mut db, deck, "perro\n---\ndog");
+
+    // A scope no deck carries: what a view holds once the deck it was saved on is gone.
+    db.apply(
+        &Command::CreateView {
+            spec: ViewSpec {
+                deck: Some(404),
+                ..ViewSpec::default()
+            },
+            name: "Spanish".to_string(),
+        },
+        NOON,
+    )
+    .expect("create view");
+
+    let snapshot = db.snapshot().expect("snapshot");
+    let view = &snapshot.views[0];
+    assert!(
+        view.scope_missing(&snapshot),
+        "the view says its deck is gone"
+    );
+    assert_eq!(
+        snapshot.cards_matching(&view.spec).len(),
+        2,
+        "a scope no deck carries shows the library, not an empty list"
+    );
+}
