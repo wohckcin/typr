@@ -2,11 +2,11 @@
 //! that ends a session.
 
 use rune::tok::{self, type_};
-use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
+use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, Markdown, MarkdownStyle, root};
 
 use typr_core::keymap::{Command, Surface};
-use typr_core::session::{Face, Session};
+use typr_core::session::{Face, Mode, Session};
 use typr_core::store::{Grade, Id, StoreError};
 
 /// What the study screen needs from the app.
@@ -45,6 +45,18 @@ pub trait Host: 'static {
 
     /// Record the size the picture pane was laid out at.
     fn set_picture_pane(&mut self, _width: f32, _height: f32) {}
+
+    /// The name the summary offers for the cram run's filter.
+    fn cram_name(&self) -> &TextEdit;
+
+    /// That name, for the input that edits it.
+    fn cram_name_field(&mut self) -> &mut TextEdit;
+
+    /// Whether the run's filter is already saved, or on its way to being saved.
+    fn cram_saved(&self) -> bool;
+
+    /// Save the run's filter as a view, once.
+    fn save_cram_view(&mut self);
 }
 
 /// Run a command the table bound to the session surface. Answers whether it was used.
@@ -279,7 +291,7 @@ pub fn view<S: Host>(s: &S) -> El {
             );
     }
 
-    let body = col()
+    let mut body = col()
         .w_full()
         .h_full()
         .fill(t.bg)
@@ -289,7 +301,18 @@ pub fn view<S: Host>(s: &S) -> El {
             text(side_heading::<S>(s))
                 .font(type_::LABEL)
                 .color(t.text_secondary),
-        )
+        );
+    // A cram run looks like any other session, so the screen has to say that its answers go
+    // nowhere: the reader would otherwise expect a due date to move.
+    if session.mode() == Mode::Cram {
+        body = body.child(
+            text("Cram · answers here are not scheduled".to_string())
+                .key("cram-note")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        );
+    }
+    let body = body
         .child(card)
         .child(answers)
         .child(bindings())
@@ -298,16 +321,20 @@ pub fn view<S: Host>(s: &S) -> El {
 }
 
 /// What the session came to: the answers given, and what is due now.
+///
+/// A cram run ends differently: it scheduled nothing, so there is no due date to report, and its
+/// filter is worth keeping, so the summary offers to save it as a view.
 pub fn summary<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let session = s.session();
+    let cram = session.mode() == Mode::Cram;
     let remembered = session
         .grades
         .iter()
         .filter(|g| **g == Grade::Remembered)
         .count();
     let forgot = session.grades.len() - remembered;
-    let body = col()
+    let mut body = col()
         .key("summary")
         .w_full()
         .h_full()
@@ -319,12 +346,50 @@ pub fn summary<S: Host>(s: &S) -> El {
             text(format!("{remembered} remembered · {forgot} forgot"))
                 .key("summary-grades")
                 .color(t.text_secondary),
-        )
-        .child(
+        );
+    if cram {
+        body = body.child(
+            text(format!(
+                "{} answer(s) · nothing was scheduled",
+                session.grades.len()
+            ))
+            .key("summary-scheduled")
+            .color(t.text_secondary),
+        );
+        body = body.child(
+            row()
+                .key("save-cram")
+                .w_full()
+                .gap(8.0)
+                .child(
+                    text_input(s.cram_name(), type_::LABEL)
+                        .key("cram-name")
+                        .single_line()
+                        .grow(1.0)
+                        .placeholder("Name this view", t.text_secondary)
+                        .on_edit(|s: &mut S| s.cram_name_field())
+                        .on_submit(|s: &mut S, _| s.save_cram_view()),
+                )
+                .child(
+                    Button::new(if s.cram_saved() {
+                        "Saved"
+                    } else {
+                        "Save as view"
+                    })
+                    .variant(ButtonVariant::Ghost)
+                    .on_press(|s: &mut S| s.save_cram_view())
+                    .build(&rune_kit::Kit::neutral(true))
+                    .key("save-cram-view"),
+                ),
+        );
+    } else {
+        body = body.child(
             text(format!("{} due now", s.due_now()))
                 .key("summary-due")
                 .color(t.text_secondary),
-        )
+        );
+    }
+    body = body
         .child(
             Button::new("Back to library")
                 .variant(ButtonVariant::Neutral)

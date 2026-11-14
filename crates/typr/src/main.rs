@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use rune::tok::{self, type_};
-use rune::{AppSpec, Cx, El, Tx, Waker, col, row, text};
+use rune::{AppSpec, Cx, El, TextEdit, Tx, Waker, col, row, text};
 use typr::attachments::Attachments;
 use typr::day_offset;
 use typr::editor::{self, Editor};
@@ -127,6 +127,12 @@ struct State {
     cram_request: Option<u64>,
     /// The filter the cram session walks, kept so the summary can save it as a view.
     cram_spec: Option<ViewSpec>,
+    /// The name the summary will save that filter under.
+    cram_name: TextEdit,
+    /// The save-view request in flight.
+    cram_save_request: Option<u64>,
+    /// Whether the filter has been saved, so a second press creates no second view.
+    cram_saved: bool,
 }
 
 impl Default for State {
@@ -162,6 +168,9 @@ impl Default for State {
             palette: keymap::palette::Palette::default(),
             cram_request: None,
             cram_spec: None,
+            cram_name: TextEdit::default(),
+            cram_save_request: None,
+            cram_saved: false,
         }
     }
 }
@@ -629,6 +638,49 @@ impl study::Host for State {
         // put a card into a session nobody is looking at.
         self.arrivals = None;
         self.session_deck = None;
+        // The drill's filter belongs to the summary; the library holds its own again.
+        self.cram_spec = None;
+        self.cram_save_request = None;
+        self.cram_saved = false;
+    }
+
+    fn cram_name(&self) -> &TextEdit {
+        &self.cram_name
+    }
+
+    fn cram_name_field(&mut self) -> &mut TextEdit {
+        &mut self.cram_name
+    }
+
+    fn cram_saved(&self) -> bool {
+        self.cram_saved || self.cram_save_request.is_some()
+    }
+
+    fn save_cram_view(&mut self) {
+        // Pressing twice must not leave two views behind: the same filter and name cannot be a
+        // second drill, and the button reads Saved from the moment the first press goes out.
+        if self.cram_saved() {
+            return;
+        }
+        let Some(spec) = self.cram_spec.clone() else {
+            return;
+        };
+        let name = self.cram_name.text.trim().to_string();
+        if name.is_empty() {
+            self.say("Name the view before saving it".to_string());
+            return;
+        }
+        let sent = match &self.store {
+            Some(store) => store.create_view(&spec, &name),
+            None => Err(StoreError::Closed),
+        };
+        remember(
+            &mut self.sent,
+            "create_view",
+            &mut self.cram_save_request,
+            &mut self.failure,
+            sent,
+        );
     }
 }
 
@@ -969,6 +1021,10 @@ impl State {
             return;
         };
         let spec = self.library.spec();
+        self.cram_name.replace_text(drill_name(&spec));
+        // A new drill is a new filter, and the previous one may already have been saved.
+        self.cram_saved = false;
+        self.cram_save_request = None;
         let sent = store.cards_for_view(&spec);
         if remember(
             &mut self.sent,
@@ -1106,6 +1162,10 @@ impl State {
                         self.screen = Screen::Session;
                     }
                 }
+                Ok(Outcome::View(_)) if self.cram_save_request == Some(event.id) => {
+                    self.cram_save_request = None;
+                    self.cram_saved = true;
+                }
                 Ok(Outcome::Card(id)) if self.card_request == Some(event.id) => {
                     self.card_request = None;
                     self.editor.card = Some(id);
@@ -1184,6 +1244,10 @@ impl State {
                 Ok(_) => {}
                 Err(error) => {
                     self.session.refuse(event.id);
+                    // A refusal leaves the offer open: the reader can press save again.
+                    if self.cram_save_request == Some(event.id) {
+                        self.cram_save_request = None;
+                    }
                     self.fail(&error);
                 }
             }
@@ -1543,6 +1607,10 @@ fn entry_for(card: &CardSummary, key: &str, overdue: i64) -> Option<Entry> {
 /// A session answers a card once: answering puts the card in `answered` and the walk skips its
 /// other entries, so a second question for the same card could never be shown. The filter selects
 /// cards, so one entry each is the whole of it; forgetting returns that one entry to the end.
+///
+/// A card with no key is dropped rather than queued with a question it cannot ask. The store's
+/// selection already leaves such cards out (`Db::cards_for_view` keeps only cards with a studyable
+/// prompt), so this is the same rule stated again for any other source of cards.
 fn cram_entries(cards: &[CardSummary]) -> Vec<Entry> {
     cards
         .iter()
@@ -1551,6 +1619,20 @@ fn cram_entries(cards: &[CardSummary]) -> Vec<Entry> {
             entry_for(card, &key, 0)
         })
         .collect()
+}
+
+/// What the summary proposes as a name for a cram run's filter.
+///
+/// The filter is the part worth naming, so the name says what was selected rather than when it was
+/// selected: a tag, the search that was typed, or the drill itself.
+fn drill_name(spec: &ViewSpec) -> String {
+    if let Some(tag) = spec.tags.first() {
+        return format!("{tag} drill");
+    }
+    if !spec.query.trim().is_empty() {
+        return format!("{} drill", spec.query.trim());
+    }
+    "Cram drill".to_string()
 }
 
 fn main() {

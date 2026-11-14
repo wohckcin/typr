@@ -1,4 +1,4 @@
-use rune::{Env, Key, KeyEvent, Mods, Runtime, Tx};
+use rune::{Env, Key, KeyEvent, Mods, Runtime, TextEdit, Tx};
 
 use super::{Host, key, summary, view};
 use typr_core::keymap::{Surface, bindings_of};
@@ -18,6 +18,10 @@ struct App {
     shuffles: u32,
     /// The size the picture pane reads as laid out, which places a diagram face's covers.
     pane: (f32, f32),
+    /// The name the summary would save a cram run's filter under.
+    cram_name: TextEdit,
+    /// Whether the summary gave that filter to a view.
+    saved: bool,
 }
 
 impl App {
@@ -34,6 +38,8 @@ impl App {
             left: false,
             shuffles: 0,
             pane: (400.0, 300.0),
+            cram_name: TextEdit::default(),
+            saved: false,
         }
     }
 
@@ -81,6 +87,22 @@ impl Host for App {
 
     fn reshuffle(&mut self) {
         self.shuffles += 1;
+    }
+
+    fn cram_name(&self) -> &TextEdit {
+        &self.cram_name
+    }
+
+    fn cram_name_field(&mut self) -> &mut TextEdit {
+        &mut self.cram_name
+    }
+
+    fn cram_saved(&self) -> bool {
+        self.saved
+    }
+
+    fn save_cram_view(&mut self) {
+        self.saved = true;
     }
 }
 
@@ -335,4 +357,73 @@ fn a_diagram_review_shows_its_caption() {
         .find(|element| element.key.as_deref() == Some("diagram-caption"))
         .and_then(|element| element.text);
     assert_eq!(caption.as_deref(), Some("The chambers of the heart"));
+}
+
+#[test]
+fn a_cram_review_says_nothing_is_scheduled() {
+    fn draw(s: &App, _: &mut rune::Cx<App>) -> rune::El {
+        view::<App>(s)
+    }
+    let mut app = App::with(Queue::Due, &[]);
+    app.session = Session::cram(vec![Entry::sides(
+        1,
+        vec!["front".to_string(), "back".to_string()],
+        0,
+    )]);
+    let mut runtime = Runtime::new(app, draw, (900.0, 600.0), Env::new(true, 1.0));
+    runtime.frame(0.1);
+    let drawn: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    let note = drawn
+        .iter()
+        .find(|line| line.starts_with("Cram"))
+        .unwrap_or_else(|| panic!("the review does not name the mode: {drawn:?}"));
+    assert!(
+        note.contains("not scheduled"),
+        "the review says the answers go nowhere: {note:?}"
+    );
+}
+
+#[test]
+fn a_cram_summary_reports_its_answers_without_a_schedule() {
+    fn draw(s: &App, _: &mut rune::Cx<App>) -> rune::El {
+        summary::<App>(s)
+    }
+    let mut app = App::with(Queue::Due, &[]);
+    app.session = Session::cram(vec![Entry::sides(
+        1,
+        vec!["front".to_string(), "back".to_string()],
+        0,
+    )]);
+    app.session.reveal();
+    assert!(app.session.grade(Grade::Remembered).is_some());
+    assert!(app.session.answer_here(), "the answer stays in the run");
+    assert!(app.session.finished());
+
+    let mut runtime = Runtime::new(app, draw, (900.0, 600.0), Env::new(true, 1.0));
+    runtime.frame(0.1);
+    let drawn: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    let report = drawn
+        .iter()
+        .find(|line| line.contains("answer(s) · nothing was scheduled"))
+        .unwrap_or_else(|| panic!("the summary does not report the run: {drawn:?}"));
+    assert!(
+        report.starts_with('1'),
+        "it counts the answers given: {report:?}"
+    );
+    assert!(
+        !drawn.iter().any(|line| line.contains("due now")),
+        "a run that scheduled nothing has no due date to report: {drawn:?}"
+    );
+    assert!(
+        drawn.iter().any(|line| line == "Save as view"),
+        "the summary offers to keep the filter: {drawn:?}"
+    );
 }

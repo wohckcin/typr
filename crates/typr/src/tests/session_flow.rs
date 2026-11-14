@@ -925,3 +925,100 @@ fn a_cram_grade_writes_nothing() {
         "the run ends when the last pass is remembered"
     );
 }
+
+/// A finished cram run over a filter, sitting on the summary with its name ready.
+fn cram_summary(dir: &tempfile::TempDir) -> State {
+    let mut state = State {
+        store: Some(library_with_one_card(dir)),
+        screen: Screen::Summary,
+        ..State::default()
+    };
+    state.session = Session::cram(vec![Entry::sides(
+        1,
+        vec!["front".to_string(), "back".to_string()],
+        0,
+    )]);
+    state.session.reveal();
+    assert!(state.session.grade(Grade::Remembered).is_some());
+    assert!(
+        state.session.answer_here(),
+        "the cram answer stays in the run"
+    );
+    assert!(state.session.finished());
+    state.cram_spec = Some(ViewSpec {
+        tags: vec!["exam".to_string()],
+        ..ViewSpec::default()
+    });
+    state.cram_name.replace_text("Exam drill".to_string());
+    state
+}
+
+#[test]
+fn saving_a_cram_session_keeps_its_filter() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut state = cram_summary(&dir);
+    let spec = state.cram_spec.clone().expect("the run's filter");
+    refresh_library(&mut state);
+    assert!(
+        state.library.snapshot().views.is_empty(),
+        "a run is never saved on its own"
+    );
+
+    study::Host::save_cram_view(&mut state);
+    wait_for(&mut state, "the saved view", |state| {
+        !state.library.snapshot().views.is_empty()
+    });
+
+    let views = state.library.snapshot().views.clone();
+    assert_eq!(views.len(), 1, "the drill became a view");
+    assert_eq!(views[0].name, "Exam drill");
+    assert_eq!(
+        views[0].spec, spec,
+        "the view keeps the session's filter unchanged"
+    );
+}
+
+#[test]
+fn the_summary_saves_the_drill_once() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut state = cram_summary(&dir);
+    // Two presses before the answer lands, and one after it, all name one view: saving the same
+    // filter twice would leave the library with a duplicate nobody asked for.
+    study::Host::save_cram_view(&mut state);
+    study::Host::save_cram_view(&mut state);
+    wait_for(&mut state, "the saved view", |state| {
+        !state.library.snapshot().views.is_empty()
+    });
+    study::Host::save_cram_view(&mut state);
+    for _ in 0..50 {
+        state.drain();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    refresh_library(&mut state);
+    assert_eq!(
+        state.library.snapshot().views.len(),
+        1,
+        "the drill is saved exactly once"
+    );
+}
+
+#[test]
+fn a_cram_run_drops_a_card_that_cannot_be_asked() {
+    // The store's selection already leaves these out, so what is left to hold is that no card
+    // without a key turns into an entry with an empty prompt: it is dropped, not panicked on.
+    let note = CardSummary {
+        id: 7,
+        sides: 1,
+        prompts: 0,
+        ..CardSummary::default()
+    };
+    assert!(
+        note.prompt_keys().is_empty(),
+        "a note claims no prompt to ask"
+    );
+    let entries = cram_entries(&[note]);
+    assert!(
+        entries.is_empty(),
+        "a card with no question is not queued: {entries:?}"
+    );
+}
