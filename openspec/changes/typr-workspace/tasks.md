@@ -22,9 +22,9 @@
 
 ## 4. The desktop crate settles
 
-- [ ] 4.1 Point every view and the binary at `typr_core::` (`library`, `editor`, `study`, `history`, `main`, `src/tests.rs`) and fix whatever the compiler reports. **Verify**: `cargo test --workspace` passes with the same test counts as before the move.
-- [ ] 4.2 Run every scene to a snapshot and compare against the pre-move run. **Verify**: all ten scenes write a non-empty PNG under a temporary `RUNE_DIRS_ROOT`, the set of scene names is unchanged, and each image's byte size is within a few bytes of the pre-move run recorded in the change's notes.
-- [ ] 4.3 Update `README.md`: workspace layout, `cargo run -p typr`, `cargo test --workspace`, and the note that Rune's revision and patch entries live in one root manifest. **Verify**: following the README from a clean checkout reaches a running app and a passing test run.
+- [x] 4.1 Point every view and the binary at `typr_core::` (`library`, `editor`, `study`, `history`, `main`, `src/tests.rs`) and fix whatever the compiler reports. **Verify**: `cargo test --workspace` passes with the same test counts as before the move.
+- [x] 4.2 Run every scene to a snapshot and compare against the pre-move run. **Verify**: all ten scenes write a non-empty PNG under a temporary `RUNE_DIRS_ROOT`, the set of scene names is unchanged, and each image's byte size is within a few bytes of the pre-move run recorded in the change's notes.
+- [x] 4.3 Update `README.md`: workspace layout, `cargo run -p typr`, `cargo test --workspace`, and the note that Rune's revision and patch entries live in one root manifest. **Verify**: following the README from a clean checkout reaches a running app and a passing test run.
 
 ## 5. Enforce the boundary
 
