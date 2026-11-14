@@ -33,7 +33,7 @@ Depends on `card-templates` (fields), `diagram-cards` (masks) and `cloze-deletio
   - **Verification**: `importing_a_mochi_export_from_the_library_adds_its_cards` drives the command path and settles the answer; an unreadable file leaves the count unchanged and the reason on screen.
 - [x] 4.2 README documents the four formats, the CSV header and what a `.typr` file is; the new dependency is recorded with its reason.
   - **Verification**: the README section exists and `cargo tree -p typr-core --edges normal` shows the archive crate and no toolkit crate.
-- [ ] 4.3 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
+- [x] 4.3 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.
 
 ## Workflow follow-up
