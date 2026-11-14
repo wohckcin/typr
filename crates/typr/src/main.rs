@@ -1880,6 +1880,16 @@ fn main() {
             state.editor.buffer.insert(" Edited.");
             state.editor.request_leave();
         }),
+        ("session-cram", |state: &mut State| {
+            // A run over a filter: the cards the library had selected, asked once each with no
+            // due date behind them, so the screen has to say where the answers go.
+            let entries = vec![
+                Entry::sides(1, ["What is **mitosis**?", "Cell division."], 0),
+                Entry::sides(2, ["What is **osmosis**?", "Water across a membrane."], 0),
+            ];
+            state.session = Session::cram(entries);
+            state.screen = Screen::Session;
+        }),
     ];
     // Without this Rune ends a window close with `_exit`, so both the worker's flush and the quit
     // record below would be skipped: data would survive only because each command commits as it is

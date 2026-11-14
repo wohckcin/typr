@@ -27,7 +27,7 @@ Depends on `custom-views` for `ViewSpec`.
 
 ## 4. Close out
 
-- [ ] 4.1 A scene `session-cram` shows a cram session; README documents cramming and its lack of writes.
+- [x] 4.1 A scene `session-cram` shows a cram session; README documents cramming and its lack of writes.
   - **Verification**: `--list-scenes` lists it and its `--snap` is non-blank.
 - [ ] 4.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.

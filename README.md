@@ -147,6 +147,18 @@ pinned-only flag are written back.
 A view remembers its deck by id. If that deck is deleted, the view says so on its row and shows the
 whole library rather than nothing.
 
+## Cramming
+
+`x` in the library studies exactly the cards the filter selects — the deck, the search, the tag and
+the pinned-only flag that are on screen — ignoring due dates, the new-card cap and the scheduler.
+With nothing selected it refuses and says so rather than opening an empty run.
+
+A cram answer writes nothing: no prompt changes phase, takes an interval or gains a due date, and
+`review_log` gains no row. The only thing a run changes is its own queue, so forgetting a card puts
+it back at the end of the same run and a card leaves only when it is remembered. The summary says
+how many answers were given and that nothing was scheduled, and it can save the run's filter as a
+view: the name is yours to type, and nothing is saved unless you press the button.
+
 ## Keyboard
 
 Every binding lives in one table, `typr_core::keymap::TABLE`, and the app draws its hints from
