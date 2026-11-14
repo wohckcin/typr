@@ -12,8 +12,8 @@ use crate::hidden::{self, Shape};
 use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
 
 use super::{
-    CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow, NewPrompt, Outcome, Phase,
-    ReviewRow, Settings, Snapshot, Stats, StoreError,
+    CardKind, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow, NewPrompt,
+    Outcome, Phase, ReviewRow, Settings, Snapshot, Stats, StoreError,
     schema::{self, SchemaFacts},
 };
 use unicode_normalization::UnicodeNormalization;
@@ -428,7 +428,7 @@ impl Db {
             let mut stmt = self.conn.prepare(
                 "SELECT c.id, c.deck_id, c.sides, c.archived, c.trashed_at, c.updated_at, c.markdown,
                         c.search_text, COUNT(sp.card_id), SUM(sp.card_id IS NOT NULL AND sp.due_at IS NULL), MIN(sp.due_at),
-                        c.reverse
+                        c.reverse, c.kind, c.image, c.caption
                  FROM card c
                  LEFT JOIN studyable_prompt sp ON sp.card_id = c.id
                  GROUP BY c.id
@@ -438,6 +438,10 @@ impl Db {
                 Ok(CardSummary {
                     id: row.get(0)?,
                     deck: row.get(1)?,
+                    kind: CardKind::parse(&row.get::<_, String>(12)?),
+                    image: row.get(13)?,
+                    caption: row.get(14)?,
+                    masks: Vec::new(),
                     sides: count_of(row.get(2)?),
                     tags: Vec::new(),
                     archived: row.get::<_, i64>(3)? != 0,
@@ -469,6 +473,31 @@ impl Db {
             for summary in &mut cards {
                 if let Some(names) = by_card.remove(&summary.id) {
                     summary.tags = names;
+                }
+            }
+
+            // Only a diagram card carries rectangles, so the second pass is keyed by the cards that
+            // need them and leaves every text card alone.
+            let mut stmt = self.conn.prepare(
+                "SELECT card_id, group_no, x, y, w, h FROM mask ORDER BY card_id, group_no, y, x",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, Id>(0)?,
+                    MaskRow {
+                        group: count_of(row.get::<_, i64>(1)?),
+                        rect: MaskRect::new(row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?),
+                    },
+                ))
+            })?;
+            let mut by_card: HashMap<Id, Vec<MaskRow>> = HashMap::new();
+            for row in rows {
+                let (card, mask) = row?;
+                by_card.entry(card).or_default().push(mask);
+            }
+            for summary in &mut cards {
+                if let Some(masks) = by_card.remove(&summary.id) {
+                    summary.masks = masks;
                 }
             }
             cards

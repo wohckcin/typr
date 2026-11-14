@@ -4,36 +4,84 @@ use std::collections::HashSet;
 
 use crate::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
-use crate::store::{Grade, Id};
+use crate::store::{Grade, Id, MaskRect};
 
 /// One face of a card: what is on screen before it is unmasked, and what it reads as afterwards.
 ///
 /// A side is its own question, so both strings hold the same text. Hidden text differs: the hidden
-/// form carries a mask where the answer would be.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Face {
-    pub hidden: String,
-    pub shown: String,
+/// form carries a mask where the answer would be. A picture face has no text at all: it is covered
+/// over the group being asked and uncovered on reveal.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Face {
+    /// A face made of text: a side, or a sentence with its answer hidden inside it.
+    Text { hidden: String, shown: String },
+    /// A face made of a picture: the rectangles of the group being asked are covered until the
+    /// answer is revealed. The corners are fractions of the image, so a face holds at any size.
+    Image {
+        image: String,
+        caption: Option<String>,
+        masks: Vec<MaskRect>,
+    },
 }
 
 impl Face {
     /// A face that asks a question by being itself: a side, or a whole hidden-text sentence.
     pub fn question(text: impl Into<String>) -> Face {
         let text = text.into();
-        Face {
+        Face::Text {
             hidden: text.clone(),
             shown: text,
         }
     }
 
+    /// A hidden-text face: the same text twice, once with the group masked.
+    pub fn masked(hidden: impl Into<String>, shown: impl Into<String>) -> Face {
+        Face::Text {
+            hidden: hidden.into(),
+            shown: shown.into(),
+        }
+    }
+
+    /// A group of rectangles on a picture: one answer, whatever the group holds.
+    pub fn group(image: impl Into<String>, caption: Option<String>, masks: Vec<MaskRect>) -> Face {
+        Face::Image {
+            image: image.into(),
+            caption,
+            masks,
+        }
+    }
+
     /// Whether unmasking this face changes what is on screen.
     pub fn unmasks(&self) -> bool {
-        self.hidden != self.shown
+        match self {
+            Face::Text { hidden, shown } => hidden != shown,
+            Face::Image { masks, .. } => !masks.is_empty(),
+        }
+    }
+
+    /// The text of this face, if it is made of text.
+    pub fn text(&self) -> Option<(&str, &str)> {
+        match self {
+            Face::Text { hidden, shown } => Some((hidden, shown)),
+            Face::Image { .. } => None,
+        }
+    }
+
+    /// The picture and the rectangles this face covers, if it is made of a picture.
+    pub fn picture(&self) -> Option<(&str, Option<&str>, &[MaskRect])> {
+        match self {
+            Face::Image {
+                image,
+                caption,
+                masks,
+            } => Some((image, caption.as_deref(), masks)),
+            Face::Text { .. } => None,
+        }
     }
 }
 
 /// A card waiting its turn, with the faces its prompt asks.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
     pub card: Id,
     /// The prompt this entry reviews, such as `fwd` or `cloze:1`.
@@ -76,6 +124,23 @@ impl Entry {
         }
     }
 
+    /// A group of rectangles on a diagram: one face, covered until it is uncovered.
+    pub fn mask_group(
+        card: Id,
+        prompt: impl Into<String>,
+        image: impl Into<String>,
+        caption: Option<String>,
+        masks: Vec<MaskRect>,
+        overdue: i64,
+    ) -> Entry {
+        Entry {
+            card,
+            prompt: prompt.into(),
+            faces: vec![Face::group(image, caption, masks)],
+            overdue,
+        }
+    }
+
     /// A hidden-text group: one face, masked until it is unmasked.
     pub fn masked<H, S>(
         card: Id,
@@ -91,10 +156,7 @@ impl Entry {
         Entry {
             card,
             prompt: prompt.into(),
-            faces: vec![Face {
-                hidden: hidden.into(),
-                shown: shown.into(),
-            }],
+            faces: vec![Face::masked(hidden, shown)],
             overdue,
         }
     }
@@ -189,13 +251,20 @@ impl Session {
             .map_or(0, |entry| entry.faces.len().saturating_sub(self.revealed))
     }
 
-    /// The next face, which revealing would show.
+    /// The next text face, which revealing would show. A picture face has no text to hand back, so
+    /// this answers `None` for one; ask [`Session::asking`] for the face itself.
     pub fn next_side(&self) -> Option<&str> {
         let entry = self.current()?;
         entry
             .faces
             .get(self.revealed)
-            .map(|face| face.shown.as_str())
+            .and_then(Face::text)
+            .map(|(_, shown)| shown)
+    }
+
+    /// The face being asked right now, whether it is made of text or of a picture.
+    pub fn asking(&self) -> Option<&Face> {
+        self.current()?.faces.get(self.revealed)
     }
 
     /// The faces to draw, in order, with whether each is the unmasked answer.
@@ -209,10 +278,15 @@ impl Session {
         };
         let mut lines = Vec::new();
         for (index, face) in entry.faces.iter().enumerate() {
+            // A picture face is drawn by the review screen, which needs the rectangles; only text
+            // becomes a line here.
+            let Some((hidden, shown)) = face.text() else {
+                continue;
+            };
             if index < self.revealed {
-                lines.push((face.shown.as_str(), true));
+                lines.push((shown, true));
             } else if index == self.revealed && face.unmasks() {
-                lines.push((face.hidden.as_str(), false));
+                lines.push((hidden, false));
             }
         }
         lines

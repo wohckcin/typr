@@ -9,6 +9,10 @@ fn card(sides: u32, markdown: &str) -> CardSummary {
     CardSummary {
         id: 1,
         deck: 1,
+        kind: typr_core::store::CardKind::Text,
+        image: None,
+        caption: None,
+        masks: Vec::new(),
         sides,
         tags: Vec::new(),
         archived: false,

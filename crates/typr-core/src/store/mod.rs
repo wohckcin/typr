@@ -84,11 +84,42 @@ pub struct Deck {
     pub reverse: Option<bool>,
 }
 
+/// Which of the two things a card asks: text, or a picture with rectangles on it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CardKind {
+    Text,
+    Diagram,
+}
+
+impl CardKind {
+    pub fn parse(value: &str) -> CardKind {
+        match value {
+            "diagram" => CardKind::Diagram,
+            _ => CardKind::Text,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CardKind::Text => "text",
+            CardKind::Diagram => "diagram",
+        }
+    }
+}
+
 /// A card as the library lists it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CardSummary {
     pub id: Id,
     pub deck: Id,
+    /// Whether the card asks in text or in a picture.
+    pub kind: CardKind,
+    /// The picture a diagram card asks about, as a name under the attachments folder.
+    pub image: Option<String>,
+    /// What the picture shows; a diagram card may explain itself.
+    pub caption: Option<String>,
+    /// Every rectangle the card holds, one row each, ordered by group then top-left first.
+    pub masks: Vec<MaskRow>,
     /// How many sides the text splits into; one side is a note and never queues.
     pub sides: u32,
     /// The card's tags, in the casing each was first written across the whole library.
@@ -135,7 +166,7 @@ impl Default for Settings {
 }
 
 /// Everything a view may read without a round trip.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Snapshot {
     pub decks: Vec<Deck>,
     pub cards: Vec<CardSummary>,

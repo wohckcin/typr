@@ -331,6 +331,10 @@ impl Library {
             .map(|id| CardSummary {
                 id,
                 deck: 1,
+                kind: typr_core::store::CardKind::Text,
+                image: None,
+                caption: None,
+                masks: Vec::new(),
                 sides: 2,
                 tags: Vec::new(),
                 archived: false,

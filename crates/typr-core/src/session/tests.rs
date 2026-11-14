@@ -1,7 +1,7 @@
 use super::{Entry, Session};
 use crate::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
-use crate::store::Grade;
+use crate::store::{Grade, MaskRect};
 
 const NOON: i64 = 1_760_000_000_000;
 
@@ -473,5 +473,48 @@ fn a_forward_entry_says_which_way_it_is_asked() {
         Session::empty().direction(),
         "",
         "nothing on screen says nothing"
+    );
+}
+
+#[test]
+fn a_mask_group_is_one_face() {
+    let masks = vec![
+        MaskRect::new(0.1, 0.1, 0.2, 0.2),
+        MaskRect::new(0.6, 0.1, 0.2, 0.2),
+    ];
+    let mut session = Session::new(
+        Queue::Due,
+        vec![Entry::mask_group(
+            4,
+            "mask:2",
+            "plate.png",
+            Some("The heart".to_string()),
+            masks.clone(),
+            0,
+        )],
+    );
+
+    assert_eq!(
+        session.hidden(),
+        1,
+        "two rectangles of one group are one answer, so one face is hidden"
+    );
+    assert_eq!(session.lines(), Vec::new(), "a picture has no text lines");
+    let face = session.asking().expect("the face being asked");
+    let (image, caption, covered) = face.picture().expect("a picture face");
+    assert_eq!(image, "plate.png");
+    assert_eq!(caption, Some("The heart"));
+    assert_eq!(covered, masks.as_slice());
+    assert!(!session.gradeable(), "the answer is covered");
+
+    assert!(session.reveal());
+    assert_eq!(session.hidden(), 0);
+    assert!(
+        session.gradeable(),
+        "one reveal uncovers the whole group, so the card is gradeable"
+    );
+    assert_eq!(
+        session.grade(Grade::Remembered),
+        Some((4, Grade::Remembered))
     );
 }

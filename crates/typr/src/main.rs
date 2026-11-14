@@ -687,6 +687,32 @@ impl State {
             .filter_map(|(id, key, due_at)| {
                 let card = snapshot.cards.iter().find(|card| card.id == id)?;
                 let overdue = due_at.map_or(0, |due_at| overdue_days(now, due_at, offset));
+
+                // A diagram card is asked one group at a time: the key names the group, and the face
+                // carries only that group's rectangles, so the covers cannot spill onto an answer
+                // the next prompt will ask about.
+                if let Some(group) = key.strip_prefix("mask:") {
+                    let group: u32 = group.parse().ok()?;
+                    let masks: Vec<_> = card
+                        .masks
+                        .iter()
+                        .filter(|mask| mask.group == group)
+                        .map(|mask| mask.rect)
+                        .collect();
+                    if masks.is_empty() {
+                        return None;
+                    }
+                    let image = card.image.clone()?;
+                    return Some(Entry::mask_group(
+                        card.id,
+                        key.as_str(),
+                        image,
+                        card.caption.clone(),
+                        masks,
+                        overdue,
+                    ));
+                }
+
                 let shape = hidden::shape(&card.markdown);
                 // A prompt the card's shape does not claim cannot be asked: masking it would hide
                 // nothing, so the question would show the answer. A one-sided card is a note, which
