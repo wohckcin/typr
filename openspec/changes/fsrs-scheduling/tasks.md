@@ -4,7 +4,7 @@
 
 - [x] 1.1 New `crates/typr-core/src/fsrs.rs`: `pub struct Memory { stability: f64, difficulty: f64 }`, `pub const DEFAULT_WEIGHTS: [f64; 19]`, `pub fn initial(grade: Grade, weights: &[f64]) -> Memory`, `pub fn update(memory: Memory, grade: Grade, elapsed_days: f64, weights: &[f64]) -> Memory`, `pub fn interval_days(stability: f64, retention: f64) -> f64`.
   - **Verification**: `cargo test -p typr-core --lib fsrs` runs a golden table of published reference values for both grades at several elapsed times, plus a stability monotonicity test and a retention test (95% yields a shorter interval than 70%).
-- [ ] 1.2 Parsing and validation: `pub fn weights(text: &str) -> Result<Vec<f64>, StoreError>` refusing a count other than nineteen, a non-number and a non-positive value.
+- [x] 1.2 Parsing and validation: `pub fn weights(text: &str) -> Result<Vec<f64>, StoreError>` refusing a count other than nineteen, a non-number and a non-positive value.
   - **Verification**: `a_malformed_weight_list_is_refused_without_replacing_the_old_one`.
 
 ## 2. Wiring

@@ -403,6 +403,9 @@ impl Db {
                     // The two levels that override it are columns, not settings; this one is the
                     // value every card without an override inherits.
                     "reverse_default" => matches!(value.as_str(), "0" | "1"),
+                    // An optimiser's output is accepted whole or refused whole: a half-parsed list
+                    // would leave a schedule nobody can explain.
+                    "fsrs_weights" => crate::fsrs::weights(value).is_ok(),
                     _ => true,
                 };
                 if !known {

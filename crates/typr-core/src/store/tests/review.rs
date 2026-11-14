@@ -1113,3 +1113,49 @@ fn a_card_counts_once_against_the_cap_however_many_directions_it_holds() {
         "two directions of one card are one card learned"
     );
 }
+
+#[test]
+fn a_malformed_weight_list_is_refused_without_replacing_the_old_one() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    let good = crate::fsrs::weight_text(&crate::fsrs::DEFAULT_WEIGHTS);
+    db.apply(
+        &Command::SetSetting {
+            key: "fsrs_weights".to_string(),
+            value: good.clone(),
+        },
+        NOON,
+    )
+    .expect("a list an optimiser could have produced");
+
+    let refused = db.apply(
+        &Command::SetSetting {
+            key: "fsrs_weights".to_string(),
+            value: "0.40255,one,3.173".to_string(),
+        },
+        NOON,
+    );
+    match refused {
+        Err(StoreError::Setting { key, value }) => {
+            assert_eq!(key, "fsrs_weights");
+            assert_eq!(value, "0.40255,one,3.173");
+        }
+        other => panic!("a malformed list should be refused, got {other:?}"),
+    }
+
+    let kept: String = db
+        .connection_for_test()
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'fsrs_weights'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the stored list");
+    assert_eq!(kept, good, "the old list is still what the library holds");
+    assert_eq!(
+        crate::fsrs::weights(&kept)
+            .expect("and it still parses")
+            .len(),
+        crate::fsrs::WEIGHT_COUNT
+    );
+}
