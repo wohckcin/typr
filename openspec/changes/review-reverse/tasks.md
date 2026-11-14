@@ -22,9 +22,9 @@
 
 ## 2. Scheduling independence
 
-- [ ] 2.1 Nothing in `grade`, `reset_history`, `advance_clock` or the due ordering keys on anything but `(card, key)`, so independence is inherited; pin it with tests rather than new code.
+- [x] 2.1 Nothing in `grade`, `reset_history`, `advance_clock` or the due ordering keys on anything but `(card, key)`, so independence is inherited; pin it with tests rather than new code.
   - **Verification**: `the_two_directions_keep_separate_schedules` grades `fwd` remembered and `rev` forgot in one library and asserts each prompt's own phase, interval and due day.
-- [ ] 2.2 `Db::review_count` keeps counting non-learn records for the card across both prompts, and `History` lists which direction each record belongs to.
+- [x] 2.2 `Db::review_count` keeps counting non-learn records for the card across both prompts, and `History` lists which direction each record belongs to.
   - **Verification**: `history_names_the_direction_of_each_record` reads two records for one card and finds their keys in the rows.
 
 ## 3. Reviewing the reverse direction

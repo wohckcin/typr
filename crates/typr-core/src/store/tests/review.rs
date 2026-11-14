@@ -951,3 +951,78 @@ fn reverse_queue(db: &Db) -> Vec<Id> {
     cards.sort_unstable();
     cards
 }
+
+#[test]
+fn the_two_directions_keep_separate_schedules() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Directions");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    grade(&mut db, card, "fwd", Grade::Remembered, NOON);
+    grade(&mut db, card, "fwd", Grade::Remembered, NOON + TEN_MINUTES);
+    grade(&mut db, card, "rev", Grade::Remembered, NOON);
+    grade(&mut db, card, "rev", Grade::Forgot, NOON + TEN_MINUTES);
+
+    let forward = db
+        .prompt(card, "fwd")
+        .expect("fwd prompt")
+        .expect("fwd row");
+    let reverse = db
+        .prompt(card, "rev")
+        .expect("rev prompt")
+        .expect("rev row");
+    assert_eq!(forward.phase, Phase::Review);
+    assert_eq!(forward.interval_ms, DAY, "the forward direction graduated");
+    assert_eq!(reverse.phase, Phase::Relearn);
+    assert_eq!(
+        reverse.interval_ms, 0,
+        "and the reverse one did not inherit that interval"
+    );
+    assert_eq!(
+        forward.due_at,
+        Some(NOON + TEN_MINUTES + DAY),
+        "each direction keeps its own due date"
+    );
+    assert_eq!(reverse.due_at, Some(NOON + 2 * TEN_MINUTES));
+}
+
+#[test]
+fn history_names_the_direction_of_each_record() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Directions");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    grade(&mut db, card, "fwd", Grade::Remembered, NOON);
+    grade(&mut db, card, "rev", Grade::Remembered, NOON + HOUR);
+
+    let history = db.history(card).expect("history");
+    assert_eq!(history.len(), 2, "one record per direction");
+    assert_eq!(history[0].key, "fwd");
+    assert_eq!(history[1].key, "rev");
+    assert_eq!(
+        db.review_count(card).expect("count"),
+        2,
+        "the card's count covers both directions"
+    );
+}
+
+/// Grade one prompt, asserting the store accepted it.
+fn grade(db: &mut Db, card: Id, key: &str, grade: Grade, at: i64) {
+    match db.apply(
+        &Command::Grade {
+            card,
+            key: key.to_string(),
+            grade,
+            duration_ms: None,
+        },
+        at,
+    ) {
+        Ok(Outcome::Graded { .. }) => {}
+        other => panic!("grading {key}: {other:?}"),
+    }
+}
+
+const TEN_MINUTES: i64 = 10 * 60 * 1000;
+const DAY: i64 = 24 * HOUR;
