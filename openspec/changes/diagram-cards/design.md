@@ -29,6 +29,8 @@ place out-of-flow children, which is how a covering panel sits over part of an i
 - Occlusion-style cards where the answer is another image.
 - Importing Mochi's diagram cards, which waits for `mochi-import-export`.
 
+**Migration V6 copies the view V5 leaves and widens one predicate.** It keeps `c.has_cloze` from V4 and the `p.key <> 'rev'` filter from V5 and adds only the mask clause; restating the view from the V3 baseline would quietly drop both. This change is also what makes a one-sided card studyable, which is why `cloze-deletions` scopes its "single-sided card has no prompt" rule to text cards: a text note still never queues, a diagram card with one face does.
+
 ## Decisions
 
 **A mask group is a prompt, a mask is a row.** `mask(card_id, group_no, x, y, w, h)` with fractions in
