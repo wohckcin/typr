@@ -37,14 +37,28 @@ fn slow_record(name: &str, elapsed: Duration) -> Option<String> {
 /// Runs in `main` after the run loop, never from `Drop`: the handle is dropped during teardown
 /// inside `rune::run`, and a flush there would come before its own record.
 fn finish(status: Option<&WorkerStatus>) {
-    if let Some(error) = status.and_then(WorkerStatus::ended) {
-        log::error!(
-            target: "typr",
-            "the library worker ended badly: {}",
-            logging::describe(&*error)
-        );
+    for (level, message) in quit_records(status) {
+        log::log!(target: "typr", level, "{message}");
     }
     logging::shutdown();
+}
+
+/// What a quit leaves in the log. A worker that ended badly says so; a quiet end is written down
+/// too, because otherwise a clean quit and a killed process look the same afterwards.
+fn quit_records(status: Option<&WorkerStatus>) -> Vec<(log::Level, String)> {
+    match status.and_then(WorkerStatus::ended) {
+        Some(error) => vec![(
+            log::Level::Error,
+            format!(
+                "the library worker ended badly: {}",
+                logging::describe(&*error)
+            ),
+        )],
+        None => vec![(
+            log::Level::Debug,
+            "the window closed and the worker ended quietly".to_string(),
+        )],
+    }
 }
 
 /// The worker's end, kept where it outlives the state that owns the handle.
@@ -850,6 +864,10 @@ fn main() {
             state.editor.request_leave();
         }),
     ];
+    // Without this Rune ends a window close with `_exit`, so both the worker's flush and the quit
+    // record below would be skipped: data would survive only because each command commits as it is
+    // answered, and nothing would ever write down how a run ended.
+    rune::orderly_exit();
     rune::run(AppSpec {
         scenes,
         setup: Some(|state: &mut State, waker: Waker| state.setup(waker)),

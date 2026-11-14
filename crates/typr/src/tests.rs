@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::time::Duration;
 
 use crate::*;
-use log::LevelFilter;
 use rune::{Key, KeyEvent, Mods};
 use typr_core::clock::{Clock, LEARNING_STEP_MS};
 use typr_core::store::Db;
@@ -31,9 +30,7 @@ fn a_slow_answer_is_recorded_and_a_quick_one_is_not() {
 }
 
 #[test]
-fn a_panicked_worker_is_written_down_at_quit() {
-    let logs = tempfile::tempdir().expect("temp dir");
-    let path = logging::install(logs.path(), LevelFilter::Warn).expect("installed");
+fn a_panicked_worker_is_named_in_the_quit_record() {
     let library = tempfile::tempdir().expect("temp dir");
     let db = Db::open(&library.path().join("typr.sqlite3")).expect("open");
     let waker: Waker = Arc::new(|| {});
@@ -48,14 +45,15 @@ fn a_panicked_worker_is_written_down_at_quit() {
     }
     drop(handle);
 
-    finish(Some(&status));
+    let records = quit_records(Some(&status));
 
-    let written = std::fs::read_to_string(&path).expect("read the log");
+    assert_eq!(records.len(), 1, "one line for a worker that ended");
+    assert_eq!(records[0].0, log::Level::Error);
     assert!(
-        written.contains("the library worker ended badly"),
-        "the end reached the log: {written}"
+        records[0].1.contains("the library worker ended badly"),
+        "{records:?}"
     );
-    assert!(written.contains("the clock fell over"), "{written}");
+    assert!(records[0].1.contains("the clock fell over"), "{records:?}");
 }
 
 /// One due card, revealed to its last side, forgotten, and acknowledged.
@@ -1328,4 +1326,16 @@ fn escaping_the_editor_returns_to_the_library_and_asks_first_when_dirty() {
         .expect("discard");
     state.screen = Screen::Library;
     assert!(!state.editor.asking, "the question is gone");
+}
+
+#[test]
+fn a_quiet_quit_says_so() {
+    let records = quit_records(None);
+
+    assert_eq!(records.len(), 1, "one line for a quiet quit");
+    assert_eq!(records[0].0, log::Level::Debug);
+    assert!(
+        records[0].1.contains("the worker ended quietly"),
+        "{records:?}"
+    );
 }
