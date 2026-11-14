@@ -34,6 +34,20 @@ A request the application accepted SHALL receive exactly one answer, whether it 
 - **WHEN** three commands have been accepted and the second one is being applied when the background library work fails
 - **THEN** the first had its answer, and the second and third each receive a failure answer
 
+### Requirement: The backend reports failures without logging
+
+The backend SHALL report a stoppage only through the answers and events it already returns, and SHALL NOT write log records, open log files or format timestamps itself, so it keeps the dependency set `project-structure` requires.
+
+#### Scenario: A stoppage reaches the screen through an event
+
+- **WHEN** the background library work panics
+- **THEN** the backend returns one event carrying the panic message as a typed error, and writes nothing to disk itself
+
+#### Scenario: The backend gains no logging crate
+
+- **WHEN** the backend's normal dependency graph is listed
+- **THEN** it names no logging crate, and no file or directory helper from the desktop toolkit
+
 ### Requirement: Failures are recorded in one log file
 
 The application SHALL append failure records to a log file inside the application's logs folder. The file SHALL be bounded: when it exceeds a fixed size, the application SHALL keep the previous file as one rotated copy and start a new one, so at most two files exist. The log path SHALL follow the same root the rest of the application's data uses.
@@ -73,7 +87,7 @@ The application SHALL filter what it logs by a level taken from the `TYPR_LOG` e
 
 ### Requirement: Startup records the facts a report needs
 
-At information level the application SHALL record the database path, the stored schema version read before migration and the one written after it, and the number of migrations applied, so a report can distinguish a migrated library from a refused or unopened one.
+At information level the application SHALL record the database path, the stored schema version read before migration and the one written after it, and the number of migrations applied, so a report can distinguish a migrated library from a refused or unopened one. The backend SHALL supply those numbers as data rather than as log records.
 
 #### Scenario: A migrated library is identifiable
 
@@ -87,7 +101,7 @@ At information level the application SHALL record the database path, the stored 
 
 ### Requirement: A slow command is recorded with its cost
 
-A command whose execution takes longer than a fixed threshold SHALL be logged with the time it took and which command it was, so a slow interface can be traced to a command rather than guessed at. Commands below the threshold SHALL NOT be logged.
+A command whose answer takes longer than a fixed threshold SHALL be logged with the time it took and which command it was, so a slow interface can be traced to a command rather than guessed at. The measurement SHALL be taken where the application waits for the answer, not inside the backend. Commands below the threshold SHALL NOT be logged.
 
 #### Scenario: A slow write is recorded
 
@@ -96,7 +110,7 @@ A command whose execution takes longer than a fixed threshold SHALL be logged wi
 
 ### Requirement: A worker that ended abnormally is recorded when the application quits
 
-When the application quits, a background library worker that ended by failing SHALL be recorded in the log, so the record survives even when the screen that would have shown it is already gone.
+When the application quits, a background library worker that ended by failing SHALL be recorded in the log, so the record survives even when the screen that would have shown it is already gone. The record SHALL be written after the worker's end is known and before the log is flushed.
 
 #### Scenario: Quitting after a failure leaves a record
 

@@ -6,11 +6,12 @@ A failure in typr currently leaves no durable trace. The worst case is silent: i
 
 ## What Changes
 
-- Add a panic boundary around the store task: a panic answers the ids in flight with `StoreError::Closed`, publishes one unprompted error event so the failure line explains the stoppage, and lets the session clear its pending grade.
-- Record the store task's exit instead of discarding it: `Handle::close` keeps the `JoinHandle` result, so a panicked worker is reported rather than swallowed.
-- Add a log file at `<AppDirs::logs()>/typr.log`, capped and rotated to `typr.log.1`, written through the `log` facade with the level taken from `TYPR_LOG` (default `warn`), so a bug report has something to attach.
+- Add a panic boundary around the store task in `typr-core`: a panic answers the ids in flight and everything still queued with `StoreError::Closed`, publishes one unprompted event carrying a new `StoreError::WorkerPanicked`, and lets the session clear its pending grade. The backend reports; it does not log.
+- Make the worker's end observable after the handle is gone: `Handle` exposes a `WorkerStatus` the application keeps, so a panicked worker can be recorded at quit instead of being swallowed by `let _ = worker.join()`.
+- Expose what a report needs as data, not as log lines: `Db::schema_facts()` answers the version found, the version written and how many migrations ran.
+- Add a log file at `<AppDirs::logs()>/typr.log` in the desktop crate, capped and rotated to `typr.log.1`, written through the `log` facade with the level taken from `TYPR_LOG` (default `warn`), so a bug report has something to attach.
 - Log the cause chain rather than the top message: a failure records every `source()` link, while the status bar keeps its single line and the typed error.
-- Record the facts a support question always asks for: database path, schema version before and after migration, and any command that took longer than a threshold.
+- Record the facts a support question always asks for: database path, schema version before and after migration, and any command whose answer took longer than a threshold, measured where the application waits for it.
 - Out of scope: span-level timing (`tracing`), crash reporting services, log upload, structured JSON sinks, and logging inside Rune.
 
 ## Capabilities
@@ -21,13 +22,14 @@ A failure in typr currently leaves no durable trace. The worst case is silent: i
 
 ### Modified Capabilities
 
-None. `openspec/specs/` is still empty; the four typr-v1 capabilities live inside their change until it is archived.
+None. `project-structure` requires the backend to hold exactly three normal dependencies and to know nothing of `AppDirs` or `time`, and this change keeps that: the log sink, the rotation, the level and the timestamps all live in `crates/typr`, and `typr-core` gains no logging crate.
 
 ## Impact
 
-- `src/store/task.rs`: the worker loop gains a panic boundary and an answer for the orphaned ids; `close` stops discarding the join result.
-- `src/main.rs`: initialises the logger after `AppDirs` resolves, and reports a failure through the same chain-aware helper the log uses.
-- New module: `logging` (sink, rotation, level, chain walker).
-- `Cargo.toml`: adds `log = "0.4"` as a direct dependency. It is already in the lock through Rune, so the build gains no new crates.
+- `crates/typr-core/src/store/task.rs`: the worker loop gains a panic boundary, an answer for the orphaned ids, and a `WorkerStatus` it publishes when the thread ends.
+- `crates/typr-core/src/store/mod.rs`: `StoreError::WorkerPanicked { message }`; `Db::schema_facts()` and the `SchemaFacts` it returns, captured during migration.
+- `crates/typr/src/logging.rs` (new): sink, rotation, level, chain walker.
+- `crates/typr/src/main.rs`: installs the logger once `paths` resolves, records the worker's end and flushes after `rune::run` returns, and logs each failure it already draws.
+- `crates/typr/Cargo.toml`: adds `log = "0.4"`. It is already in the lock through Rune, so the build gains no new crates. `crates/typr-core/Cargo.toml` is unchanged.
 - Tests: a panicking store task reports instead of hanging, the log file holds the cause chain, the level filter is honoured, and a rotated file keeps the previous run.
 - Nothing in the review loop changes: grades, schedules and stored data are untouched.
