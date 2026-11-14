@@ -6,6 +6,7 @@
 
 mod db;
 mod schema;
+mod settings;
 mod task;
 mod view;
 
@@ -16,6 +17,7 @@ use crate::hidden;
 
 pub use db::{Db, Folded, folded};
 pub use schema::{CURRENT_VERSION, SchemaFacts};
+pub use settings::{Group, SettingKey, SettingValue, Theme};
 pub use task::{Handle, Waker, WorkerStatus};
 pub use view::{SavedView, Sort, SortDir, ViewSpec, shuffled};
 
@@ -229,6 +231,10 @@ impl CardSummary {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     pub new_per_day: u32,
+    /// How long a learning or relearning step waits, in minutes.
+    pub learning_step_minutes: u32,
+    /// The furthest ahead a remembered card can be scheduled, in days.
+    pub max_interval_days: u32,
     /// Whether a card is reviewed from its last side unless a deck or the card says otherwise.
     pub reverse_default: bool,
     /// Which scheduler answers a grade.
@@ -237,6 +243,12 @@ pub struct Settings {
     pub retention: u32,
     /// FSRS's weights, already checked to be the nineteen numbers it expects.
     pub weights: Vec<f64>,
+    /// Whether the app draws its dark or its light palette.
+    pub theme: Theme,
+    /// How much the whole interface is scaled.
+    pub scale: f32,
+    /// The body text size in the editor and the review, in points.
+    pub preview_font_size: u32,
 }
 
 /// The two schedulers a library can choose between.
@@ -275,18 +287,31 @@ pub const MAX_RETENTION: u32 = 97;
 
 impl Settings {
     pub const DEFAULT_NEW_PER_DAY: u32 = 20;
+    /// The learning step before anyone sets one, in minutes.
+    pub const DEFAULT_LEARNING_STEP_MINUTES: u32 = 10;
+    /// The furthest a card is scheduled before anyone sets a cap, in days.
+    pub const DEFAULT_MAX_INTERVAL_DAYS: u32 = 365;
     /// The retention FSRS aims at before anyone sets one, as a percentage.
     pub const DEFAULT_RETENTION: u32 = 90;
+    /// The interface scale before anyone sets one.
+    pub const DEFAULT_SCALE: f32 = 1.0;
+    /// The body text size before anyone sets one, in points.
+    pub const DEFAULT_PREVIEW_FONT_SIZE: u32 = 14;
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             new_per_day: Self::DEFAULT_NEW_PER_DAY,
+            learning_step_minutes: Self::DEFAULT_LEARNING_STEP_MINUTES,
+            max_interval_days: Self::DEFAULT_MAX_INTERVAL_DAYS,
             reverse_default: false,
             scheduler: SchedulerKind::default(),
             retention: Self::DEFAULT_RETENTION,
             weights: crate::fsrs::DEFAULT_WEIGHTS.to_vec(),
+            theme: Theme::default(),
+            scale: Self::DEFAULT_SCALE,
+            preview_font_size: Self::DEFAULT_PREVIEW_FONT_SIZE,
         }
     }
 }
@@ -656,12 +681,14 @@ pub enum Command {
         seed: u64,
         deck: Option<Id>,
     },
+    /// Change one setting. The key and the value are typed, so a misspelt key or a value of the
+    /// wrong shape is a compile error rather than a row nothing reads.
     SetSetting {
-        key: String,
-        value: String,
+        key: SettingKey,
+        value: SettingValue,
     },
-    /// Which scheduler answers a grade. The string form of the setting exists too, because a
-    /// library file can arrive with any text in it; this is what the UI calls.
+    /// Which scheduler answers a grade. The stored form is text, because a library file can
+    /// arrive with any text in it; this variant keeps the UI from spelling that text.
     SetScheduler {
         kind: SchedulerKind,
     },
@@ -986,7 +1013,7 @@ pub trait Store: Send + Sync {
     /// The cards the filter `spec` selects, for a cram run: the snapshot's own filter, studyable
     /// cards only, and neither a due date nor the new-card allowance in the way.
     fn cards_for_view(&self, spec: &ViewSpec) -> Result<u64, StoreError>;
-    fn set_setting(&self, key: &str, value: &str) -> Result<u64, StoreError>;
+    fn set_setting(&self, key: SettingKey, value: SettingValue) -> Result<u64, StoreError>;
     fn set_scheduler(&self, kind: SchedulerKind) -> Result<u64, StoreError>;
     fn set_retention(&self, percent: u32) -> Result<u64, StoreError>;
     fn set_weights(&self, weights: &[f64]) -> Result<u64, StoreError>;

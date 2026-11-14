@@ -10,14 +10,14 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::fsrs::Memory;
 use crate::hidden::{self, Shape};
-use crate::schedule::{FixedMultiplier, Fsrs, PromptState, Scheduler};
+use crate::schedule::{FixedMultiplier, Fsrs, Policy, PromptState, Scheduler};
 use crate::template;
 use crate::transfer::{self, mochi};
 
 use super::{
-    CardKind, CardMode, CardRef, CardSummary, Command, Deck, DuePrompt, Grade, Id, MAX_RETENTION,
-    MIN_RETENTION, MaskRect, MaskRow, NewPrompt, Outcome, Phase, ReviewRow, SavedView,
-    SchedulerKind, Settings, Snapshot, Sort, SortDir, Stats, StoreError, ViewSpec,
+    CardKind, CardMode, CardRef, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect,
+    MaskRow, NewPrompt, Outcome, Phase, ReviewRow, SavedView, SchedulerKind, SettingKey,
+    SettingValue, Settings, Snapshot, Sort, SortDir, Stats, StoreError, ViewSpec,
     schema::{self, SchemaFacts},
 };
 use unicode_normalization::UnicodeNormalization;
@@ -398,13 +398,15 @@ impl Db {
                 }
             },
             Command::Draft { card } => Ok(Outcome::Draft(self.draft(*card)?)),
-            Command::SetSetting { key, value } => self.write_setting(key, value),
-            Command::SetScheduler { kind } => self.write_setting("scheduler", kind.as_str()),
+            Command::SetSetting { key, value } => self.write_setting(*key, value),
+            Command::SetScheduler { kind } => {
+                self.write_setting(SettingKey::Scheduler, &SettingValue::Scheduler(*kind))
+            }
             Command::SetRetention { percent } => {
-                self.write_setting("retention", &percent.to_string())
+                self.write_setting(SettingKey::Retention, &SettingValue::Number(*percent))
             }
             Command::SetWeights { weights } => {
-                self.write_setting("fsrs_weights", &crate::fsrs::weight_text(weights))
+                self.write_setting(SettingKey::Weights, &SettingValue::Weights(weights.clone()))
             }
             Command::SetCardReverse { card, reverse } => {
                 // NULL is "inherit", so the nearest deck's value applies again.
@@ -778,89 +780,21 @@ impl Db {
     }
 
     pub fn settings(&self) -> Result<Settings, StoreError> {
-        let limit: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value FROM settings WHERE key = 'new_per_day'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let new_per_day = match limit {
-            None => Settings::DEFAULT_NEW_PER_DAY,
-            Some(value) => value.parse().map_err(|_| StoreError::Setting {
-                key: "new_per_day".to_string(),
-                value,
-            })?,
-        };
-        let default: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value FROM settings WHERE key = 'reverse_default'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let reverse_default = match default.as_deref() {
-            None | Some("0") => false,
-            Some("1") => true,
-            Some(value) => {
-                return Err(StoreError::Setting {
-                    key: "reverse_default".to_string(),
-                    value: value.to_string(),
-                });
+        let mut settings = Settings::default();
+        let mut stmt = self.conn.prepare("SELECT key, value FROM settings")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (key, text) = row?;
+            // A key this build does not know is a setting a later build wrote; leaving it in
+            // place is what lets a library move between builds without losing it.
+            if let Some(key) = SettingKey::parse(&key) {
+                let value = key.parse_value(&text)?;
+                key.assign(&mut settings, value);
             }
-        };
-        let kind: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value FROM settings WHERE key = 'scheduler'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let scheduler = match kind {
-            None => SchedulerKind::default(),
-            Some(value) => SchedulerKind::parse(&value).ok_or(StoreError::Setting {
-                key: "scheduler".to_string(),
-                value,
-            })?,
-        };
-        let retention = match self.setting_text("retention")? {
-            None => Settings::DEFAULT_RETENTION,
-            Some(value) => match value.parse::<u32>() {
-                Ok(percent) if (MIN_RETENTION..=MAX_RETENTION).contains(&percent) => percent,
-                _ => {
-                    return Err(StoreError::Setting {
-                        key: "retention".to_string(),
-                        value,
-                    });
-                }
-            },
-        };
-        let weights = match self.setting_text("fsrs_weights")? {
-            None => crate::fsrs::DEFAULT_WEIGHTS.to_vec(),
-            Some(value) => crate::fsrs::weights(&value)?,
-        };
-        Ok(Settings {
-            new_per_day,
-            reverse_default,
-            scheduler,
-            retention,
-            weights,
-        })
-    }
-
-    /// One settings row as text, or `None` when nothing has written it.
-    fn setting_text(&self, key: &str) -> Result<Option<String>, StoreError> {
-        Ok(self
-            .conn
-            .query_row(
-                "SELECT value FROM settings WHERE key = ?1",
-                params![key],
-                |row| row.get(0),
-            )
-            .optional()?)
+        }
+        Ok(settings)
     }
 
     /// The text as it was left, if it was left unsaved.
@@ -1495,7 +1429,8 @@ impl Db {
         at: i64,
     ) -> Result<Outcome, StoreError> {
         let state = self.prompt_state(card, key)?;
-        let outcome = self.scheduler()?.grade(&state, grade, at);
+        let (scheduler, policy) = self.scheduler()?;
+        let outcome = scheduler.grade(&state, grade, at, policy);
         self.conn.execute(
             "INSERT INTO review_log (card_id, key, phase, at, grade, interval_ms, due_at, duration_ms)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -1577,45 +1512,31 @@ impl Db {
     /// Write one setting, refusing a value the reader would later refuse.
     ///
     /// The refusal happens before the write, so a library never holds a value that would make the
-    /// next snapshot fail: both the typed commands and the string form come through here.
-    fn write_setting(&self, key: &str, value: &str) -> Result<Outcome, StoreError> {
-        let known = match key {
-            "new_per_day" => value.parse::<u32>().is_ok(),
-            // The two levels that override it are columns, not settings; this one is the value
-            // every card without an override inherits.
-            "reverse_default" => matches!(value, "0" | "1"),
-            "scheduler" => SchedulerKind::parse(value).is_some(),
-            "retention" => matches!(value.parse::<u32>(), Ok(MIN_RETENTION..=MAX_RETENTION)),
-            // An optimiser's output is accepted whole or refused whole: a half-parsed list would
-            // leave a schedule nobody can explain.
-            "fsrs_weights" => crate::fsrs::weights(value).is_ok(),
-            _ => true,
-        };
-        if !known {
-            return Err(StoreError::Setting {
-                key: key.to_string(),
-                value: value.to_string(),
-            });
-        }
+    /// next snapshot fail. Every command that changes a setting comes through here, and the key
+    /// and value it accepts are the same pair [`SettingKey::parse_value`] reads back.
+    fn write_setting(&self, key: SettingKey, value: &SettingValue) -> Result<Outcome, StoreError> {
+        key.validate(value)?;
         self.conn.execute(
             "INSERT INTO settings (key, value) VALUES (?1, ?2)
              ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-            params![key, value],
+            params![key.as_str(), value.text()],
         )?;
         Ok(Outcome::Ok)
     }
 
     /// The scheduler the library asked for, rebuilt from its settings on every grade so a settings
     /// change needs no restart.
-    fn scheduler(&self) -> Result<Box<dyn Scheduler>, StoreError> {
+    fn scheduler(&self) -> Result<(Box<dyn Scheduler>, Policy), StoreError> {
         let settings = self.settings()?;
-        Ok(match settings.scheduler {
+        let policy = Policy::from_settings(&settings);
+        let scheduler: Box<dyn Scheduler> = match settings.scheduler {
             SchedulerKind::Fixed => Box::new(FixedMultiplier),
             SchedulerKind::Fsrs => Box::new(Fsrs {
-                weights: settings.weights,
+                weights: settings.weights.clone(),
                 retention: f64::from(settings.retention) / 100.0,
             }),
-        })
+        };
+        Ok((scheduler, policy))
     }
 
     fn prompt_state(&self, card: Id, key: &str) -> Result<PromptState, StoreError> {

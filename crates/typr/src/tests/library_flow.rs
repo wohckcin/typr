@@ -1629,8 +1629,8 @@ fn cramming_a_tag_with_nothing_due_visits_exactly_its_cards() {
     let db = typr_core::store::Db::open(&path).expect("open");
     db.apply(
         &typr_core::store::Command::SetSetting {
-            key: "new_per_day".to_string(),
-            value: "0".to_string(),
+            key: typr_core::store::SettingKey::NewPerDay,
+            value: typr_core::store::SettingValue::Number(0),
         },
         0,
     )

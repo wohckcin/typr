@@ -620,14 +620,14 @@ fn the_view_and_the_snapshot_agree_on_what_is_studyable() {
 }
 
 #[test]
-fn a_new_card_cap_that_is_not_a_number_is_refused() {
+fn a_new_card_cap_above_the_range_is_refused() {
     let dir = TempDir::new().expect("temp dir");
     let db = open_temp(&dir);
     let error = db
         .apply(
             &Command::SetSetting {
-                key: "new_per_day".to_string(),
-                value: "plenty".to_string(),
+                key: SettingKey::NewPerDay,
+                value: SettingValue::Number(crate::store::settings::MAX_NEW_PER_DAY + 1),
             },
             0,
         )

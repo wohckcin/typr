@@ -188,10 +188,16 @@ pub fn weights(text: &str) -> Result<Vec<f64>, StoreError> {
         .map(|part| part.trim().parse::<f64>())
         .collect::<Result<Vec<f64>, _>>()
         .map_err(|_| refused())?;
-    if parsed.len() != WEIGHT_COUNT || parsed.iter().any(|w| !w.is_finite() || *w <= 0.0) {
+    if !are_weights(&parsed) {
         return Err(refused());
     }
     Ok(parsed)
+}
+
+/// Whether a list could have come from an optimiser: the right count, every number finite and
+/// positive. The one rule both the text parser and a typed setting value go through.
+pub fn are_weights(weights: &[f64]) -> bool {
+    weights.len() == WEIGHT_COUNT && weights.iter().all(|w| w.is_finite() && *w > 0.0)
 }
 
 /// The list in the shape [`weights`] reads back, so a stored default and a pasted list look alike.

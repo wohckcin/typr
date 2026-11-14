@@ -67,7 +67,7 @@ fn every_store_method_is_reachable_through_the_trait() {
         door.set_draft(1, Some("unsaved")),
         door.trash_card(1),
         door.restore_card(1),
-        door.set_setting("new_per_day", "10"),
+        door.set_setting(SettingKey::NewPerDay, SettingValue::Number(10)),
         door.history(1),
         door.stats(0, i64::MAX),
     ];

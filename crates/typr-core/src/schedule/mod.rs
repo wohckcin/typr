@@ -6,7 +6,7 @@
 
 use crate::day::DAY_MS as ONE_DAY_MS;
 use crate::fsrs::{self, Memory};
-use crate::store::{Grade, Phase};
+use crate::store::{Grade, Phase, Settings};
 
 pub use crate::day::DAY_MS;
 
@@ -19,8 +19,37 @@ pub const LEARNING_STEP_MS: i64 = 10 * MINUTE_MS;
 const MULTIPLIER_NUM: i64 = 5;
 const MULTIPLIER_DEN: i64 = 2;
 
-/// The longest interval a prompt can reach.
+/// The longest interval a prompt can reach before a library asks for another cap.
 pub const MAX_INTERVAL_MS: i64 = 365 * DAY_MS;
+
+/// The bounds a library's settings put on its schedule. The defaults are what a library that has
+/// never touched the two settings uses, so an unconfigured scheduler behaves exactly as before.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Policy {
+    /// How long a learning or relearning step waits.
+    pub learning_step_ms: i64,
+    /// The furthest ahead a remembered card can be scheduled.
+    pub max_interval_ms: i64,
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Self {
+            learning_step_ms: LEARNING_STEP_MS,
+            max_interval_ms: MAX_INTERVAL_MS,
+        }
+    }
+}
+
+impl Policy {
+    /// The bounds the library's settings ask for.
+    pub fn from_settings(settings: &Settings) -> Self {
+        Self {
+            learning_step_ms: settings.learning_step_ms(),
+            max_interval_ms: settings.max_interval_ms(),
+        }
+    }
+}
 
 /// What the scheduler needs to know about a prompt.
 ///
@@ -61,7 +90,7 @@ pub struct Outcome {
 
 /// How a prompt moves when it is graded.
 pub trait Scheduler: Send + Sync {
-    fn grade(&self, state: &PromptState, grade: Grade, at_ms: i64) -> Outcome;
+    fn grade(&self, state: &PromptState, grade: Grade, at_ms: i64, policy: Policy) -> Outcome;
 }
 
 /// Mochi's entry steps with a fixed multiplier after them.
@@ -79,13 +108,13 @@ fn fixed(phase: Phase, interval_ms: i64, due_at: Option<i64>) -> Outcome {
 }
 
 impl Scheduler for FixedMultiplier {
-    fn grade(&self, state: &PromptState, grade: Grade, at_ms: i64) -> Outcome {
+    fn grade(&self, state: &PromptState, grade: Grade, at_ms: i64, policy: Policy) -> Outcome {
         match (state.phase, grade) {
             // A failure before the card has ever been scheduled changes nothing: it stays new.
             (Phase::Learn, Grade::Forgot) => fixed(Phase::Learn, state.interval_ms, None),
             // The first success takes the card out of the new queue and sets a ten-minute step.
             (Phase::Learn, Grade::Remembered) => {
-                fixed(Phase::Review, 0, Some(at_ms + LEARNING_STEP_MS))
+                fixed(Phase::Review, 0, Some(at_ms + policy.learning_step_ms))
             }
             // The step's success, and any success after a failure, starts from one day.
             (Phase::Review, Grade::Remembered) if state.interval_ms == 0 => {
@@ -96,7 +125,7 @@ impl Scheduler for FixedMultiplier {
             }
             (Phase::Review, Grade::Remembered) => {
                 let stretched = state.interval_ms * MULTIPLIER_NUM / MULTIPLIER_DEN;
-                let interval = stretched.clamp(ONE_DAY_MS, MAX_INTERVAL_MS);
+                let interval = stretched.clamp(ONE_DAY_MS, policy.max_interval_ms);
                 fixed(Phase::Review, interval, Some(at_ms + interval))
             }
             // A failure in the review or relearning phase drops into a ten-minute step, keeping the
@@ -104,7 +133,7 @@ impl Scheduler for FixedMultiplier {
             (Phase::Review | Phase::Relearn, Grade::Forgot) => fixed(
                 Phase::Relearn,
                 state.interval_ms,
-                Some(at_ms + LEARNING_STEP_MS),
+                Some(at_ms + policy.learning_step_ms),
             ),
         }
     }
@@ -151,7 +180,7 @@ impl Fsrs {
 }
 
 impl Scheduler for Fsrs {
-    fn grade(&self, state: &PromptState, grade: Grade, at_ms: i64) -> Outcome {
+    fn grade(&self, state: &PromptState, grade: Grade, at_ms: i64, policy: Policy) -> Outcome {
         let memory = match (state.memory, state.due_at) {
             // Nothing has graded this prompt before: its first memory comes from the grade alone.
             (None, None) => fsrs::initial(grade, &self.weights),
@@ -170,7 +199,8 @@ impl Scheduler for Fsrs {
             ),
         };
         let days = fsrs::interval_days(memory.stability, self.retention);
-        let interval = ms_from_days(days).clamp(LEARNING_STEP_MS, MAX_INTERVAL_MS);
+        let interval = ms_from_days(days, policy.max_interval_ms)
+            .clamp(policy.learning_step_ms, policy.max_interval_ms);
         let (phase, due) = match grade {
             Grade::Remembered => (Phase::Review, at_ms + interval),
             Grade::Forgot => (Phase::Relearn, at_ms + interval),
@@ -189,12 +219,12 @@ impl Scheduler for Fsrs {
 /// A float-to-integer cast would be the obvious spelling, and this workspace refuses lossy casts;
 /// going through `Duration` rounds the same way without one. The clamp keeps the input inside the
 /// range a duration accepts, so the conversion cannot fail.
-fn ms_from_days(days: f64) -> i64 {
-    let ceiling = (MAX_INTERVAL_MS as f64) / (ONE_DAY_MS as f64);
+fn ms_from_days(days: f64, cap_ms: i64) -> i64 {
+    let ceiling = (cap_ms as f64) / (ONE_DAY_MS as f64);
     let bounded = days.clamp(0.0, ceiling);
     let millis =
         std::time::Duration::from_secs_f64(bounded * (ONE_DAY_MS as f64) / 1_000.0).as_millis();
-    i64::try_from(millis).unwrap_or(MAX_INTERVAL_MS)
+    i64::try_from(millis).unwrap_or(cap_ms)
 }
 
 #[cfg(test)]

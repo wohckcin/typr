@@ -1,6 +1,6 @@
 use super::{
     DAY_MS, FixedMultiplier, Fsrs, LEARNING_STEP_MS, MAX_INTERVAL_MS, MULTIPLIER_DEN,
-    MULTIPLIER_NUM, Outcome, PromptState, Scheduler,
+    MULTIPLIER_NUM, Outcome, Policy, PromptState, Scheduler,
 };
 use crate::fsrs::{self, Memory};
 use crate::store::{Grade, Phase};
@@ -8,7 +8,7 @@ use crate::store::{Grade, Phase};
 const AT: i64 = 1_700_000_000_000;
 
 fn grade(state: PromptState, grade: Grade) -> Outcome {
-    FixedMultiplier.grade(&state, grade, AT)
+    FixedMultiplier.grade(&state, grade, AT, Policy::default())
 }
 
 #[test]
@@ -141,7 +141,7 @@ fn an_fsrs_grade_bootstraps_a_prompt_it_has_never_seen() {
         due_at: Some(AT),
         ..PromptState::NEW
     };
-    let outcome = fsrs.grade(&scheduled, Grade::Remembered, AT);
+    let outcome = fsrs.grade(&scheduled, Grade::Remembered, AT, Policy::default());
     assert_eq!(outcome.phase, Phase::Review);
     // Answered on its due date, so it has been held exactly five days: five-day stability, 90%
     // recall, remembered. Starting from `initial` instead would give a different number, which is
@@ -162,7 +162,7 @@ fn an_fsrs_grade_bootstraps_a_prompt_it_has_never_seen() {
 #[test]
 fn an_fsrs_first_grade_of_a_new_card_starts_from_its_stability() {
     let fsrs = Fsrs::defaults();
-    let outcome = fsrs.grade(&PromptState::NEW, Grade::Remembered, AT);
+    let outcome = fsrs.grade(&PromptState::NEW, Grade::Remembered, AT, Policy::default());
     let memory = outcome.memory.expect("a memory");
     assert_eq!(
         memory,
@@ -189,8 +189,8 @@ fn a_failed_fsrs_review_waits_less_than_a_remembered_one() {
             difficulty: 5.0,
         }),
     };
-    let miss = fsrs.grade(&due, Grade::Forgot, AT);
-    let hit = fsrs.grade(&due, Grade::Remembered, AT);
+    let miss = fsrs.grade(&due, Grade::Forgot, AT, Policy::default());
+    let hit = fsrs.grade(&due, Grade::Remembered, AT, Policy::default());
     assert_eq!(miss.phase, Phase::Relearn);
     assert_eq!(hit.phase, Phase::Review);
     assert!(
@@ -212,7 +212,7 @@ fn the_fixed_scheduler_still_produces_the_same_numbers() {
         interval_ms: 10 * DAY_MS,
         ..PromptState::NEW
     };
-    let outcome = FixedMultiplier.grade(&ten_days, Grade::Remembered, AT);
+    let outcome = FixedMultiplier.grade(&ten_days, Grade::Remembered, AT, Policy::default());
     assert_eq!(
         outcome.interval_ms,
         25 * DAY_MS,
@@ -241,7 +241,12 @@ fn a_review_on_its_due_date_still_raises_the_stability() {
 
     // Twice in a row, each answer landing exactly on the due date.
     for _ in 0..2 {
-        let outcome = fsrs.grade(&state, Grade::Remembered, state.due_at.expect("due"));
+        let outcome = fsrs.grade(
+            &state,
+            Grade::Remembered,
+            state.due_at.expect("due"),
+            Policy::default(),
+        );
         let memory = outcome.memory.expect("FSRS keeps a memory");
         assert!(
             memory.stability > state.memory.expect("a memory").stability,

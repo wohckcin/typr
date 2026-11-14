@@ -427,8 +427,8 @@ fn a_cram_selection_ignores_due_dates_and_the_cap() {
     let mut db = open_temp(&dir);
     db.apply(
         &Command::SetSetting {
-            key: "new_per_day".to_string(),
-            value: "0".to_string(),
+            key: SettingKey::NewPerDay,
+            value: SettingValue::Number(0),
         },
         NOON,
     )

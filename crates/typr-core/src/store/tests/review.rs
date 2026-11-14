@@ -385,8 +385,8 @@ fn the_new_queue_stops_at_the_cap_and_resumes_the_next_day() {
     }
     db.apply(
         &Command::SetSetting {
-            key: "new_per_day".to_string(),
-            value: "2".to_string(),
+            key: SettingKey::NewPerDay,
+            value: SettingValue::Number(2),
         },
         NOON,
     )
@@ -591,8 +591,8 @@ fn two_groups_of_one_card_count_once_against_the_cap() {
     let mut db = open_temp(&dir);
     db.apply(
         &Command::SetSetting {
-            key: "new_per_day".to_string(),
-            value: "1".to_string(),
+            key: SettingKey::NewPerDay,
+            value: SettingValue::Number(1),
         },
         0,
     )
@@ -900,8 +900,8 @@ fn the_library_default_is_the_last_word() {
     assert!(reverse_queue(&db).is_empty(), "reverse starts off");
     db.apply(
         &Command::SetSetting {
-            key: "reverse_default".to_string(),
-            value: "1".to_string(),
+            key: SettingKey::ReverseDefault,
+            value: SettingValue::Flag(true),
         },
         NOON,
     )
@@ -914,8 +914,8 @@ fn the_library_default_is_the_last_word() {
 
     let refused = db.apply(
         &Command::SetSetting {
-            key: "reverse_default".to_string(),
-            value: "yes".to_string(),
+            key: SettingKey::ReverseDefault,
+            value: SettingValue::Number(1),
         },
         NOON,
     );
@@ -1075,8 +1075,8 @@ fn a_card_counts_once_against_the_cap_however_many_directions_it_holds() {
     let mut db = open_temp(&dir);
     db.apply(
         &Command::SetSetting {
-            key: "new_per_day".to_string(),
-            value: "1".to_string(),
+            key: SettingKey::NewPerDay,
+            value: SettingValue::Number(1),
         },
         0,
     )
@@ -1121,8 +1121,8 @@ fn a_malformed_weight_list_is_refused_without_replacing_the_old_one() {
     let good = crate::fsrs::weight_text(&crate::fsrs::DEFAULT_WEIGHTS);
     db.apply(
         &Command::SetSetting {
-            key: "fsrs_weights".to_string(),
-            value: good.clone(),
+            key: SettingKey::Weights,
+            value: SettingValue::Weights(crate::fsrs::DEFAULT_WEIGHTS.to_vec()),
         },
         NOON,
     )
@@ -1130,15 +1130,15 @@ fn a_malformed_weight_list_is_refused_without_replacing_the_old_one() {
 
     let refused = db.apply(
         &Command::SetSetting {
-            key: "fsrs_weights".to_string(),
-            value: "0.40255,one,3.173".to_string(),
+            key: SettingKey::Weights,
+            value: SettingValue::Weights(vec![0.40255, -1.0, 3.173]),
         },
         NOON,
     );
     match refused {
         Err(StoreError::Setting { key, value }) => {
             assert_eq!(key, "fsrs_weights");
-            assert_eq!(value, "0.40255,one,3.173");
+            assert_eq!(value, "0.40255,-1,3.173");
         }
         other => panic!("a malformed list should be refused, got {other:?}"),
     }
@@ -1168,8 +1168,8 @@ fn fsrs_state_survives_reopening_the_library() {
     let card = card(&mut db, deck, "gato\n---\ncat");
     db.apply(
         &Command::SetSetting {
-            key: "scheduler".to_string(),
-            value: "fsrs".to_string(),
+            key: SettingKey::Scheduler,
+            value: SettingValue::Scheduler(SchedulerKind::Fsrs),
         },
         NOON,
     )
@@ -1208,8 +1208,8 @@ fn switching_schedulers_leaves_every_record_alone() {
 
     db.apply(
         &Command::SetSetting {
-            key: "scheduler".to_string(),
-            value: "fsrs".to_string(),
+            key: SettingKey::Scheduler,
+            value: SettingValue::Scheduler(SchedulerKind::Fsrs),
         },
         NOON,
     )
@@ -1285,21 +1285,21 @@ fn a_retention_of_one_hundred_and_fifty_percent_is_refused() {
 }
 
 #[test]
-fn an_unknown_scheduler_is_refused() {
+fn a_setting_of_the_wrong_shape_is_refused() {
     let dir = TempDir::new().expect("temp dir");
     let db = open_temp(&dir);
     match db.apply(
         &Command::SetSetting {
-            key: "scheduler".to_string(),
-            value: "annealing".to_string(),
+            key: SettingKey::Scheduler,
+            value: SettingValue::Flag(true),
         },
         NOON,
     ) {
         Err(StoreError::Setting { key, value }) => {
             assert_eq!(key, "scheduler");
-            assert_eq!(value, "annealing");
+            assert_eq!(value, "1");
         }
-        other => panic!("an unknown scheduler should be refused, got {other:?}"),
+        other => panic!("a flag for a scheduler should be refused, got {other:?}"),
     }
     assert!(
         db.settings().is_ok(),
