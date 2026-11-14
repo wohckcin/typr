@@ -139,6 +139,12 @@ struct State {
     setting_inputs: HashMap<SettingKey, TextEdit>,
     /// The screen to go back to when settings closes.
     settings_from: Option<Screen>,
+    /// The file the library was opened from, absent until setup has opened one.
+    database: Option<std::path::PathBuf>,
+    /// What the schema reported when the file was opened, so settings can say it was migrated.
+    schema_opened: Option<typr_core::store::SchemaFacts>,
+    /// What the settings screen says about the file, gathered when it opens.
+    library_facts: crate::settings::Facts,
 }
 
 impl Default for State {
@@ -182,6 +188,9 @@ impl Default for State {
                 .map(|key| (key, TextEdit::default()))
                 .collect(),
             settings_from: None,
+            database: None,
+            schema_opened: None,
+            library_facts: crate::settings::Facts::default(),
         }
     }
 }
@@ -296,6 +305,27 @@ fn count_of(count: usize, one: &str, many: &str) -> String {
 }
 
 /// The lower-case extension a transfer reads its format from.
+/// Show a file or folder in the desktop's file manager.
+///
+/// There is no toolkit call for this, and no headless way to observe it: a test can only prove the
+/// command was built the way each desktop expects.
+fn reveal_path(path: &std::path::Path) -> std::io::Result<()> {
+    reveal_with(path).map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_with(path: &std::path::Path) -> std::io::Result<std::process::Child> {
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(path)
+        .spawn()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reveal_with(path: &std::path::Path) -> std::io::Result<std::process::Child> {
+    std::process::Command::new("xdg-open").arg(path).spawn()
+}
+
 fn transfer_format(path: &std::path::Path) -> Option<String> {
     path.extension()
         .and_then(std::ffi::OsStr::to_str)
@@ -355,7 +385,35 @@ impl State {
                 .or_default()
                 .replace_text(text);
         }
+        self.library_facts = self.read_facts();
         self.screen = Screen::Settings;
+    }
+
+    /// What the settings screen reports about the file: where it is, how big it is, and which
+    /// schema this open left it at.
+    fn read_facts(&self) -> crate::settings::Facts {
+        let database = self
+            .database
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        let bytes = self
+            .database
+            .as_ref()
+            .and_then(|path| std::fs::metadata(path).ok())
+            .map_or(0, |meta| meta.len());
+        let schema = self.schema_opened.map_or(0, |facts| facts.written);
+        let found = self.schema_opened.map_or(0, |facts| facts.found);
+        crate::settings::Facts {
+            database,
+            schema,
+            found,
+            bytes,
+            attachments: self.editor.attachments.root().display().to_string(),
+            logs: crate::paths::logs_root_from_environment()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default(),
+        }
     }
 
     /// Close settings and return to whatever was on screen, with a session at the card it was on.
@@ -937,6 +995,8 @@ impl State {
                         .map_or_else(|| "not written".to_string(), |path| path.display().to_string()),
                 );
                 let _ = WORKER.set(handle.status());
+                self.database = Some(database.clone());
+                self.schema_opened = Some(facts);
                 if !self.seeded {
                     self.library.set_snapshot(handle.snapshot());
                 }
@@ -1704,6 +1764,24 @@ impl settings::Host for State {
         &self.library.snapshot().settings
     }
 
+    fn facts(&self) -> &crate::settings::Facts {
+        &self.library_facts
+    }
+
+    fn import_file(&mut self, path: std::path::PathBuf) -> bool {
+        self.import_path(path).is_some()
+    }
+
+    fn export_file(&mut self, path: std::path::PathBuf) -> bool {
+        self.export_path(path).is_some()
+    }
+
+    fn reveal(&mut self, path: &str) {
+        if let Err(error) = reveal_path(std::path::Path::new(path)) {
+            self.say(format!("{path} could not be shown: {error}"));
+        }
+    }
+
     fn setting_input(&self, key: SettingKey) -> &TextEdit {
         &self.setting_inputs[&key]
     }
@@ -2143,6 +2221,28 @@ fn main() {
                 },
                 Some("Spanish"),
             );
+        }),
+        ("settings", |state: &mut State| {
+            // The screen with a library open behind it: every group filled, and the file facts the
+            // Library section reads, so the scene draws what the file would report.
+            state.screen = Screen::Settings;
+            state.library = Library::seeded(6);
+            state.library_facts = crate::settings::Facts {
+                database: "~/Library/Application Support/typr/typr.sqlite3".to_string(),
+                schema: typr_core::store::CURRENT_VERSION,
+                found: 4,
+                bytes: 1_812_480,
+                attachments: "~/Library/Application Support/typr/attachments".to_string(),
+                logs: "~/Library/Logs/typr".to_string(),
+            };
+            for key in SettingKey::ALL {
+                let text = state.library.snapshot().settings.value(key).text();
+                state
+                    .setting_inputs
+                    .entry(key)
+                    .or_default()
+                    .replace_text(text);
+            }
         }),
         ("editor-leave", |state: &mut State| {
             state.screen = Screen::Editor;

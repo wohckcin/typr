@@ -277,3 +277,75 @@ fn a_the_theme_change_repaints() {
             .page
     );
 }
+
+/// The Library section reports the file's own schema, and says when this open moved it forward.
+#[test]
+fn the_settings_screen_reports_the_files_schema() {
+    let dir = tempfile::tempdir().expect("dir");
+    let database = dir.path().join("typr.sqlite3");
+    std::fs::write(&database, vec![0_u8; 4096]).expect("a file of a known size");
+
+    let mut state = State {
+        screen: Screen::Library,
+        ..State::default()
+    };
+    state.database = Some(database.clone());
+    state.schema_opened = Some(typr_core::store::SchemaFacts {
+        found: 4,
+        written: typr_core::store::CURRENT_VERSION,
+        applied: 7,
+    });
+    state.editor.attachments =
+        typr::attachments::Attachments::detached(dir.path().join("attachments"));
+    state.open_settings();
+
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (1100.0, 800.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..3 {
+        runtime.frame(0.0);
+    }
+    let drawn: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    assert!(
+        drawn
+            .iter()
+            .any(|text| text == &database.display().to_string()),
+        "the database path is not shown in full: {drawn:?}"
+    );
+    let schema = format!(
+        "Schema {} (migrated from 4 when it was opened)",
+        typr_core::store::CURRENT_VERSION
+    );
+    assert!(
+        drawn.iter().any(|text| text == &schema),
+        "the schema row does not report the version the file reached: {drawn:?}"
+    );
+    assert!(
+        drawn.iter().any(|text| text == "Size 4.0 KB"),
+        "the size of the file is not reported: {drawn:?}"
+    );
+    assert!(
+        drawn
+            .iter()
+            .any(|text| text.contains("brought up to date when the library opened")),
+        "the migration is not explained: {drawn:?}"
+    );
+    let keys: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.key)
+        .collect();
+    for key in ["reveal-database", "facts-import", "facts-export"] {
+        assert!(
+            keys.iter().any(|own| own == key),
+            "{key} is missing from the Library section: {keys:?}"
+        );
+    }
+}

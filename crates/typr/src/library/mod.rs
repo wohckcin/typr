@@ -1491,20 +1491,11 @@ fn filter_bar<S: Host>(s: &S) -> El {
         Button::new("Import")
             .variant(ButtonVariant::Ghost)
             .on_press_tx(|_: &mut S, tx: &mut Tx| {
-                tx.open_file(
-                    FileDialogOptions {
-                        title: "Import cards".to_string(),
-                        ..FileDialogOptions::default()
+                tx.open_file(import_dialog(), |s: &mut S, result, _| {
+                    if let Ok(Some(path)) = result {
+                        let _ = s.import_file(path);
                     }
-                    .filter("Mochi export", &["mochi"])
-                    .filter("Spreadsheet", &["csv"])
-                    .filter("Markdown", &["md", "markdown"]),
-                    |s: &mut S, result, _| {
-                        if let Ok(Some(path)) = result {
-                            let _ = s.import_file(path);
-                        }
-                    },
-                );
+                });
             })
             .build(&KIT)
             .key("import"),
@@ -1513,20 +1504,11 @@ fn filter_bar<S: Host>(s: &S) -> El {
         Button::new("Export")
             .variant(ButtonVariant::Ghost)
             .on_press_tx(|_: &mut S, tx: &mut Tx| {
-                tx.save_file(
-                    FileDialogOptions {
-                        title: "Export cards".to_string(),
-                        ..FileDialogOptions::default()
+                tx.save_file(export_dialog(), |s: &mut S, result, _| {
+                    if let Ok(Some(path)) = result {
+                        let _ = s.export_file(path);
                     }
-                    .filter("typr library", &["typr"])
-                    .filter("Spreadsheet", &["csv"])
-                    .filter("Markdown", &["md"]),
-                    |s: &mut S, result, _| {
-                        if let Ok(Some(path)) = result {
-                            let _ = s.export_file(path);
-                        }
-                    },
-                );
+                });
             })
             .build(&KIT)
             .key("export"),
@@ -1535,6 +1517,28 @@ fn filter_bar<S: Host>(s: &S) -> El {
 }
 
 /// One row of the card list.
+/// The formats an import can read, offered by the library bar and the settings screen alike.
+pub fn import_dialog() -> FileDialogOptions {
+    FileDialogOptions {
+        title: "Import cards".to_string(),
+        ..FileDialogOptions::default()
+    }
+    .filter("Mochi export", &["mochi"])
+    .filter("Spreadsheet", &["csv"])
+    .filter("Markdown", &["md", "markdown"])
+}
+
+/// The formats an export can write.
+pub fn export_dialog() -> FileDialogOptions {
+    FileDialogOptions {
+        title: "Export cards".to_string(),
+        ..FileDialogOptions::default()
+    }
+    .filter("typr library", &["typr"])
+    .filter("Spreadsheet", &["csv"])
+    .filter("Markdown", &["md"])
+}
+
 /// "card" for one, "cards" for everything else, so the count never reads "1 cards".
 fn plural(count: usize) -> &'static str {
     if count == 1 { "card" } else { "cards" }

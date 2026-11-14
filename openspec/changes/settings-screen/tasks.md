@@ -16,7 +16,8 @@ Depends on `review-reverse` and `fsrs-scheduling` for the keys it exposes.
   - **Verification**: `settings_open_from_a_session_and_return_to_the_card` drives the key path in `rune::Runtime` and asserts the session's card is unchanged.
 - [x] 2.2 Appearance reaches the theme and the scale on the next frame, with a reset control.
   - **Verification**: `a_scale_change_is_drawn_on_the_next_frame` compares element geometry before and after; `a_the_theme_change_repaints` reads the kit's dark flag.
-- [ ] 2.3 Library section shows the database path, schema version and migration note, size, attachments and log paths, plus import and export.
+- [x] 2.3 Library section shows the database path, schema version and migration note, size, attachments and log paths, plus import and export.
+  - Note: the reveal control has no headless proof. There is no toolkit call for it, and a spawned file manager is invisible to the runtime, so a test could only assert that a command was built. `the_settings_screen_reports_the_files_schema` proves the paths, the schema row, the size, the migration note and the three controls; the Reveal buttons themselves are covered by the `settings` scene and by hand.
   - **Verification**: `the_settings_screen_reports_the_files_schema` seeds a rewound library and reads the drawn text; the reveal control is covered by a scene and by hand, and its headless gap is stated in the task note.
 
 ## 3. Close out

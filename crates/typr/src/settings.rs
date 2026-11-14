@@ -17,6 +17,18 @@ pub trait Host: 'static {
     fn set_setting(&mut self, key: SettingKey, value: SettingValue);
     fn refuse(&mut self, error: &StoreError);
     fn leave_settings(&mut self);
+    /// What the screen says about the library's file, gathered when it opened.
+    fn facts(&self) -> &Facts;
+    /// Copy cards in from a file the user chose.
+    fn import_file(&mut self, _path: std::path::PathBuf) -> bool {
+        false
+    }
+    /// Write the library, or the selected deck, to a file the user chose.
+    fn export_file(&mut self, _path: std::path::PathBuf) -> bool {
+        false
+    }
+    /// Show a path in the file manager.
+    fn reveal(&mut self, _path: &str) {}
 
     /// Read the field and send what it holds. A value the key does not accept is refused with the
     /// reason the store would give, and the stored value stays what it was.
@@ -31,6 +43,53 @@ pub trait Host: 'static {
     /// Put the documented default back in the field and store it.
     fn reset_setting(&mut self, key: SettingKey) {
         self.set_setting(key, key.default_value());
+    }
+}
+
+/// What the screen says about where the library lives.
+///
+/// Gathered when the screen opens: reading a file's size and the schema it was opened at is not
+/// something to do on every frame, and none of it changes while settings is up.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Facts {
+    pub database: String,
+    /// The schema the file is at now.
+    pub schema: i64,
+    /// The schema it held before this open migrated it.
+    pub found: i64,
+    pub bytes: u64,
+    pub attachments: String,
+    pub logs: String,
+}
+
+impl Facts {
+    /// True when opening the file brought it forward from a build that wrote an older schema.
+    pub fn migrated(&self) -> bool {
+        self.found < self.schema
+    }
+
+    /// The size in the unit a reader expects.
+    pub fn size(&self) -> String {
+        let bytes = self.bytes as f64;
+        if self.bytes < 1024 {
+            format!("{} bytes", self.bytes)
+        } else if bytes < 1024.0 * 1024.0 {
+            format!("{:.1} KB", bytes / 1024.0)
+        } else {
+            format!("{:.1} MB", bytes / (1024.0 * 1024.0))
+        }
+    }
+
+    /// The schema row: the version the file is at, and whether this open moved it there.
+    pub fn schema_line(&self) -> String {
+        if self.migrated() {
+            format!(
+                "Schema {} (migrated from {} when it was opened)",
+                self.schema, self.found
+            )
+        } else {
+            format!("Schema {}", self.schema)
+        }
     }
 }
 
@@ -101,6 +160,9 @@ fn section<S: Host>(s: &S, group: Group) -> El {
         .filter(|key| key.group() == group)
     {
         list = list.child(setting(s, key));
+    }
+    if group == Group::Library {
+        list = list.child(library_block(s));
     }
     if group == Group::Review {
         list = list.child(
@@ -212,5 +274,133 @@ fn editor<S: Host>(s: &S, key: SettingKey, kit: &Kit) -> El {
                 .on_press(move |s: &mut S| s.reset_setting(key))
                 .build(kit)
                 .key(format!("setting-{}-reset", key.as_str())),
+        )
+}
+
+/// Where the library lives, how big it is, and the two transfer controls.
+fn library_block<S: Host>(s: &S) -> El {
+    let kit = kit(s.settings());
+    let t = kit.c;
+    let facts = s.facts();
+    let mut block = col()
+        .key("library-facts")
+        .w_full()
+        .gap(10.0)
+        .child(fact_row::<S>(
+            s,
+            "Database",
+            &facts.database,
+            "facts-database",
+            "reveal-database",
+        ))
+        .child(
+            text(facts.schema_line())
+                .key("facts-schema")
+                .font(type_::LABEL)
+                .color(t.text_base),
+        )
+        .child(
+            text(format!("Size {}", facts.size()))
+                .key("facts-size")
+                .font(type_::LABEL)
+                .color(t.text_base),
+        )
+        .child(fact_row::<S>(
+            s,
+            "Attachments",
+            &facts.attachments,
+            "facts-attachments",
+            "reveal-attachments",
+        ))
+        .child(fact_row::<S>(
+            s,
+            "Logs",
+            &facts.logs,
+            "facts-logs",
+            "reveal-logs",
+        ))
+        .child(
+            row()
+                .key("facts-transfer")
+                .gap(8.0)
+                .child(
+                    Button::new("Import…")
+                        .variant(ButtonVariant::Ghost)
+                        .on_press_tx(|_: &mut S, tx: &mut rune::Tx| {
+                            tx.open_file(
+                                crate::library::import_dialog(),
+                                |s: &mut S, result, _| {
+                                    if let Ok(Some(path)) = result {
+                                        let _ = s.import_file(path);
+                                    }
+                                },
+                            );
+                        })
+                        .build(&kit)
+                        .key("facts-import"),
+                )
+                .child(
+                    Button::new("Export…")
+                        .variant(ButtonVariant::Ghost)
+                        .on_press_tx(|_: &mut S, tx: &mut rune::Tx| {
+                            tx.save_file(
+                                crate::library::export_dialog(),
+                                |s: &mut S, result, _| {
+                                    if let Ok(Some(path)) = result {
+                                        let _ = s.export_file(path);
+                                    }
+                                },
+                            );
+                        })
+                        .build(&kit)
+                        .key("facts-export"),
+                ),
+        );
+    if facts.migrated() {
+        block = block.child(
+            text("An older build wrote this file; it was brought up to date when the library opened.")
+                .key("facts-migrated")
+                .font(type_::LABEL)
+                .color(t.text_muted),
+        );
+    }
+    block
+}
+
+/// One labelled path, shown in full, with the control that shows it in the file manager.
+fn fact_row<S: Host>(
+    s: &S,
+    label: &str,
+    path: &str,
+    value_key: &'static str,
+    reveal_key: &'static str,
+) -> El {
+    let kit = kit(s.settings());
+    let t = kit.c;
+    let shown = path.to_string();
+    row()
+        .key(format!("fact-{value_key}"))
+        .w_full()
+        .gap(12.0)
+        .center_y()
+        .child(
+            text(label.to_string())
+                .w(110.0)
+                .font(type_::LABEL)
+                .color(t.text_muted),
+        )
+        .child(
+            text(path.to_string())
+                .key(value_key)
+                .font(type_::LABEL)
+                .color(t.text_base)
+                .grow(1.0),
+        )
+        .child(
+            Button::new("Reveal")
+                .variant(ButtonVariant::Ghost)
+                .on_press(move |s: &mut S| s.reveal(&shown))
+                .build(&kit)
+                .key(reveal_key),
         )
 }
