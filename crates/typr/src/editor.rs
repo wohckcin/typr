@@ -11,7 +11,7 @@ use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root
 static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));
 
 use crate::attachments::{self, Attachments};
-use crate::store::Id;
+use typr_core::store::Id;
 
 /// The app state an editor screen draws from.
 pub trait Host: 'static {

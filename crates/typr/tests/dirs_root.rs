@@ -1,7 +1,7 @@
 //! A test run rooted elsewhere must leave the real data folder alone.
 
 use rune::dirs::{AppDirs, ROOT_ENV};
-use typr::store::{self, APP_ID, database_path};
+use typr::paths::{APP_ID, database_path, open_from_environment};
 
 #[test]
 fn a_rooted_run_writes_nothing_to_the_real_data_folder() {
@@ -20,7 +20,7 @@ fn a_rooted_run_writes_nothing_to_the_real_data_folder() {
     );
 
     {
-        let db = store::open_from_environment().expect("open through the environment");
+        let db = open_from_environment().expect("open through the environment");
         drop(db);
     }
 

@@ -5,8 +5,8 @@ use rune::tok::{self, type_};
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
 use rune_kit::{Button, ButtonVariant, Markdown, MarkdownStyle, root};
 
-use crate::session::Session;
-use crate::store::{Grade, Id, StoreError};
+use typr_core::session::Session;
+use typr_core::store::{Grade, Id, StoreError};
 
 /// What the study screen needs from the app.
 pub trait Host: 'static {

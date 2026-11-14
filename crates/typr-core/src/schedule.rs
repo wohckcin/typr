@@ -6,7 +6,7 @@
 
 use crate::store::{Grade, Phase};
 
-pub use typr_core::day::DAY_MS;
+pub use crate::day::DAY_MS;
 
 pub const MINUTE_MS: i64 = 60_000;
 

@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use rusqlite::Connection;
 use tempfile::TempDir;
 
-use typr_core::clock::TestClock;
+use crate::clock::TestClock;
 
 use super::db::Record;
 use super::*;
@@ -19,7 +19,7 @@ mod schema;
 const NOON: i64 = 1_768_089_600_000 + 13 * 60 * 60 * 1000;
 const HOUR: i64 = 60 * 60 * 1000;
 
-fn noop_waker() -> rune::Waker {
+fn noop_waker() -> super::Waker {
     Arc::new(|| {})
 }
 

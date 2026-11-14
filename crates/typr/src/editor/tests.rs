@@ -1,5 +1,5 @@
 use super::{Editor, preview_key, view};
-use crate::store::Id;
+use typr_core::store::Id;
 
 #[test]
 fn editing_one_card_leaves_another_cards_parse_alone() {

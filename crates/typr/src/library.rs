@@ -8,7 +8,7 @@ use rune::tok::{self, type_};
 use rune::{El, GrowthSpec, ScrollSpec, TextEdit, col, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, Dialog, Kit, root};
 
-use crate::store::{CardMode, CardSummary, Deck, Id, Snapshot};
+use typr_core::store::{CardMode, CardSummary, Deck, Id, Snapshot};
 
 /// Kept for the lifetime of the app: a Kit rebuilds its palette and type ramp.
 static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));

@@ -1,7 +1,7 @@
 use rune::{Cx, El, Env, Runtime};
 
 use super::*;
-use crate::store::Phase;
+use typr_core::store::Phase;
 
 fn record(phase: Phase, grade: Grade, at: i64) -> ReviewRow {
     ReviewRow {

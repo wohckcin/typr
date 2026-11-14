@@ -11,11 +11,12 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
-use rune::Waker;
-
-use typr_core::clock::{Clock, SystemClock};
+use crate::clock::Clock;
 
 use super::{Command, Db, Event, Grade, Id, Outcome, Snapshot, Store, StoreError};
+
+/// What the worker calls once its answer is published and readable.
+pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
 /// The id an [`Event`] carries when it answers no request: the worker says what went wrong without
 /// a caller having asked. The UI shows its error and matches it against nothing.
@@ -67,16 +68,6 @@ impl Handle {
             shared,
             next_id: AtomicU64::new(0),
         })
-    }
-
-    /// Start the worker on the library in the process environment.
-    pub fn open(clock: Box<dyn Clock + Send + Sync>, waker: Waker) -> Result<Self, StoreError> {
-        Self::spawn(super::open_from_environment()?, clock, waker)
-    }
-
-    /// A handle over the system clock, for the app.
-    pub fn open_system(waker: Waker) -> Result<Self, StoreError> {
-        Self::open(Box::new(SystemClock), waker)
     }
 
     /// Send the last flush and wait for it: the one place the frame thread blocks, because a

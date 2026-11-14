@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use super::{Library, ROW_HEIGHT_PX, view};
-use crate::store::CardMode;
+use typr_core::store::CardMode;
 
 #[test]
 fn a_long_library_builds_only_the_rows_on_screen() {
@@ -48,7 +48,7 @@ fn the_search_box_narrows_the_list() {
 #[test]
 fn a_tag_filter_and_a_deck_filter_compose() {
     let mut library = Library::seeded(10);
-    let second = crate::store::Deck {
+    let second = typr_core::store::Deck {
         id: 2,
         parent: None,
         name: "Other".to_string(),

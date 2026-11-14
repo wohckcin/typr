@@ -1,7 +1,7 @@
 use super::{Entry, Session};
+use crate::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
 use crate::store::Grade;
-use typr_core::clock::LEARNING_STEP_MS;
 
 const NOON: i64 = 1_760_000_000_000;
 

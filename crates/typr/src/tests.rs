@@ -30,10 +30,10 @@ fn forgotten_due_card() -> State {
 fn library_with_one_card(dir: &tempfile::TempDir) -> Handle {
     let path = dir.path().join("library.sqlite3");
     {
-        let db = typr::store::Db::open(&path).expect("open");
+        let db = typr_core::store::Db::open(&path).expect("open");
         let deck = match db
             .apply(
-                &typr::store::Command::CreateDeck {
+                &typr_core::store::Command::CreateDeck {
                     parent: None,
                     name: "Biology".to_string(),
                 },
@@ -45,7 +45,7 @@ fn library_with_one_card(dir: &tempfile::TempDir) -> Handle {
             other => panic!("expected a deck, got {other:?}"),
         };
         db.apply(
-            &typr::store::Command::CreateCard {
+            &typr_core::store::Command::CreateCard {
                 deck,
                 markdown: "front\n---\nback".to_string(),
             },
@@ -54,7 +54,7 @@ fn library_with_one_card(dir: &tempfile::TempDir) -> Handle {
         .expect("card");
     }
     Handle::spawn(
-        typr::store::Db::open(&path).expect("open"),
+        typr_core::store::Db::open(&path).expect("open"),
         Box::new(typr_core::clock::SystemClock),
         std::sync::Arc::new(|| {}),
     )
@@ -108,10 +108,10 @@ fn a_grade_that_lands_after_leaving_does_not_open_a_summary() {
 fn library_with_a_reviewed_and_a_fresh_card(dir: &tempfile::TempDir) -> (Handle, Id, Id) {
     let path = dir.path().join("library.sqlite3");
     let (reviewed, fresh) = {
-        let db = typr::store::Db::open(&path).expect("open");
+        let db = typr_core::store::Db::open(&path).expect("open");
         let deck = match db
             .apply(
-                &typr::store::Command::CreateDeck {
+                &typr_core::store::Command::CreateDeck {
                     parent: None,
                     name: "Biology".to_string(),
                 },
@@ -124,7 +124,7 @@ fn library_with_a_reviewed_and_a_fresh_card(dir: &tempfile::TempDir) -> (Handle,
         };
         let card = |markdown: &str| match db
             .apply(
-                &typr::store::Command::CreateCard {
+                &typr_core::store::Command::CreateCard {
                     deck,
                     markdown: markdown.to_string(),
                 },
@@ -138,10 +138,10 @@ fn library_with_a_reviewed_and_a_fresh_card(dir: &tempfile::TempDir) -> (Handle,
         let reviewed = card("front\n---\nback");
         card("other front\n---\nother back");
         db.apply(
-            &typr::store::Command::Grade {
+            &typr_core::store::Command::Grade {
                 card: reviewed,
                 key: "fwd".to_string(),
-                grade: typr::store::Grade::Remembered,
+                grade: typr_core::store::Grade::Remembered,
                 duration_ms: None,
             },
             1_000,
@@ -150,7 +150,7 @@ fn library_with_a_reviewed_and_a_fresh_card(dir: &tempfile::TempDir) -> (Handle,
         (reviewed, db.snapshot().expect("snapshot").cards[1].id)
     };
     let handle = Handle::spawn(
-        typr::store::Db::open(&path).expect("open"),
+        typr_core::store::Db::open(&path).expect("open"),
         Box::new(typr_core::clock::SystemClock),
         std::sync::Arc::new(|| {}),
     )
@@ -270,7 +270,7 @@ fn saving_a_new_card_stores_it_and_adopts_its_id() {
     let path = dir.path().join("library.sqlite3");
     let waker: Waker = std::sync::Arc::new(|| {});
     let handle = Handle::spawn(
-        typr::store::Db::open(&path).expect("open"),
+        typr_core::store::Db::open(&path).expect("open"),
         Box::new(typr_core::clock::SystemClock),
         waker,
     )
@@ -295,7 +295,7 @@ fn saving_a_new_card_stores_it_and_adopts_its_id() {
     assert!(!state.editor.dirty(), "the buffer counts as saved");
 
     drop(state.store.take());
-    let db = typr::store::Db::open(&path).expect("reopen");
+    let db = typr_core::store::Db::open(&path).expect("reopen");
     let cards = db.snapshot().expect("snapshot").cards;
     assert_eq!(cards.len(), 1, "one card on disk");
     assert_eq!(cards[0].id, card);

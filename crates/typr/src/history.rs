@@ -4,7 +4,7 @@ use rune::tok::{self, type_};
 use rune::{El, ScrollSpec, col, row, text};
 use rune_kit::root;
 
-use crate::store::{Grade, Id, ReviewRow};
+use typr_core::store::{Grade, Id, ReviewRow};
 
 /// One card's history, as the screen shows it.
 #[derive(Debug, Default)]

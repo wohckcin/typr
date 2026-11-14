@@ -338,7 +338,7 @@ fn the_cap_counts_graduated_cards_across_decks_and_ignores_learning_cycles() {
         at += 60_000;
     }
     assert_eq!(
-        db.learned_on(typr_core::day::study_day(NOON, 0), 0)
+        db.learned_on(crate::day::study_day(NOON, 0), 0)
             .expect("learned"),
         0
     );
@@ -365,7 +365,7 @@ fn the_cap_counts_graduated_cards_across_decks_and_ignores_learning_cycles() {
     .expect("grade");
 
     assert_eq!(
-        db.learned_on(typr_core::day::study_day(NOON, 0), 0)
+        db.learned_on(crate::day::study_day(NOON, 0), 0)
             .expect("learned"),
         2
     );
@@ -429,7 +429,7 @@ fn statistics_are_counted_per_study_day() {
     let deck = deck(&mut db, "Stats");
     let card = card(&mut db, deck, "a\n---\nb");
 
-    let today = typr_core::day::study_day(NOON, 0);
+    let today = crate::day::study_day(NOON, 0);
     let tomorrow_at = NOON + 24 * HOUR;
     db.apply(
         &Command::Grade {

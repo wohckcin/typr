@@ -8,17 +8,11 @@ mod db;
 mod schema;
 mod task;
 
-use std::path::PathBuf;
 use std::sync::Arc;
-
-use rune::dirs::AppDirs;
 
 pub use db::{Db, Folded, folded};
 pub use schema::CURRENT_VERSION;
-pub use task::Handle;
-
-/// The app id used for both Rune's folders and this app's file.
-pub const APP_ID: &str = "typr";
+pub use task::{Handle, Waker};
 
 /// A deck, card, prompt or log row.
 pub type Id = i64;
@@ -437,38 +431,6 @@ pub enum StoreError {
     /// The worker thread is gone, so nothing was sent and no answer will come.
     #[error("the library is closed")]
     Closed,
-}
-
-/// The library file inside an app's data folder.
-pub fn database_path(dirs: &AppDirs) -> PathBuf {
-    dirs.data().join("typr.sqlite3")
-}
-
-/// The folder a card's images are copied into, beside the database.
-pub fn attachments_root(dirs: &AppDirs) -> PathBuf {
-    dirs.data().join("attachments")
-}
-
-/// The attachments folder for the process environment.
-pub fn attachments_root_from_environment() -> Result<PathBuf, StoreError> {
-    let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;
-    Ok(attachments_root(&dirs))
-}
-
-/// Open the library from the process environment, creating its folder if needed.
-///
-/// `RUNE_DIRS_ROOT`, when set, moves every folder (see [`rune::dirs`]), which is how a test or an
-/// isolated run keeps out of the real one.
-pub fn open_from_environment() -> Result<Db, StoreError> {
-    let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;
-    open_in(&dirs)
-}
-
-/// Open the library inside the given folders.
-pub fn open_in(dirs: &AppDirs) -> Result<Db, StoreError> {
-    std::fs::create_dir_all(dirs.data())?;
-    std::fs::create_dir_all(attachments_root(dirs))?;
-    Db::open(&database_path(dirs))
 }
 
 /// The only way the UI reaches the store.

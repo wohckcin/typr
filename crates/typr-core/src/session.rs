@@ -1,8 +1,8 @@
 //! One study session: the queue it walks, what has been shown, and what has been graded.
 
+use crate::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
 use crate::store::{Grade, Id};
-use typr_core::clock::LEARNING_STEP_MS;
 
 /// A card waiting its turn, with the sides as they will be revealed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -194,7 +194,7 @@ impl Session {
     /// Only cards sharing the same overdue day may swap places, which is what keeps a reshuffle
     /// from breaking the order the scheduler asked for.
     pub fn reshuffle(&mut self, seed: u64) {
-        let mut shuffle = typr_core::shuffle::Shuffle::new(seed);
+        let mut shuffle = crate::shuffle::Shuffle::new(seed);
         let mut index = self.at;
         while index < self.entries.len() {
             let overdue = self.entries[index].overdue;

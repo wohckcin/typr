@@ -1,9 +1,9 @@
 use rune::{Env, Key, KeyEvent, Mods, Runtime, Tx};
 
 use super::{Host, key, summary, view};
-use crate::screen::Queue;
-use crate::session::{Entry, Session};
-use crate::store::{Grade, Id, StoreError};
+use typr_core::screen::Queue;
+use typr_core::session::{Entry, Session};
+use typr_core::store::{Grade, Id, StoreError};
 
 const NOON: i64 = 1_760_000_000_000;
 

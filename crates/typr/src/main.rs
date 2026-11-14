@@ -7,11 +7,13 @@ use typr::day_offset;
 use typr::editor::{self, Editor};
 use typr::history::{self, History};
 use typr::library::{self, Library};
-use typr::screen::{Queue, Screen};
-use typr::session::{Entry, Session};
-use typr::store::{self, CardMode, Grade, Handle, Id, Outcome, Store, StoreError};
+use typr::paths;
+use typr::screen::Screen;
 use typr::study::{self, Host};
-use typr_core::clock::Clock;
+use typr_core::clock::{Clock, SystemClock};
+use typr_core::screen::Queue;
+use typr_core::session::{Entry, Session};
+use typr_core::store::{CardMode, Grade, Handle, Id, Outcome, Store, StoreError};
 use typr_core::{day, sides};
 
 /// A named starting state for a headless `--scene` run.
@@ -317,8 +319,11 @@ impl State {
             return;
         }
         let draw = waker.clone();
-        let opened = store::attachments_root_from_environment()
-            .and_then(|root| Handle::open_system(waker).map(|handle| (root, handle)));
+        let opened = paths::attachments_root_from_environment().and_then(|root| {
+            let db = paths::open_from_environment()?;
+            let handle = Handle::spawn(db, Box::new(SystemClock), waker)?;
+            Ok((root, handle))
+        });
         match opened {
             Ok((root, handle)) => {
                 if !self.seeded {
@@ -633,7 +638,7 @@ fn main() {
                 "What is **mitosis**?\n---\nCell division.".to_string(),
             );
             state.editor.showing_history = true;
-            let row = |phase, grade, at, due_at| typr::store::ReviewRow {
+            let row = |phase, grade, at, due_at| typr_core::store::ReviewRow {
                 card: 1,
                 key: "fwd".to_string(),
                 phase,
@@ -646,15 +651,15 @@ fn main() {
             state.editor.history.set(
                 1,
                 vec![
-                    row(typr::store::Phase::Learn, Grade::Forgot, 1_000, None),
+                    row(typr_core::store::Phase::Learn, Grade::Forgot, 1_000, None),
                     row(
-                        typr::store::Phase::Review,
+                        typr_core::store::Phase::Review,
                         Grade::Remembered,
                         2_000,
                         Some(86_400_000),
                     ),
                     row(
-                        typr::store::Phase::Review,
+                        typr_core::store::Phase::Review,
                         Grade::Forgot,
                         3_000,
                         Some(3_600_000),
