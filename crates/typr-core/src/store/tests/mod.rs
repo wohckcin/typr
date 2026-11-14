@@ -110,6 +110,24 @@ fn schedule(db: &mut Db, card: Id, due_at: i64) {
 /// Put a file back to an older schema: the version number alone is not a simulation, because a build
 /// of that age had none of the objects later migrations added.
 pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
+    if version < 6 {
+        // The view names the mask table and the diagram columns, so it goes before they do, and a
+        // version-5 file then carries the view that step installed.
+        conn.execute_batch("DROP VIEW IF EXISTS studyable_prompt")
+            .expect("drop the view");
+        conn.execute_batch("DROP TABLE IF EXISTS mask")
+            .expect("drop the mask table");
+        conn.execute_batch("ALTER TABLE card DROP COLUMN kind")
+            .expect("drop the card kind");
+        conn.execute_batch("ALTER TABLE card DROP COLUMN image")
+            .expect("drop the card image");
+        conn.execute_batch("ALTER TABLE card DROP COLUMN caption")
+            .expect("drop the card caption");
+        if version == 5 {
+            conn.execute_batch(crate::store::schema::v5_view_sql())
+                .expect("put the version-5 view back");
+        }
+    }
     if version < 5 {
         // The view names both reverse columns, so it goes before they do, and a version-4 file then
         // carries the view that step installed.

@@ -605,6 +605,140 @@ fn reverse_prompts(db: &Db) -> Vec<Id> {
         .expect("rows")
 }
 
+#[test]
+fn a_library_from_before_diagrams_reads_as_text() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let before = {
+        let db = Db::open(&path).expect("open");
+        let deck = match db
+            .apply(
+                &Command::CreateDeck {
+                    parent: None,
+                    name: "Deck".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            Outcome::Deck(id) => id,
+            other => panic!("creating a deck: {other:?}"),
+        };
+        db.apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "front\n---\nback".to_string(),
+            },
+            0,
+        )
+        .expect("two-sided card");
+        db.apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "a note".to_string(),
+            },
+            0,
+        )
+        .expect("note");
+        // Written before V6 existed: no kind, no image, no caption, and no mask table at all.
+        rewind_for_test(db.connection_for_test(), 5);
+        let mut statement = db
+            .connection_for_test()
+            .prepare("SELECT card_id, key FROM studyable_prompt ORDER BY card_id, key")
+            .expect("prepare");
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?))
+            })
+            .expect("query")
+            .collect::<Result<Vec<(Id, String)>, _>>()
+            .expect("rows")
+    };
+
+    let db = Db::open(&path).expect("reopen");
+    let card_columns = columns(&db, "card");
+    for column in ["kind", "image", "caption"] {
+        assert!(
+            card_columns.contains(&column.to_string()),
+            "{column} missing from {card_columns:?}"
+        );
+    }
+
+    let kinds: Vec<String> = {
+        let mut statement = db
+            .connection_for_test()
+            .prepare("SELECT kind FROM card ORDER BY id")
+            .expect("prepare");
+        statement
+            .query_map([], |row| row.get(0))
+            .expect("query")
+            .collect::<Result<Vec<String>, _>>()
+            .expect("rows")
+    };
+    assert_eq!(kinds, vec!["text".to_string(), "text".to_string()]);
+
+    let pictures: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT COUNT(*) FROM card WHERE image IS NOT NULL OR caption IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count");
+    assert_eq!(
+        pictures, 0,
+        "a card from before the split carries no picture"
+    );
+
+    let after: Vec<(Id, String)> = {
+        let mut statement = db
+            .connection_for_test()
+            .prepare("SELECT card_id, key FROM studyable_prompt ORDER BY card_id, key")
+            .expect("prepare");
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?))
+            })
+            .expect("query")
+            .collect::<Result<Vec<(Id, String)>, _>>()
+            .expect("rows")
+    };
+    assert_eq!(after, before, "the queue is the same on both sides of V6");
+    assert!(!after.is_empty(), "the two-sided card still queues");
+}
+
+#[test]
+fn a_one_sided_diagram_card_queues_while_a_one_sided_text_card_does_not() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let db = open_temp(&dir);
+    db.connection_for_test()
+        .execute_batch(
+            "INSERT INTO deck (id, parent_id, name, archived) VALUES (1, NULL, 'library', 0);
+             INSERT INTO card
+                (id, deck_id, kind, image, caption, markdown, search_text, sides, has_cloze,
+                 created_at, updated_at)
+             VALUES
+                (1, 1, 'diagram', 'plate.png', 'A plate', '', '', 1, 0, 0, 0),
+                (2, 1, 'text', NULL, NULL, 'a note', 'a note', 1, 0, 0, 0);
+             INSERT INTO mask (card_id, group_no, x, y, w, h)
+             VALUES (1, 1, 0.1, 0.1, 0.2, 0.2);
+             INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)
+             VALUES (1, 'mask:1', 'learn', NULL, 0, 0, 0),
+                    (2, 'fwd', 'learn', NULL, 0, 0, 0);",
+        )
+        .expect("rows");
+
+    assert_eq!(
+        keys_for(&db, 1),
+        vec!["mask:1".to_string()],
+        "a diagram card is studyable on its image alone"
+    );
+    assert!(
+        keys_for(&db, 2).is_empty(),
+        "a one-sided text card is still a note"
+    );
+}
+
 /// Every key the view admits for one card, in key order.
 fn keys_for(db: &Db, card: Id) -> Vec<String> {
     let mut statement = db

@@ -16,7 +16,64 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6];
+
+/// Diagram cards: a card may carry an image instead of markdown, and each group of rectangles drawn
+/// on it is a review of its own.
+///
+/// The view is V5's body again, widened by one disjunct that admits a card holding a mask. V5 is
+/// key-aware and knows `rev`, so copying its body verbatim is what keeps reverse working; restating
+/// the view from the V3 baseline would drop both the hidden-text and the reverse clauses.
+const V6: &str = r#"
+ALTER TABLE card ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';
+ALTER TABLE card ADD COLUMN image TEXT;
+ALTER TABLE card ADD COLUMN caption TEXT;
+CREATE TABLE mask (
+    card_id INTEGER NOT NULL REFERENCES card (id) ON DELETE CASCADE,
+    group_no INTEGER NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    w REAL NOT NULL,
+    h REAL NOT NULL,
+    PRIMARY KEY (card_id, group_no, x, y, w, h)
+);
+CREATE INDEX mask_group ON mask (card_id, group_no);
+DROP VIEW IF EXISTS studyable_prompt;
+CREATE VIEW studyable_prompt AS
+WITH RECURSIVE archived_deck(id) AS (
+    SELECT id FROM deck WHERE archived = 1
+    UNION
+    SELECT d.id FROM deck d JOIN archived_deck a ON d.parent_id = a.id
+),
+deck_reverse(id, inherited) AS (
+    SELECT id, COALESCE(reverse, (SELECT COALESCE(CAST(value AS INTEGER), 0) FROM settings WHERE key = 'reverse_default'))
+    FROM deck WHERE parent_id IS NULL
+    UNION
+    SELECT d.id, COALESCE(d.reverse, r.inherited)
+    FROM deck d JOIN deck_reverse r ON d.parent_id = r.id
+)
+SELECT p.card_id, p.key, p.phase, p.due_at, p.interval_ms
+FROM prompt p
+JOIN card c ON c.id = p.card_id
+WHERE c.trashed_at IS NULL
+  AND c.archived = 0
+  AND p.retired = 0
+  AND (
+        (p.key = 'fwd' AND c.sides >= 2)
+        OR (p.key LIKE 'cloze:%' AND c.has_cloze = 1)
+        OR (
+            p.key = 'rev'
+            AND c.sides >= 2
+            AND COALESCE(
+                    c.reverse,
+                    (SELECT inherited FROM deck_reverse WHERE id = c.deck_id),
+                    0
+                ) = 1
+        )
+        OR EXISTS (SELECT 1 FROM mask m WHERE m.card_id = c.id)
+    )
+  AND c.deck_id NOT IN (SELECT id FROM archived_deck);
+"#;
 
 /// Reverse reviews: a `rev` prompt queues only where the card, its nearest deck or the library
 /// default turns reverse on, and NULL means "inherit".
@@ -132,6 +189,15 @@ pub(crate) fn v4_view_sql() -> &'static str {
     const MARKER: &str = "DROP VIEW IF EXISTS studyable_prompt;";
     let at = V4.find(MARKER).expect("V4 drops the view") + MARKER.len();
     &V4[at..]
+}
+
+/// V5's view, for tests that put a file back to the schema a version-5 build left. Quoted out of
+/// [`V5`] rather than copied, so the two cannot drift apart.
+#[cfg(test)]
+pub(crate) fn v5_view_sql() -> &'static str {
+    const MARKER: &str = "DROP VIEW IF EXISTS studyable_prompt;";
+    let at = V5.find(MARKER).expect("V5 drops the view") + MARKER.len();
+    &V5[at..]
 }
 
 /// Drafts belong to a card, or to the card that has not been saved yet, so the key needs no
