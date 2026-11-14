@@ -18,4 +18,4 @@
 
 ## Workflow follow-up
 
-- [ ] Archive this change once the sync writes the reworded requirement into `openspec/specs/card-grid/spec.md`.
+- [x] Archive this change once the sync writes the reworded requirement into `openspec/specs/card-grid/spec.md`.
