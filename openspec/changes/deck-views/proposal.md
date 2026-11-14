@@ -33,7 +33,8 @@ None. `card-library` still governs which cards a deck lists; this change governs
 
 ## Impact
 
-- Migration V7 adds `deck.view` (nullable text, `grid` when null), read by `Snapshot`.
+- Migration V12 adds `deck.view` (nullable text, `grid` when null), read by `Snapshot`; it takes the
+  number after `fsrs-scheduling`'s V11, which is the last migration the roadmap chain lands.
 - `crates/typr/src/library.rs` gains a view enum and one builder per view; `library/tile.rs` is reused by the
   grid; a new `library/notebook.rs` renders full card contents.
 - `crates/typr/src/store/db.rs` and `store/mod.rs` gain `Command::SetDeckView`.

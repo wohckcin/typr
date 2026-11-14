@@ -26,7 +26,7 @@ sets: grid, list, notebook and column. The grid view is the only one that was me
 
 ### The view is a column on `deck`, not a setting
 
-`settings` holds library-wide values; a view is per deck, so migration V7 adds `deck.view TEXT NULL` with
+`settings` holds library-wide values; a view is per deck, so migration V12 adds `deck.view TEXT NULL` with
 `NULL` meaning `grid`, and `Snapshot::decks` carries it. A single global `deck_view` setting was rejected: the
 whole point of four views is that a deck of long cards wants notebook while a deck of vocabulary wants list.
 
@@ -63,7 +63,10 @@ one transaction. Sorting by `updated_at` was rejected: a deck's order is the use
 
 - **Five surfaces to keep in step.** Mitigated by one builder per view behind one dispatch, and by a test that
   every view offers edit, preview and delete.
-- **Migration V7 touches every deck row.** It is nullable and read-only, so no data is rewritten.
+- **Migration V12 touches every deck row.** It is nullable and read-only, so no data is rewritten. The
+  number is V12 because the chain lands V4 cloze, V5 reverse, V6 diagram, V7 templates, V8 custom views,
+  V9 and V10 names and references, and V11 FSRS before this one; a change that hard-codes a number must
+  name the version it follows, or two changes will claim the same step.
 - **The column view's find is scoped to one card**, which is weaker than library search; that is what the
   measured app does.
 
