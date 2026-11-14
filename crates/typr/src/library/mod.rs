@@ -9,6 +9,8 @@ use rune::tok::{self, type_};
 use rune::{El, GrowthSpec, ScrollSpec, TextEdit, col, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, Dialog, Kit, root};
 
+use typr_core::keymap::{Command, Surface};
+
 use typr_core::store::{CardMode, CardSummary, Deck, Id, Snapshot};
 
 /// Kept for the lifetime of the app: a Kit rebuilds its palette and type ramp.
@@ -70,6 +72,11 @@ pub fn tile_width(width: f32, columns: usize) -> f32 {
 pub trait Host: 'static {
     fn library(&self) -> &Library;
     fn library_mut(&mut self) -> &mut Library;
+
+    /// Whether the window has room for a keycap beside a control's label.
+    fn keycaps(&self) -> bool {
+        false
+    }
 
     /// Switch the list to another view. The default needs no store: it only changes what is drawn.
     fn set_mode(&mut self, mode: CardMode) {
@@ -699,8 +706,12 @@ fn filter_bar<S: Host>(s: &S) -> El {
     if library.mode == CardMode::Trash {
         bar = bar.child(empty_trash_button::<S>());
     }
+    let new_card = match crate::keymap::chord(Surface::Library, Command::NewCard) {
+        Some(chord) if s.keycaps() => format!("New card  {chord}"),
+        _ => "New card".to_string(),
+    };
     bar = bar.child(
-        Button::new("New card")
+        Button::new(new_card)
             .variant(ButtonVariant::Submit)
             .on_press(|s: &mut S| s.new_card())
             .build(&KIT)

@@ -74,6 +74,34 @@ While you type, the preview masks every answer and names the group it belongs to
 numbered span, `[ … ]` for the plain form — and the caption counts prompts rather than sides — so a card with two numbered groups reports two prompts, not two
 sides.
 
+## Keyboard
+
+Every binding lives in one table, `typr_core::keymap::TABLE`, and the app draws its hints from
+it: press `?` on any screen to see the list filtered, or `⌘K` (Ctrl+K on Linux and Windows) for
+the command palette. Keycaps beside a button disappear when the window is narrower than 520
+points, and the action stays.
+
+| Screen | Key | Action |
+|---|---|---|
+| Library | `s` | Review what is due |
+| Library | `n` | Review the new cards |
+| Library | `c` | New card |
+| Editor | `s` | Save the card |
+| Editor | `h` | Show the card's history |
+| Editor | `Esc` | Back to the library, asking first when the card is unsaved |
+| Session | `Space` / `Enter` | Reveal the next side |
+| Session | `j` | Remembered |
+| Session | `f` | Forgot |
+| Session | `Right` / `Left` | Next card / back, read-only |
+| Session | `r` | Shuffle the cards still to answer |
+| Session | `Esc` | Back to the library |
+| Summary | `Esc` | Start a session from the list |
+| Every screen | `?` | Keyboard shortcuts |
+| Every screen | `⌘K` | Command palette |
+
+A session keeps the keyboard: while a session is running the library's keys do nothing, and while
+the panel or the palette is open nothing else answers a key.
+
 ## Dependencies
 
 `rune` and `rune-kit` are pinned to one Rune `dev` revision in `crates/typr/Cargo.toml`, and

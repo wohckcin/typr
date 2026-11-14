@@ -1,7 +1,13 @@
 //! Turning a toolkit key event into a table chord, and running what the table names.
 
-use rune::{Key as RuneKey, KeyEvent};
-use typr_core::keymap::{Chord, Key, Mods, Surface};
+pub mod palette;
+pub mod panel;
+
+use rune::{El, Key as RuneKey, KeyEvent};
+use typr_core::keymap::{Chord, Command, Key, Mods, Surface};
+
+/// Below this width the app draws a control's label without its keycap.
+pub const KEYCAP_MIN_WIDTH: f32 = 520.0;
 
 /// The chord an event presses, or `None` when the event carries nothing the table can name.
 ///
@@ -54,3 +60,59 @@ pub fn command_for(surface: Surface, event: &KeyEvent) -> Option<typr_core::keym
 
 #[cfg(test)]
 mod tests;
+
+/// What the overlays and the keycaps need from the app.
+pub trait Host: 'static {
+    /// The surface the keyboard is on.
+    fn surface(&self) -> Surface;
+    /// The shortcut panel's state.
+    fn panel(&self) -> &panel::Panel;
+    /// The shortcut panel's state, to change.
+    fn panel_mut(&mut self) -> &mut panel::Panel;
+    /// The palette's state.
+    fn palette(&self) -> &palette::Palette;
+    /// The palette's state, to change.
+    fn palette_mut(&mut self) -> &mut palette::Palette;
+    /// Whether the window has room for a keycap beside a label.
+    fn wide_enough(&self) -> bool;
+    /// Run a command on the current surface. Answers whether it was used.
+    fn run_command(&mut self, command: Command) -> bool;
+}
+
+/// The keycap a control should draw, or `None` when the window is too narrow for one.
+pub fn keycap<S: Host + ?Sized>(s: &S, command: Command) -> Option<String> {
+    if !s.wide_enough() {
+        return None;
+    }
+    typr_core::keymap::chord_of(s.surface(), command).map(|chord| chord.to_string())
+}
+
+/// A control's label, with its keycap appended when there is room for one.
+pub fn label<S: Host + ?Sized>(s: &S, command: Command, label: &str) -> String {
+    match keycap(s, command) {
+        Some(chord) => format!("{label}  {chord}"),
+        None => label.to_string(),
+    }
+}
+
+/// The chord a command answers on a surface.
+pub fn chord(surface: Surface, command: Command) -> Option<Chord> {
+    typr_core::keymap::chord_of(surface, command)
+}
+
+/// The panel and the palette, for a `rune_kit` overlay layer.
+pub fn layer<S: Host>(s: &S, layer: &mut Vec<El>) {
+    let mut overlays = Vec::new();
+    panel::build(s, &mut overlays);
+    palette::build(s, &mut overlays);
+    layer.extend(overlays);
+}
+
+/// A keycap chip for a chord.
+pub fn kbd(chord: Chord) -> El {
+    static KIT: std::sync::LazyLock<rune_kit::Kit> =
+        std::sync::LazyLock::new(|| rune_kit::Kit::neutral(true));
+    rune_kit::Badge::new(chord.to_string())
+        .variant(rune_kit::BadgeVariant::Subtle)
+        .build(&KIT)
+}

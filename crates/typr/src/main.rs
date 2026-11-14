@@ -10,6 +10,7 @@ use typr::attachments::Attachments;
 use typr::day_offset;
 use typr::editor::{self, Editor};
 use typr::history::{self, History};
+use typr::keymap::{self, Host as _};
 use typr::library::{self, Library};
 use typr::logging;
 use typr::paths;
@@ -106,8 +107,10 @@ struct State {
     deck_request: Option<u64>,
     /// Every command that went out and has not been answered: what it was, and when it left.
     sent: HashMap<u64, (&'static str, Instant)>,
-    /// The shortcut panel is open.
-    shortcuts_open: bool,
+    /// The shortcut panel, and what is typed into it.
+    panel: keymap::panel::Panel,
+    /// The command palette, and what is typed into it.
+    palette: keymap::palette::Palette,
 }
 
 impl Default for State {
@@ -135,7 +138,8 @@ impl Default for State {
             pending_new_card: None,
             deck_request: None,
             sent: HashMap::new(),
-            shortcuts_open: false,
+            panel: keymap::panel::Panel::default(),
+            palette: keymap::palette::Palette::default(),
         }
     }
 }
@@ -274,6 +278,10 @@ impl State {
 }
 
 impl library::Host for State {
+    fn keycaps(&self) -> bool {
+        keymap::Host::wide_enough(self)
+    }
+
     fn library(&self) -> &Library {
         &self.library
     }
@@ -417,6 +425,10 @@ impl history::Host for State {
 }
 
 impl study::Host for State {
+    fn keycaps(&self) -> bool {
+        keymap::Host::wide_enough(self)
+    }
+
     fn session(&self) -> &Session {
         &self.session
     }
@@ -830,14 +842,17 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
         Screen::Session => study::view::<State>(s),
         Screen::Summary => study::summary::<State>(s),
     };
-    match &s.failure {
+    let body = match &s.failure {
         None => screen,
         Some(failure) => col()
             .w_full()
             .h_full()
             .child(screen.grow(1.0))
             .child(status_bar(failure)),
-    }
+    };
+    let mut layer = Vec::new();
+    keymap::layer::<State>(s, &mut layer);
+    rune_kit::root(body, layer)
 }
 
 /// The one line at the bottom that says what went wrong, so a failed command is not silent.
@@ -882,17 +897,31 @@ impl State {
         match self.screen {
             Screen::Library => self.run_library(command),
             Screen::Editor => self.run_editor(command),
-            Screen::Session => study::run(self, command),
+            Screen::Session => study::run(self, command) || self.run_common(command),
             Screen::Summary => self.run_summary(command),
         }
     }
 
-    fn run_library(&mut self, command: Command) -> bool {
+    /// The commands every surface answers: the panel and the palette.
+    fn run_common(&mut self, command: Command) -> bool {
         match command {
             Command::ShowShortcuts => {
-                self.shortcuts_open = !self.shortcuts_open;
+                self.panel.open = !self.panel.open;
                 true
             }
+            Command::ShowPalette => {
+                keymap::palette::open(&mut self.palette);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn run_library(&mut self, command: Command) -> bool {
+        if self.run_common(command) {
+            return true;
+        }
+        match command {
             // A session starts from a settled library, so the keys do nothing while one is running.
             _ if !self.session.finished() => false,
             Command::StartDueSession => {
@@ -912,6 +941,9 @@ impl State {
     }
 
     fn run_editor(&mut self, command: Command) -> bool {
+        if self.run_common(command) {
+            return true;
+        }
         match command {
             // Leaving asks first when the buffer holds work that is not on disk.
             Command::Leave => {
@@ -931,22 +963,17 @@ impl State {
                 }
                 true
             }
-            Command::ShowShortcuts => {
-                self.shortcuts_open = !self.shortcuts_open;
-                true
-            }
             _ => false,
         }
     }
 
     fn run_summary(&mut self, command: Command) -> bool {
+        if self.run_common(command) {
+            return true;
+        }
         match command {
             Command::Leave => {
                 self.leave_session();
-                true
-            }
-            Command::ShowShortcuts => {
-                self.shortcuts_open = !self.shortcuts_open;
                 true
             }
             _ => false,
@@ -954,7 +981,69 @@ impl State {
     }
 }
 
+impl keymap::Host for State {
+    fn surface(&self) -> Surface {
+        match self.screen {
+            Screen::Library => Surface::Library,
+            Screen::Editor => Surface::Editor,
+            Screen::Session => Surface::Session,
+            Screen::Summary => Surface::Summary,
+        }
+    }
+
+    fn panel(&self) -> &keymap::panel::Panel {
+        &self.panel
+    }
+
+    fn panel_mut(&mut self) -> &mut keymap::panel::Panel {
+        &mut self.panel
+    }
+
+    fn palette(&self) -> &keymap::palette::Palette {
+        &self.palette
+    }
+
+    fn palette_mut(&mut self) -> &mut keymap::palette::Palette {
+        &mut self.palette
+    }
+
+    /// A keycap needs room; the library's measured width is the only width the app knows.
+    fn wide_enough(&self) -> bool {
+        self.library.grid_width <= 1.0 || self.library.grid_width >= keymap::KEYCAP_MIN_WIDTH
+    }
+
+    fn run_command(&mut self, command: Command) -> bool {
+        State::run_command(self, command)
+    }
+}
+
 fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
+    // An open palette takes the arrows and Enter itself; every other key reaches its filter.
+    if s.palette.open {
+        match &event.key {
+            rune::Key::Escape => {
+                s.palette.open = false;
+                return true;
+            }
+            rune::Key::Up => {
+                let surface = s.surface();
+                keymap::palette::move_up(&mut s.palette);
+                let rows = keymap::palette::visible(surface, &s.palette.filter.text).len();
+                s.palette.index = s.palette.index.min(rows.saturating_sub(1));
+                return true;
+            }
+            rune::Key::Down => {
+                let surface = s.surface();
+                keymap::palette::move_down(&mut s.palette, surface);
+                return true;
+            }
+            rune::Key::Enter => return keymap::palette::run(s),
+            _ => {}
+        }
+    }
+    if s.panel.open && !matches!(event.key, rune::Key::Escape) && event.mods.cmd {
+        return false;
+    }
     let surface = match s.screen {
         Screen::Library => Surface::Library,
         Screen::Editor => Surface::Editor,
@@ -982,6 +1071,16 @@ fn main() {
                 None,
                 "What is **mitosis**?\n---\nCell division.".to_string(),
             );
+        }),
+        ("shortcut-panel", |state: &mut State| {
+            state.library = Library::seeded(3);
+            state.panel.open = true;
+            state.seeded = true;
+        }),
+        ("command-palette", |state: &mut State| {
+            state.library = Library::seeded(3);
+            keymap::palette::open(&mut state.palette);
+            state.seeded = true;
         }),
         ("library-empty", |state: &mut State| {
             state.screen = Screen::Library;

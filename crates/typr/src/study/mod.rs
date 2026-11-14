@@ -22,6 +22,11 @@ pub trait Host: 'static {
 
     /// Reorder the cards still to answer, without touching any schedule.
     fn reshuffle(&mut self);
+
+    /// Whether the window has room for a keycap beside a control's label.
+    fn keycaps(&self) -> bool {
+        false
+    }
 }
 
 /// Run a command the table bound to the session surface. Answers whether it was used.
@@ -55,6 +60,14 @@ pub fn key<S: Host>(s: &mut S, event: &KeyEvent) -> bool {
     match crate::keymap::command_for(Surface::Session, event) {
         Some(command) => run(s, command),
         None => false,
+    }
+}
+
+/// A control's label, with its keycap when the window has room for one.
+fn with_key<S: Host>(s: &S, command: Command, label: &str) -> String {
+    match crate::keymap::chord(Surface::Session, command) {
+        Some(chord) if s.keycaps() => format!("{label}  {chord}"),
+        _ => label.to_string(),
     }
 }
 
@@ -127,7 +140,7 @@ pub fn view<S: Host>(s: &S) -> El {
     }
 
     let mut answers = row().key("answers").gap(8.0).justify_end().child(
-        Button::new("Shuffle")
+        Button::new(with_key(s, Command::Shuffle, "Shuffle"))
             .variant(ButtonVariant::Ghost)
             .on_press(|s: &mut S| s.reshuffle())
             .build(&rune_kit::Kit::neutral(true))
@@ -136,14 +149,14 @@ pub fn view<S: Host>(s: &S) -> El {
     if session.gradeable() {
         answers = answers
             .child(
-                Button::new("Forgot")
+                Button::new(with_key(s, Command::GradeForgot, "Forgot"))
                     .variant(ButtonVariant::Ghost)
                     .on_press(|s: &mut S| answer(s, Grade::Forgot))
                     .build(&rune_kit::Kit::neutral(true))
                     .key("forgot"),
             )
             .child(
-                Button::new("Remembered")
+                Button::new(with_key(s, Command::GradeRemembered, "Remembered"))
                     .variant(ButtonVariant::Submit)
                     .on_press(|s: &mut S| answer(s, Grade::Remembered))
                     .build(&rune_kit::Kit::neutral(true))

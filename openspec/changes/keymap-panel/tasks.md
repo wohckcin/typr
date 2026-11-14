@@ -13,18 +13,18 @@
 
 ## 3. Panel and keycaps
 
-- [ ] 3.1 Add `crates/typr/src/keymap/panel.rs`: a `Dialog` grouped by surface with a filter field, opened and closed by `ShowShortcuts`. Verification: `the_panel_opens_and_closes_on_its_key` and `the_panel_filter_narrows_the_list`.
-- [ ] 3.2 Draw a keycap beside every control whose command has a binding (library header buttons, session answer buttons). Verification: `the_reveal_action_shows_its_key`.
-- [ ] 3.3 Hide keycaps below the narrower width. Verification: `a_narrow_window_keeps_the_labels_without_the_keycaps`.
+- [x] 3.1 Add `crates/typr/src/keymap/panel.rs`: a `Dialog` grouped by surface with a filter field, opened and closed by `ShowShortcuts`. Verification: `the_panel_opens_and_closes_on_its_key` and `the_panel_filter_narrows_the_list`.
+- [x] 3.2 Draw a keycap beside every control whose command has a binding (library header buttons, session answer buttons). Verification: `the_reveal_action_shows_its_key`.
+- [x] 3.3 Hide keycaps below the narrower width. Verification: `a_narrow_window_keeps_the_labels_without_the_keycaps`.
 
 ## 4. Palette
 
-- [ ] 4.1 Add `crates/typr/src/keymap/palette.rs`: `Cmd+K` opens it, typing filters over labels, Up/Down move the highlight, Enter runs the command through the surface executor. Verification: `typing_narrows_and_enter_runs` and `a_session_command_is_not_offered_on_the_library`.
-- [ ] 4.2 Register scenes `shortcut-panel` and `command-palette`, both snapped non-empty. Verification: two `--snap` runs.
+- [x] 4.1 Add `crates/typr/src/keymap/palette.rs`: `Cmd+K` opens it, typing filters over labels, Up/Down move the highlight, Enter runs the command through the surface executor. Verification: `typing_narrows_and_enter_runs` and `a_session_command_is_not_offered_on_the_library`.
+- [x] 4.2 Register scenes `shortcut-panel` and `command-palette`, both snapped non-empty. Verification: two `--snap` runs.
 
 ## 5. Verification
 
-- [ ] 5.1 Run the gate: fmt, clippy with `-D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene. Verification: all four report success.
+- [x] 5.1 Run the gate: fmt, clippy with `-D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene. Verification: all four report success.
 
 ## Workflow follow-up
 

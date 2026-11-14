@@ -546,3 +546,46 @@ fn a_prompt_the_card_no_longer_claims_does_not_open_a_session() {
         "the group the card still holds is asked as usual"
     );
 }
+
+/// A state showing a revealed session on one card, at the given window width.
+fn session_state(width: f32) -> State {
+    let mut state = State {
+        screen: Screen::Session,
+        session: session_on(1),
+        ..State::default()
+    };
+    state.library.grid_width = width;
+    state
+}
+
+fn drawn_text(state: State) -> Vec<String> {
+    let mut runtime = rune::Runtime::new(state, view, (900.0, 600.0), rune::Env::new(true, 1.0));
+    runtime.frame(0.1);
+    runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect()
+}
+
+#[test]
+fn the_reveal_action_shows_its_key() {
+    let drawn = drawn_text(session_state(900.0));
+    assert!(
+        drawn.iter().any(|text| text.contains("Remembered  J")),
+        "the grade button does not say which key grades: {drawn:?}"
+    );
+}
+
+#[test]
+fn a_narrow_window_keeps_the_labels_without_the_keycaps() {
+    let drawn = drawn_text(session_state(400.0));
+    assert!(
+        drawn.iter().any(|text| text == "Remembered"),
+        "the label went too"
+    );
+    assert!(
+        !drawn.iter().any(|text| text.contains("  J")),
+        "a narrow window still drew a keycap: {drawn:?}"
+    );
+}
