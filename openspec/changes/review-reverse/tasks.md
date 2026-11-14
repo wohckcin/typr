@@ -2,10 +2,21 @@
 
 ## 1. Schema and prompts
 
-- [ ] 1.1 Migration V5: add `deck.reverse INTEGER` and `card.reverse INTEGER` (NULL inherits), insert `reverse_default` into `settings` with value `0`, and recreate `studyable_prompt` from the body migration V4 left, verbatim, adding the `deck_reverse` recursive CTE and the `p.key <> 'rev'` filter and keeping its `c.has_cloze` clause.
+- [ ] 1.1 Migration V5: add `deck.reverse INTEGER` and `card.reverse INTEGER` (NULL inherits), insert `reverse_default` into `settings` with value `0`, and recreate `studyable_prompt` from the body migration V4 left, verbatim, adding the `deck_reverse`
+      recursive CTE and one disjunct `OR (p.key = 'rev' AND c.sides >= 2 AND <effective reverse>)`.
+      There is no `p.key <> 'rev'` filter to add: V4 is key-aware, so `fwd` and `cloze:%` are already
+      named and `rev` is simply not one of them until this migration names it.
   - **Verification**: `a_library_from_before_reverse_gains_the_columns` rewinds a real file to `user_version = 4` and reopens it; `opening_reports_what_the_schema_did` counts the new step; `a_reverse_prompt_queues_only_where_reverse_is_on` covers card-on, deck-on, library-on and all-off. `a_hidden_text_card_still_queues_after_the_reverse_migration` proves the clause this migration must not drop.
-- [ ] 1.2 `sync_prompt(card, sides)` inserts `rev` beside `fwd` for a card with two or more sides, still `ON CONFLICT DO NOTHING`.
-  - **Verification**: `a_two_sided_card_holds_both_directions` sees keys `fwd` and `rev`; `a_note_holds_no_reverse_prompt` sees neither.
+- [ ] 1.2 `sync_prompts(&self, card: Id, shape: &Shape)` — the function `cloze-deletions` left in
+      `crates/typr-core/src/store/db.rs` — inserts `rev` beside the shape's keys for a card with two or more
+      sides, `ON CONFLICT DO NOTHING`, and **claims** `rev` in the key list it un-retires, because that
+      function marks every other prompt of the card `retired = 1` and clears the mark only for the keys the
+      shape claims. The claim set is therefore `shape.prompt_keys()` plus `rev` when the shape is
+      `Sides(len >= 2)`; nothing takes a reverse flag, so toggling reverse never writes a prompt.
+  - **Verification**: `a_two_sided_card_holds_both_directions` sees keys `fwd` and `rev`; `a_note_holds_no_reverse_prompt`
+    sees neither; `saving_a_two_sided_card_leaves_its_reverse_prompt_unretired` reads `retired = 0` for
+    `rev` after a plain save; `a_card_that_stops_being_two_sided_retires_its_reverse_prompt` turns the card
+    into a note and finds `rev` marked retired.
 - [ ] 1.3 Commands `SetCardReverse { card, reverse: Option<bool> }`, `SetDeckReverse { deck, reverse: Option<bool> }` and `SetSetting { key: "reverse_default", … }` write the three levels.
   - **Verification**: `a_card_setting_beats_its_deck` and `a_deck_setting_reaches_nested_decks` create the tree, flip flags and read the queue back.
 

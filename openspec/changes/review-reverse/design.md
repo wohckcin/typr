@@ -40,9 +40,17 @@ and would leave the flag and the deck tree able to disagree.
 **Effective reverse is computed in the view through a second recursive CTE.** `deck_reverse(id, on)`
 starts at the root decks with `COALESCE(reverse, (SELECT COALESCE(CAST(value AS INTEGER), 0) FROM
 settings WHERE key = 'reverse_default'))` and walks down with `COALESCE(d.reverse, parent.on)`; a
-card's effective value is `COALESCE(c.reverse, deck_value, 0)`. The view gained the filter
-`AND (p.key <> 'rev' OR <effective reverse>)`. The alternative, resolving in Rust and writing a
+card's effective value is `COALESCE(c.reverse, deck_value, 0)`. The view gained a third disjunct,
+`OR (p.key = 'rev' AND c.sides >= 2 AND <effective reverse>)`: V4's body is key-aware, so a `rev` row is
+not admitted by any clause until this migration names one, and no exclusion filter is needed. The alternative, resolving in Rust and writing a
 `card.reverse_enabled` cache, duplicates the chain walk that already exists for archived decks.
+
+**The claim set includes `rev`, so the retirement pass keeps it.** `cloze-deletions` made
+`sync_prompts` retire every prompt of a card and clear the mark only for the keys the shape claims; a
+`rev` row inserted outside that list is retired by the same call and never queues. The claim set is
+therefore the shape's keys plus `rev` for a card with two or more sides, which also keeps the promise
+that enabling reverse writes nothing: the row exists from the moment the card is two-sided, and the
+view decides whether it queues.
 
 **Flag columns are nullable on purpose.** `deck.reverse INTEGER` and `card.reverse INTEGER` use NULL
 for "inherit", 0 for off and 1 for on, so the nearest explicit setting wins and inheritance needs no
