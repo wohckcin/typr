@@ -4,8 +4,10 @@
 
 `crates/typr/src/library.rs` builds `col().key("rows").growth(..).virtual_rows(count, ROW_HEIGHT, ..)` and
 each row is a 44 px line of text with a preview and a metadata line. `Library::visible` already holds the
-filtered cards, and `CardSummary` already carries `preview`, `sides`, `markdown`, `tags`, `updated_at` and
-`trashed_at`, so the data a tile needs is in the snapshot.
+filtered cards, and `CardSummary` (`crates/typr-core/src/store/mod.rs:87`) carries `preview`, `sides`,
+`markdown`, `tags`, `updated_at` and `trashed_at` — but no schedule, because the snapshot deliberately
+holds no scheduling state. A tile's badge needs three facts that are not there, so this change adds them
+in one place, and `sidebar`'s deck counts read the same fields instead of inventing a second query.
 
 Measured on the Mochi web app, dark theme, 2026-11-14: tile 233x157 (845 px window) and 287x132 (1485 px
 window), radius 8 px, border `1px solid rgba(255,255,255,0.04)`, the shared card shadow, 10 px padding,
@@ -44,7 +46,26 @@ of this rule with the same constants, which is why the numbers are these and not
 
 A tile states `new`, or the interval in whole days with the word day, or `due` when the prompt is due now.
 Dates were rejected: a tile is read at a glance, and "in 3 days" versus "13 Nov" costs a decode step the
-badge cannot afford. The state comes from the snapshot's prompt rows, not from a second query.
+badge cannot afford.
+
+**The schedule arrives with the snapshot, as three fields on `CardSummary`.** `Snapshot` becomes the one
+source a view reads, so a tile never waits on a round trip. The card query at
+`crates/typr-core/src/store/db.rs:302` gains a left join on `studyable_prompt` and two aggregates:
+
+```sql
+SELECT c.id, c.deck_id, c.sides, c.archived, c.trashed_at, c.updated_at, c.markdown, c.search_text,
+       COUNT(sp.card_id), SUM(sp.due_at IS NULL), MIN(sp.due_at)
+FROM card c
+LEFT JOIN studyable_prompt sp ON sp.card_id = c.id
+GROUP BY c.id
+```
+
+`CardSummary` gains `prompts: u32` (how many studyable prompts the card carries), `unscheduled: u32` (how
+many of them have never been scheduled) and `due_at: Option<i64>` (the earliest of them, which is what a
+badge wants). A card with `prompts == 0` is a note and draws no badge; `due_at` of `None` with
+`prompts > 0` means new; a `due_at` at or before now means due; anything later is an interval. Counting
+`unscheduled` separately is what lets a card with one scheduled direction and one new direction say so
+later, without another migration.
 
 ### Tags are chips with a counted overflow
 

@@ -27,11 +27,12 @@
 
 ## 2. Deck rows
 
-- [ ] 2.1 Add `Command::DueCounts { now_ms, offset_ms }` returning `Vec<(Id, u32)>`, computed
-      over `studyable_prompt` and a `WITH RECURSIVE subtree(id)` CTE, with
-      `Store::due_counts` on the trait and the handle.
-      *Verification*: a library with one due card under `Spanish` and one not due returns
-      exactly `[(spanish, 1)]`; an archived deck is absent.
+- [ ] 2.1 Add `fn deck_due_counts(snapshot: &Snapshot, now_ms: i64) -> HashMap<Id, u32>` reading the
+      `due_at` field `card-grid` adds to `CardSummary`, skipping archived and trashed cards and
+      crediting every ancestor deck.
+      *Verification*: a snapshot with one due card under `Spanish` and one not due counts exactly
+      `{spanish: 1, parent: 1}`; an archived deck's cards are absent. If `card-grid` has not landed,
+      this task starts with the `CardSummary` widening and says so.
 
 - [ ] 2.2 Draw each deck's count right-aligned, and draw nothing for a zero.
       *Verification*: a deck with one due prompt draws `1`; a quiet deck draws no badge.

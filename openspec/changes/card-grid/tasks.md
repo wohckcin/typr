@@ -4,7 +4,7 @@
 
 - [ ] 1.1 Add `crates/typr/src/library/tile.rs` with `pub fn tile<S: Host>(card: &CardSummary, width: f32) -> El` drawing the surface, the rendered first side and the footer strip. Verification: `cargo test -p typr --lib library::tile` passes `a_tile_draws_the_first_side_only`.
 - [ ] 1.2 Add `fn hidden_sides(card: &CardSummary) -> usize` (sides minus one, floored at zero) and render the badge only above zero. Verification: `a_tile_states_the_sides_it_hides` and `a_note_carries_no_hidden_side_badge`.
-- [ ] 1.3 Add `enum TileState { New, Due, Interval(i64) }` and `fn tile_state(prompt: Option<&PromptRow>, now_ms: i64) -> TileState`, rendered in the footer. Verification: `a_new_card_says_new`, `a_due_card_says_due`, `a_studied_card_says_its_interval`.
+- [ ] 1.0 Widen the snapshot: `CardSummary` gains `prompts: u32`, `unscheduled: u32` and `due_at: Option<i64>`, filled by the card query's left join on `studyable_prompt` (see design.md). No schema change. Verification: `a_card_with_one_due_prompt_snapshots_its_due_date` and `a_note_snapshots_no_prompts`; the existing snapshot tests still pass.
 - [ ] 1.4 Draw tag chips with `fn chips(tags: &[String], width: f32) -> (Vec<&String>, usize)` and the `+N` overflow. Verification: `the_chips_count_what_they_drop`.
 - [ ] 1.5 Draw the dashed placeholder tile for an empty deck, keyed `new-card`, wired to `Host::new_card`. Verification: `an_empty_deck_offers_a_tile_to_fill` finds the key and pressing it starts a draft.
 

@@ -55,14 +55,17 @@ theme's glyph set, tinted from a hash of the deck name, so two decks are disting
 at a glance. The requirement only promises an aligned label column, so this stays a
 reversible visual decision.
 
-**Due counts come from one query, not from the snapshot.** The snapshot's `CardSummary`
-carries no schedule (a deliberate design decision), so the sidebar cannot count from it.
-Add `Command::DueCounts { now_ms, offset_ms }` returning `Vec<(Id, u32)>` for every deck
-with at least one due prompt, computed over the existing `studyable_prompt` view and a
-`WITH RECURSIVE subtree(id)` CTE — the same shape `due_prompts` already uses with its
-`deck` argument. `State` refreshes the counts when it refreshes the snapshot, so a row's
-number is as fresh as the list it labels. A count of zero renders nothing, per the
-requirement.
+**Due counts are folded out of the snapshot, with no query of their own.** `card-grid` widens
+`CardSummary` with `prompts`, `unscheduled` and `due_at` so a tile can state its schedule; the same
+three fields give the sidebar its counts. `fn deck_due_counts(snapshot, now_ms) -> HashMap<Id, u32>`
+walks `snapshot.cards`, skips archived and trashed cards, and adds each card whose `due_at` is at or
+before now to its deck and to every ancestor deck, so a parent's number is its subtree's. A count of
+zero renders nothing, per the requirement.
+
+This replaces the earlier `Command::DueCounts` idea: two changes each inventing a schedule query would
+drift, and a row's number should be as fresh as the list it labels — both now come from one snapshot
+revision. The trade is that the sidebar counts cards, not prompts; a card with two due variants counts
+once, which is what a navigator should say.
 
 **Collapse is view state on `Library`.** `pub collapsed: HashSet<Id>`, and
 `fn deck_rows(&self) -> Vec<(Deck, usize)>` walks the tree with the existing
@@ -87,8 +90,9 @@ the library opened, so the row states that and takes the danger tone when it did
 
 ## Risks / Trade-offs
 
-- A due count per deck means one query per snapshot refresh; on a 5000-card library the
-  subtree CTE runs once, not per deck, so the cost is one indexed scan.
+- A due count per deck means walking every card on each snapshot refresh; on a 5000-card
+  library that is a hash pass over the vector the library list already filters, so it costs
+  no query and no clone.
 - Monogram icons are less legible than emoji; the label column still aligns, and swapping
   in authored icons later touches one function.
 - Collapse is lost on quit; a user who folded a large tree rediscovers it once per launch.
