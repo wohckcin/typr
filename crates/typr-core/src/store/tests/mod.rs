@@ -121,6 +121,12 @@ pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
             .expect("drop the card reverse column");
         conn.execute_batch("DELETE FROM settings WHERE key = 'reverse_default'")
             .expect("drop the library default");
+        // No version-4 build could have written a reverse prompt or a record for one.
+        conn.execute_batch(
+            "DELETE FROM prompt WHERE key = 'rev';
+             DELETE FROM review_log WHERE key = 'rev';",
+        )
+        .expect("drop the reverse prompt");
         if version == 4 {
             conn.execute_batch(crate::store::schema::v4_view_sql())
                 .expect("put the version-4 view back");

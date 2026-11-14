@@ -43,6 +43,14 @@ impl Shape {
         self.prompt_keys().len()
     }
 
+    /// Whether the card is also asked from its last side.
+    ///
+    /// Two sides can be read in either order, so the reverse prompt is written beside `fwd`. Hidden
+    /// text is already the question, so a group never reverses.
+    pub fn claims_reverse(&self) -> bool {
+        matches!(self, Shape::Sides(sides) if sides.len() >= 2)
+    }
+
     /// Whether the card holds hidden text rather than sides.
     pub fn hides_text(&self) -> bool {
         matches!(self, Shape::Hidden { .. })

@@ -7,7 +7,7 @@
       There is no `p.key <> 'rev'` filter to add: V4 is key-aware, so `fwd` and `cloze:%` are already
       named and `rev` is simply not one of them until this migration names it.
   - **Verification**: `a_library_from_before_reverse_gains_the_columns` rewinds a real file to `user_version = 4` and reopens it; `opening_reports_what_the_schema_did` counts the new step; `a_reverse_prompt_queues_only_where_reverse_is_on` covers card-on, deck-on, library-on and all-off. `a_hidden_text_card_still_queues_after_the_reverse_migration` proves the clause this migration must not drop.
-- [ ] 1.2 `sync_prompts(&self, card: Id, shape: &Shape)` — the function `cloze-deletions` left in
+- [x] 1.2 `sync_prompts(&self, card: Id, shape: &Shape)` — the function `cloze-deletions` left in
       `crates/typr-core/src/store/db.rs` — inserts `rev` beside the shape's keys for a card with two or more
       sides, `ON CONFLICT DO NOTHING`, and **claims** `rev` in the key list it un-retires, because that
       function marks every other prompt of the card `retired = 1` and clears the mark only for the keys the

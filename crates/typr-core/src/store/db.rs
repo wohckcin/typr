@@ -399,7 +399,14 @@ impl Db {
     /// a schedule, and nothing is deleted: a group whose spans are gone keeps its history, is marked
     /// retired and stops queueing, and asking for it again clears the mark.
     fn sync_prompts(&self, card: Id, shape: &Shape) -> Result<(), StoreError> {
-        let keys = shape.prompt_keys();
+        // A two-sided card is asked from both ends, so `rev` is written beside the face keys and has
+        // to appear in the claim set below: a key the shape does not claim is retired by this very
+        // call, which would leave the reverse row unanswerable from the moment it was written.
+        // Nothing here reads a reverse setting, so toggling reverse never writes a prompt.
+        let mut keys = shape.prompt_keys();
+        if shape.claims_reverse() {
+            keys.push("rev".to_string());
+        }
         for key in &keys {
             self.conn.execute(
                 "INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)

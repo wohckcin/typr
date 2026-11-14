@@ -140,7 +140,8 @@ fn prompt_keys_beyond_fwd_fold_into_their_own_prompts() {
         at += 1_000;
     }
 
-    // Only the three keys that have records are rewritten; `fwd` has none and keeps its row.
+    // Only the three keys that have records are rewritten; `fwd` has none and keeps its row, and
+    // `rev` came from the card having two sides.
     assert_eq!(db.rebuild_prompts().expect("rebuild"), 3);
     assert_eq!(
         db.prompt_keys(card).expect("keys"),
@@ -148,7 +149,8 @@ fn prompt_keys_beyond_fwd_fold_into_their_own_prompts() {
             "clair".to_string(),
             "cloze:1".to_string(),
             "fwd".to_string(),
-            "mask:a1".to_string()
+            "mask:a1".to_string(),
+            "rev".to_string()
         ]
     );
     for key in ["clair", "cloze:1", "mask:a1"] {
@@ -698,4 +700,92 @@ fn a_group_whose_spans_are_gone_stops_queueing() {
         )
         .expect("the flag after the second save");
     assert_eq!(retired, 0, "a returning group is answerable again");
+}
+
+#[test]
+fn a_two_sided_card_holds_both_directions() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Directions");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    assert_eq!(
+        db.prompt_keys(card).expect("keys"),
+        vec!["fwd".to_string(), "rev".to_string()],
+        "a card that can be read either way carries a prompt for each reading"
+    );
+}
+
+#[test]
+fn a_note_holds_no_reverse_prompt() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Notes");
+    let note = card(&mut db, deck, "just a line");
+
+    assert!(
+        db.prompt_keys(note).expect("keys").is_empty(),
+        "a note has nothing to ask, in either direction"
+    );
+}
+
+#[test]
+fn saving_a_two_sided_card_leaves_its_reverse_prompt_unretired() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Directions");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    // The save claims every key the card holds; `rev` outside that list would be retired by the same
+    // call that keeps `fwd` alive.
+    db.apply(
+        &Command::SaveCard {
+            id: card,
+            markdown: "front\n---\nback again".to_string(),
+        },
+        NOON,
+    )
+    .expect("save");
+
+    assert_eq!(
+        retired(&db, card, "rev"),
+        0,
+        "the reverse prompt is answerable"
+    );
+    assert_eq!(retired(&db, card, "fwd"), 0, "and so is the forward one");
+}
+
+#[test]
+fn a_card_that_stops_being_two_sided_retires_its_reverse_prompt() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Directions");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    db.apply(
+        &Command::SaveCard {
+            id: card,
+            markdown: "one line now".to_string(),
+        },
+        NOON,
+    )
+    .expect("save");
+
+    assert_eq!(retired(&db, card, "rev"), 1, "nothing is left to ask");
+    assert_eq!(
+        db.prompt_keys(card).expect("keys"),
+        vec!["fwd".to_string(), "rev".to_string()],
+        "the rows stay, because their history does"
+    );
+}
+
+/// The retirement mark on one prompt, which is what keeps it out of the queues.
+fn retired(db: &Db, card: Id, key: &str) -> i64 {
+    db.connection_for_test()
+        .query_row(
+            "SELECT retired FROM prompt WHERE card_id = ?1 AND key = ?2",
+            rusqlite::params![card, key],
+            |row| row.get(0),
+        )
+        .expect("the retirement flag")
 }

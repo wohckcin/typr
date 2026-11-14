@@ -17,7 +17,8 @@ fn a_prompt_appears_with_the_second_side_and_survives_edits() {
     let two_sided = card(&mut db, deck, "front\n---\nback");
     assert_eq!(
         db.prompt_keys(two_sided).expect("keys"),
-        vec!["fwd".to_string()]
+        vec!["fwd".to_string(), "rev".to_string()],
+        "two sides are two questions, one from each end"
     );
 
     // Turned into a note: the prompt and its schedule are kept, the card just stops queueing.
@@ -40,7 +41,8 @@ fn a_prompt_appears_with_the_second_side_and_survives_edits() {
     assert_eq!(sides, 1);
     assert_eq!(
         db.prompt_keys(two_sided).expect("keys"),
-        vec!["fwd".to_string()]
+        vec!["fwd".to_string(), "rev".to_string()],
+        "both rows stay: the card stopped queueing, it did not forget anything"
     );
 
     // And back again: still exactly one prompt, not two.
@@ -52,7 +54,11 @@ fn a_prompt_appears_with_the_second_side_and_survives_edits() {
         0,
     )
     .expect("save");
-    assert_eq!(db.prompt_keys(two_sided).expect("keys").len(), 1);
+    assert_eq!(
+        db.prompt_keys(two_sided).expect("keys"),
+        vec!["fwd".to_string(), "rev".to_string()],
+        "two sides again, and no second row for either direction"
+    );
 }
 
 #[test]
