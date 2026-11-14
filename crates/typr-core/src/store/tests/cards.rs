@@ -741,3 +741,40 @@ fn a_new_card_queue_can_be_scoped_to_one_deck() {
         "and unscoped is every deck"
     );
 }
+
+#[test]
+fn a_card_with_one_due_prompt_snapshots_its_due_date() {
+    let dir = TempDir::new().expect("tempdir");
+    let mut db = open_temp(&dir);
+    let grammar = deck(&mut db, "Grammar");
+    let under = card(&mut db, grammar, " front\n---\n back");
+    schedule(&mut db, under, NOON + HOUR);
+
+    let snapshot = db.snapshot().expect("snapshot");
+    let summary = snapshot
+        .cards
+        .iter()
+        .find(|candidate| candidate.id == under)
+        .expect("the card is in the snapshot");
+    assert_eq!(summary.prompts, 1, "one studyable prompt is counted");
+    assert_eq!(summary.unscheduled, 0, "it has been scheduled");
+    assert_eq!(summary.due_at, Some(NOON + HOUR), "its due time comes through");
+}
+
+#[test]
+fn a_note_snapshots_no_prompts() {
+    let dir = TempDir::new().expect("tempdir");
+    let mut db = open_temp(&dir);
+    let grammar = deck(&mut db, "Grammar");
+    let note = card(&mut db, grammar, " just one side");
+
+    let snapshot = db.snapshot().expect("snapshot");
+    let summary = snapshot
+        .cards
+        .iter()
+        .find(|candidate| candidate.id == note)
+        .expect("the card is in the snapshot");
+    assert_eq!(summary.prompts, 0, "a note carries no prompt");
+    assert_eq!(summary.unscheduled, 0);
+    assert_eq!(summary.due_at, None, "and so has no due time");
+}

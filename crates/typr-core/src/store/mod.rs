@@ -101,6 +101,12 @@ pub struct CardSummary {
     /// The card's text folded the way `LIKE` compares it, so the library can filter without a
     /// round trip to the store thread.
     pub search_text: String,
+    /// How many studyable prompts the card carries. Zero means a note, which never queues.
+    pub prompts: u32,
+    /// How many of those prompts have never been scheduled.
+    pub unscheduled: u32,
+    /// The earliest due time among them; what a tile's badge reads.
+    pub due_at: Option<i64>,
 }
 
 /// Settings the user can change. Only the new-card cap exists in v1.

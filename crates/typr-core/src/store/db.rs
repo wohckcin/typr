@@ -299,8 +299,12 @@ impl Db {
         };
         let cards = {
             let mut stmt = self.conn.prepare(
-                "SELECT id, deck_id, sides, archived, trashed_at, updated_at, markdown, search_text
-                 FROM card ORDER BY updated_at DESC, id",
+                "SELECT c.id, c.deck_id, c.sides, c.archived, c.trashed_at, c.updated_at, c.markdown,
+                        c.search_text, COUNT(sp.card_id), SUM(sp.card_id IS NOT NULL AND sp.due_at IS NULL), MIN(sp.due_at)
+                 FROM card c
+                 LEFT JOIN studyable_prompt sp ON sp.card_id = c.id
+                 GROUP BY c.id
+                 ORDER BY c.updated_at DESC, c.id",
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(CardSummary {
@@ -314,6 +318,9 @@ impl Db {
                     preview: preview(&row.get::<_, String>(6)?),
                     markdown: row.get(6)?,
                     search_text: row.get(7)?,
+                    prompts: count_of(row.get(8)?),
+                    unscheduled: count_of(row.get(9)?),
+                    due_at: row.get(10)?,
                 })
             })?;
             let mut cards = rows.collect::<Result<Vec<_>, _>>()?;

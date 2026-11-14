@@ -273,6 +273,9 @@ impl Library {
                 preview: format!("Card {id}"),
                 markdown: format!("Card {id}\n---\nCard {id}"),
                 search_text: format!("card {id}"),
+                prompts: u32::from(id % 3 != 0),
+                unscheduled: u32::from(id % 3 == 1),
+                due_at: (id % 3 == 2).then_some(-1),
             })
             .collect();
         library.refresh();
