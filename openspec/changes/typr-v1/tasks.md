@@ -32,7 +32,7 @@
 ## 4. Card library
 
 - [x] 4.1 Implement deck creation, nesting and reparenting with cycle rejection and per-parent name uniqueness, and verify tests for a move into the deck's own child and for a duplicate name under the same parent
-- [ ] 4.2 Implement card creation, edit and reassignment between decks
+- [x] 4.2 Implement card creation, edit and reassignment between decks
 
   **Open**: the store half is done and tested (`move_card` keeps the prompt row and its due
   date). The screen half is not: nothing in the library opened the editor, so a card could not be
@@ -68,7 +68,7 @@
   `a_card_opens_in_the_editor_with_the_tags_it_holds` opens a card and finds the editor holding its
   text and tags with nothing to save.
 
-- [ ] 4.13 Move a card to another deck from the library, and verify the card leaves the old deck's list, arrives in the new one, and keeps its due date: a control that sets a card's tags through `Command::SetTags`, showing the tags the card holds and refusing duplicates that differ only by case
+- [x] 4.13 Move a card to another deck from the library, and verify the card leaves the old deck's list, arrives in the new one, and keeps its due date: a control that sets a card's tags through `Command::SetTags`, showing the tags the card holds and refusing duplicates that differ only by case
 
   **Verification**: a scripted run adds "Grammar" then "grammar" and asserts one tag remains, displayed with the first casing, and that the library's tag filter lists it once
 

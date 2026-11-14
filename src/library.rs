@@ -53,6 +53,9 @@ pub trait Host: 'static {
     /// Open an editor on a card that does not exist yet.
     fn new_card(&mut self) {}
 
+    /// Move a card into a deck, keeping whatever schedule it has.
+    fn move_card(&mut self, _card: Id, _deck: Id) {}
+
     /// Add a deck under the selected one, or at the top when none is selected.
     fn new_deck(&mut self) {}
 
@@ -123,6 +126,8 @@ pub struct Library {
     pub moving: Option<Id>,
     /// The deck waiting for an answer to "archive this?", when it holds cards.
     pub confirming_archive: Option<Id>,
+    /// The card waiting for a deck, while the sidebar offers itself as one.
+    pub moving_card: Option<Id>,
 }
 
 impl Default for Library {
@@ -141,6 +146,7 @@ impl Default for Library {
             rename_buffer: TextEdit::default(),
             moving: None,
             confirming_archive: None,
+            moving_card: None,
         }
     }
 }
@@ -164,6 +170,12 @@ impl Library {
             .cards
             .iter()
             .any(|card| !card.archived && card.trashed_at.is_none() && decks.contains(&card.deck))
+    }
+
+    /// Choose which deck the list shows, redrawing it for that deck.
+    pub fn select_deck(&mut self, deck: Option<Id>) {
+        self.selected_deck = deck;
+        self.refresh();
     }
 
     /// Open the name field on a deck, holding what the deck is called now.
@@ -341,7 +353,13 @@ fn deck_row<S: Host>(deck: &Deck, selected: bool, renaming: bool, moving: bool) 
                 .color(if selected { rune::Color::WHITE } else { t.text }),
         )
         .on_press(move |s: &mut S| {
-            // While a deck is being moved, every deck is a possible new parent.
+            // While a deck is being moved, every deck is a possible new parent; while a card is,
+            // every deck is a possible new home.
+            if let Some(card) = s.library().moving_card {
+                s.library_mut().moving_card = None;
+                s.move_card(card, id);
+                return;
+            }
             if let Some(moving) = s.library().moving {
                 s.library_mut().moving = None;
                 if moving != id {
@@ -349,9 +367,7 @@ fn deck_row<S: Host>(deck: &Deck, selected: bool, renaming: bool, moving: bool) 
                 }
                 return;
             }
-            let library = s.library_mut();
-            library.selected_deck = Some(id);
-            library.refresh();
+            s.library_mut().select_deck(Some(id));
         })
 }
 
@@ -378,14 +394,16 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         })
         .child(text("All cards").font(type_::BODY).color(t.text))
         .on_press(|s: &mut S| {
+            if s.library().moving_card.is_some() {
+                s.library_mut().moving_card = None;
+                return;
+            }
             if let Some(moving) = s.library().moving {
                 s.library_mut().moving = None;
                 s.move_deck(moving, None);
                 return;
             }
-            let library = s.library_mut();
-            library.selected_deck = None;
-            library.refresh();
+            s.library_mut().select_deck(None);
         });
     sidebar = sidebar.child(all);
     let renaming = library.renaming;
@@ -394,7 +412,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
             deck,
             library.selected_deck == Some(deck.id),
             renaming == Some(deck.id),
-            library.moving.is_some(),
+            library.moving.is_some() || library.moving_card.is_some(),
         ));
     }
     sidebar = sidebar.child(
@@ -517,6 +535,13 @@ fn card_row<S: Host>(card: &CardSummary, selected: bool, mode: CardMode) -> El {
         .child(text(note).font(type_::LABEL).color(t.text_secondary));
     if mode == CardMode::Active {
         line = line
+            .child(
+                Button::new("Move")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press(move |s: &mut S| s.library_mut().moving_card = Some(id))
+                    .build(&KIT)
+                    .key(format!("move-card-{id}")),
+            )
             .child(
                 Button::new("Edit")
                     .variant(ButtonVariant::Ghost)

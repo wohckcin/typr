@@ -979,3 +979,111 @@ fn the_library_offers_a_way_into_the_editor() {
     assert!(matches!(state.screen, Screen::Editor), "a new card opens");
     assert_eq!(state.editor.card, None, "with no id until it is saved");
 }
+
+#[test]
+fn a_card_moves_to_another_deck_and_keeps_its_schedule() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    let from = state.library.cards()[0].deck;
+
+    let graded = state
+        .store
+        .as_ref()
+        .expect("store")
+        .grade(1, "fwd", Grade::Remembered, None)
+        .expect("sent");
+    settle(&mut state, graded);
+    let made = state
+        .store
+        .as_ref()
+        .expect("store")
+        .create_deck(None, "French")
+        .expect("sent");
+    settle(&mut state, made);
+    let to = state
+        .library
+        .snapshot()
+        .decks
+        .iter()
+        .map(|deck| deck.id)
+        .find(|id| *id != from)
+        .expect("the new deck");
+
+    // The row offers the move, and the sidebar takes the card.
+    let mut preview = State {
+        library: Library::seeded(3),
+        ..State::default()
+    };
+    let mut runtime = rune::Runtime::new(
+        preview,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    assert!(
+        runtime.find("move-card-1").is_some(),
+        "a card can be moved to another deck"
+    );
+    preview = runtime.state;
+    drop(preview);
+
+    library::Host::move_card(&mut state, 1, to);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards()[0].deck == to {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(
+        state.library.cards()[0].deck,
+        to,
+        "the card lives in its new deck"
+    );
+
+    state.library.select_deck(Some(from));
+    assert!(
+        state.library.cards().is_empty(),
+        "and has left the old deck's list"
+    );
+    state.library.select_deck(Some(to));
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "while the new deck lists it"
+    );
+
+    // The schedule came with it: a graded card is still due.
+    let id = state
+        .store
+        .as_ref()
+        .expect("store")
+        .due_prompts(i64::MAX / 4, 0, 1)
+        .expect("sent");
+    let mut due = None;
+    for _ in 0..200 {
+        let answer = state
+            .store
+            .as_ref()
+            .expect("store")
+            .poll()
+            .into_iter()
+            .find(|event| event.id == id);
+        if let Some(event) = answer {
+            if let Ok(Outcome::Due(prompts)) = event.result {
+                due = Some(prompts.len());
+                break;
+            }
+            panic!("expected the due queue");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(due, Some(1), "and its due date survived the move");
+}

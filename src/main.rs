@@ -171,6 +171,16 @@ impl library::Host for State {
         self.screen = Screen::Editor;
     }
 
+    fn move_card(&mut self, card: Id, deck: Id) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.move_card(card, deck),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
+    }
+
     fn new_card(&mut self) {
         self.editor = Editor::new(None, String::new());
         self.screen = Screen::Editor;
