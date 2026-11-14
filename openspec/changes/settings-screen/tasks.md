@@ -22,7 +22,7 @@ Depends on `review-reverse` and `fsrs-scheduling` for the keys it exposes.
 
 ## 3. Close out
 
-- [ ] 3.1 A scene `settings` renders the screen with a library open; README documents each key and its default.
+- [x] 3.1 A scene `settings` renders the screen with a library open; README documents each key and its default.
   - **Verification**: `--list-scenes` lists it and its `--snap` is non-blank.
 - [ ] 3.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.

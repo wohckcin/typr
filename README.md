@@ -172,6 +172,11 @@ stays. Nothing is written on a refusal, so a library never holds a value that wo
 opening. A value edited into the file by hand is read through the same validators, so a library
 with a bad row reports the key and text instead of silently replacing it.
 
+The screen's Library group reports the file itself rather than a setting: the database path, the
+schema version the file is at, its size, the attachments folder and the log path, each with a
+control that shows it in the file manager, plus the import and export dialogs. When an older
+library is opened, the schema row says which version it was at before this open brought it forward.
+
 A scheduler change takes effect on the next grade; the other keys apply on the next frame.
 
 FSRS state lives beside the prompt, in two nullable columns: a prompt that has not been through
