@@ -23,4 +23,4 @@
 
 ## Workflow follow-up
 
-- [ ] Archive this change once every task is ticked and the gate is green.
+- [x] Archive this change once every task is ticked and the gate is green.
