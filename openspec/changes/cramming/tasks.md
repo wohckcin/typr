@@ -4,7 +4,7 @@ Depends on `custom-views` for `ViewSpec`.
 
 ## 1. Mode
 
-- [ ] 1.1 `Mode { New, Due, Cram }` on `Session`; `Session::new` keeps working for the two existing queues and a new `Session::cram(entries)` starts one.
+- [x] 1.1 `Mode { New, Due, Cram }` on `Session`; `Session::new` keeps working for the two existing queues and a new `Session::cram(entries)` starts one.
   - **Verification**: `cargo test -p typr-core --lib session` gains `a_cram_session_starts_with_every_entry_queued` and every existing queue test passes unchanged.
 - [ ] 1.2 `State::submit_grade` branches once: in cram it applies the grade to the session and sends nothing.
   - **Verification**: `a_cram_grade_writes_nothing` asserts the library's prompt rows and `review_log` are byte-identical before and after three answers, and `crates/typr-core/src/store/tests/review.rs` publishes no event.

@@ -1,4 +1,4 @@
-use super::{Entry, Session};
+use super::{Entry, Mode, Session};
 use crate::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
 use crate::store::{Grade, MaskRect};
@@ -516,5 +516,60 @@ fn a_mask_group_is_one_face() {
     assert_eq!(
         session.grade(Grade::Remembered),
         Some((4, Grade::Remembered))
+    );
+}
+
+#[test]
+fn a_cram_session_starts_with_every_entry_queued() {
+    let session = Session::cram(vec![
+        entry(1, &["front"]),
+        entry(2, &["front"]),
+        entry(3, &["front"]),
+    ]);
+
+    assert_eq!(session.mode(), Mode::Cram);
+    assert_eq!(
+        session.order(),
+        vec![1, 2, 3],
+        "no due date and no allowance stands between the filter and the queue"
+    );
+    assert_eq!(session.remaining(), 3);
+    assert_eq!(session.current().map(|entry| entry.card), Some(1));
+    assert!(!session.finished(), "nothing has been answered yet");
+    assert!(session.grades.is_empty());
+}
+
+#[test]
+fn one_card_three_passes() {
+    let mut session = Session::cram(vec![entry(1, &["front", "back"])]);
+
+    for (pass, grade) in [Grade::Forgot, Grade::Forgot, Grade::Remembered]
+        .into_iter()
+        .enumerate()
+    {
+        while session.hidden() > 0 {
+            assert!(session.reveal());
+        }
+        assert_eq!(
+            session.grade(grade),
+            Some((1, grade)),
+            "pass {} asks the same card again",
+            pass + 1
+        );
+        assert!(
+            session.answer_here(),
+            "a cram grade is taken here, not by the store"
+        );
+        assert_eq!(session.remaining(), usize::from(pass < 2));
+        assert_eq!(
+            session.finished(),
+            pass == 2,
+            "forgot comes round again; only the remembered pass ends the run"
+        );
+    }
+
+    assert_eq!(
+        session.grades,
+        vec![Grade::Forgot, Grade::Forgot, Grade::Remembered]
     );
 }

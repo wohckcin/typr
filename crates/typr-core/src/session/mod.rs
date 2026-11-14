@@ -162,10 +162,22 @@ impl Entry {
     }
 }
 
+/// What a session walks: the two queues the scheduler serves, or a cram run over a filter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    /// Cards nothing has scheduled yet, capped by the day's allowance.
+    New,
+    /// Prompts whose due date has come.
+    Due,
+    /// Exactly the cards a filter selects, whatever the schedule says.
+    Cram,
+}
+
 /// The cards this session is walking, in order.
 #[derive(Debug)]
 pub struct Session {
     pub queue: Queue,
+    mode: Mode,
     entries: Vec<Entry>,
     at: usize,
     revealed: usize,
@@ -195,8 +207,26 @@ impl Session {
     }
 
     pub fn new(queue: Queue, entries: Vec<Entry>) -> Session {
+        let mode = match queue {
+            Queue::New => Mode::New,
+            Queue::Due => Mode::Due,
+        };
+        Session::with_mode(mode, queue, entries)
+    }
+
+    /// A session over exactly these cards: no due date, no allowance, and no store to tell.
+    ///
+    /// A cram run answers the filter the library is showing, so the queue it would otherwise have
+    /// walked is kept on the due one. Nothing reads it: a cram grade is settled inside the
+    /// session, never acknowledged by the store.
+    pub fn cram(entries: Vec<Entry>) -> Session {
+        Session::with_mode(Mode::Cram, Queue::Due, entries)
+    }
+
+    fn with_mode(mode: Mode, queue: Queue, entries: Vec<Entry>) -> Session {
         let mut session = Session {
             queue,
+            mode,
             entries,
             at: 0,
             revealed: 0,
@@ -210,6 +240,11 @@ impl Session {
         };
         session.show_first_side();
         session
+    }
+
+    /// Which queue this session walks, or that it walks a filter instead.
+    pub fn mode(&self) -> Mode {
+        self.mode
     }
 
     /// A card opens on its first side: the reader is never staring at an empty frame wondering
@@ -353,6 +388,20 @@ impl Session {
         self.pending = None;
     }
 
+    /// The grade has been taken inside the session, for a run that writes nothing: a cram answer
+    /// has no store to wait for, so it is settled here and now. Answers whether there was one.
+    pub fn answer_here(&mut self) -> bool {
+        if self.mode != Mode::Cram {
+            return false;
+        }
+        let Some((card, grade)) = self.pending.take() else {
+            return false;
+        };
+        self.grades.push(grade);
+        self.cram_answer(card, grade);
+        true
+    }
+
     /// The store has answered `id`; the session can move on.
     pub fn acknowledge(&mut self, id: u64, now_ms: i64) -> bool {
         let Some((awaiting, card, grade)) = self.awaiting else {
@@ -363,6 +412,12 @@ impl Session {
         }
         self.awaiting = None;
         self.grades.push(grade);
+        if self.mode == Mode::Cram {
+            // The mode's rule, not the transport's: a cram session never sends a grade, but a
+            // grade that did come back must still move the card the cram way.
+            self.cram_answer(card, grade);
+            return true;
+        }
         // A card that arrived with a schedule behind it keeps that schedule: it waits out its
         // relearning step instead of being handed straight back as if it were new.
         let queue = if self.scheduled.contains(&card) {
@@ -373,15 +428,7 @@ impl Session {
         match (queue, grade) {
             // A forgotten card is not answered: one leaves the queue for later, the other comes
             // straight back, and neither counts as done.
-            (Queue::New, Grade::Forgot) => {
-                if let Some(entry) = self.take(card) {
-                    let empty = self.current().is_none();
-                    self.entries.push(entry);
-                    if empty {
-                        self.show_first_side();
-                    }
-                }
-            }
+            (Queue::New, Grade::Forgot) => self.requeue(card),
             (Queue::Due, Grade::Forgot) => {
                 if let Some(entry) = self.take(card) {
                     self.waiting.push((now_ms + LEARNING_STEP_MS, entry));
@@ -390,6 +437,26 @@ impl Session {
             _ => self.answer(card),
         }
         true
+    }
+
+    /// A cram answer moves the card within the session and nowhere else: remembered is done,
+    /// forgot comes round again before the run can finish.
+    fn cram_answer(&mut self, card: Id, grade: Grade) {
+        match grade {
+            Grade::Forgot => self.requeue(card),
+            Grade::Remembered => self.answer(card),
+        }
+    }
+
+    /// Put a card back at the end of the queue, so this run asks it again.
+    fn requeue(&mut self, card: Id) {
+        if let Some(entry) = self.take(card) {
+            let empty = self.current().is_none();
+            self.entries.push(entry);
+            if empty {
+                self.show_first_side();
+            }
+        }
     }
 
     /// Record that `card` is answered, and step over it if the cursor is on it.
