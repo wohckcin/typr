@@ -1621,3 +1621,97 @@ fn a_cram_session_with_nothing_selected_does_not_open() {
         state.failure
     );
 }
+
+#[test]
+fn cramming_a_tag_with_nothing_due_visits_exactly_its_cards() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let db = typr_core::store::Db::open(&path).expect("open");
+    db.apply(
+        &typr_core::store::Command::SetSetting {
+            key: "new_per_day".to_string(),
+            value: "0".to_string(),
+        },
+        0,
+    )
+    .expect("the cap to none");
+    let deck = match db
+        .apply(
+            &typr_core::store::Command::CreateDeck {
+                parent: None,
+                name: "Spanish".to_string(),
+            },
+            0,
+        )
+        .expect("deck")
+    {
+        typr_core::store::Outcome::Deck(id) => id,
+        other => panic!("creating a deck: {other:?}"),
+    };
+    let card = |markdown: &str| match db
+        .apply(
+            &typr_core::store::Command::CreateCard {
+                deck,
+                markdown: markdown.to_string(),
+            },
+            0,
+        )
+        .expect("card")
+    {
+        typr_core::store::Outcome::Card(id) => id,
+        other => panic!("creating a card: {other:?}"),
+    };
+    let perro = card("perro\n---\ndog");
+    let gato = card("gato\n---\ncat");
+    let sol = card("sol\n---\nsun");
+    for tagged in [perro, gato] {
+        db.apply(
+            &typr_core::store::Command::SetTags {
+                card: tagged,
+                tags: vec!["exam".to_string()],
+            },
+            0,
+        )
+        .expect("tag");
+    }
+    // Neither queue would start: nothing is due, and the cap holds every new card back.
+    let now = typr_core::clock::SystemClock.now_ms();
+    assert!(
+        db.due_prompts(now, 0, 1, None)
+            .expect("due queue")
+            .is_empty(),
+        "nothing is due"
+    );
+    assert!(
+        db.new_prompts(now, 0, 1, None)
+            .expect("new queue")
+            .is_empty(),
+        "the cap holds the fresh cards back"
+    );
+
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(db, Box::new(typr_core::clock::SystemClock), waker).expect("spawn");
+    let mut tx = Tx::default();
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    state.library.tag = Some("exam".to_string());
+    refresh_library(&mut state);
+    assert_eq!(state.library.cards().len(), 2, "the tag narrows the list");
+
+    assert!(on_key(&mut state, &letter_press("x"), &mut tx));
+    wait_for(&mut state, "the cram session", |state| {
+        matches!(state.screen, Screen::Session)
+    });
+
+    assert_eq!(state.session.mode(), Mode::Cram, "the run knows its mode");
+    let mut walked = state.session.order();
+    walked.sort_unstable();
+    let mut expected = vec![perro, gato];
+    expected.sort_unstable();
+    assert_eq!(walked, expected, "it walks the tagged cards and no other");
+    assert_ne!(walked, vec![sol], "the untagged card stays out");
+    assert!(state.session.grades.is_empty(), "nothing is answered yet");
+}

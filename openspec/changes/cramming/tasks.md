@@ -18,7 +18,7 @@ Depends on `custom-views` for `ViewSpec`.
 
 ## 3. Screen
 
-- [ ] 3.1 The library offers "Cram" beside the two queues, using the current filter; an empty filter refuses with a message.
+- [x] 3.1 The library offers "Cram" beside the two queues, using the current filter; an empty filter refuses with a message.
   - **Verification**: `cramming_a_tag_with_nothing_due_visits_exactly_its_cards` drives the key path and reads the rendered card.
 - [ ] 3.2 The session screen names the mode and says the answers are not scheduled; the summary reports the count and offers "Save as view".
   - **Verification**: `a_cram_review_says_nothing_is_scheduled` and `saving_a_cram_session_keeps_its_filter`.
