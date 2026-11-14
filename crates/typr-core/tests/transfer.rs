@@ -932,3 +932,47 @@ fn markdown_round_trip_reproduces_prompts() {
         prompts_before
     );
 }
+
+#[test]
+fn two_exports_to_the_same_new_path_leave_exactly_one_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let mut db = open(&path);
+    fixture(&mut db);
+    let cards = db.snapshot().expect("the library").cards.len();
+    let target = dir.path().join("racing.typr");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let runners: Vec<_> = (0..2)
+        .map(|_| {
+            let (path, target, barrier) = (path.clone(), target.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                transfer::export_library(&path, &target)
+            })
+        })
+        .collect();
+    let results: Vec<_> = runners
+        .into_iter()
+        .map(|runner| runner.join().expect("export thread"))
+        .collect();
+    let errors: Vec<&StoreError> = results
+        .iter()
+        .filter_map(|result| result.as_ref().err())
+        .collect();
+    assert_eq!(
+        results.iter().filter(|result| result.is_ok()).count(),
+        1,
+        "one export takes the name: {results:?}"
+    );
+    assert_eq!(errors.len(), 1, "the other export fails: {results:?}");
+    match errors[0] {
+        StoreError::Exists { path } => assert_eq!(path, &target, "the loser names the file"),
+        other => panic!("the loser is refused, not truncated: {other:?}"),
+    }
+    let exported = open(&target);
+    assert_eq!(
+        exported.snapshot().expect("the export").cards.len(),
+        cards,
+        "the winner wrote the whole library"
+    );
+}

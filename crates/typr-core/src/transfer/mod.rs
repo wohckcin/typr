@@ -15,6 +15,9 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::store::StoreError;
 
+/// Distinguishes the temporary names of exports racing in one process.
+static NEXT_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 mod csv;
 mod markdown;
 pub mod mochi;
@@ -43,6 +46,28 @@ pub fn export_library(db_path: &Path, target: &Path) -> Result<(), StoreError> {
             path: target.to_path_buf(),
         });
     }
+    let invalid = || StoreError::Write {
+        path: target.to_path_buf(),
+        source: std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "the target path is not valid UTF-8",
+        ),
+    };
+    let parent = target
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = target.file_name().ok_or_else(invalid)?;
+    // `VACUUM INTO` needs a name that does not exist yet, so each export writes its own hidden
+    // neighbour and publishes it with a hard link. The link is the check and the write in one
+    // step: two exports racing to the same new path both vacuum, but only one can take the name.
+    let temp = parent.join(format!(
+        ".{}.{}.{}.tmp",
+        name.to_string_lossy(),
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    ));
+    let text = temp.to_str().ok_or_else(invalid)?;
     let source = Connection::open_with_flags(
         db_path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -51,20 +76,27 @@ pub fn export_library(db_path: &Path, target: &Path) -> Result<(), StoreError> {
         path: db_path.to_path_buf(),
         source: error,
     })?;
-    let text = target.to_str().ok_or_else(|| StoreError::Write {
-        path: target.to_path_buf(),
-        source: std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "the target path is not valid UTF-8",
-        ),
-    })?;
-    source
-        .execute("VACUUM INTO ?1", [text])
-        .map_err(|error| StoreError::Export {
+    if let Err(error) = source.execute("VACUUM INTO ?1", [text]) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(StoreError::Export {
             path: target.to_path_buf(),
             source: error,
-        })?;
-    Ok(())
+        });
+    }
+    let published = match std::fs::hard_link(&temp, target) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(StoreError::Exists {
+                path: target.to_path_buf(),
+            })
+        }
+        Err(error) => Err(StoreError::Write {
+            path: target.to_path_buf(),
+            source: error,
+        }),
+    };
+    let _ = std::fs::remove_file(&temp);
+    published
 }
 
 /// Copy `source` into `root` under a name that is not taken, and answer the reference to write into
