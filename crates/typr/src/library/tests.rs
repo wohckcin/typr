@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use super::{GAP, Library, WRAP_BELOW, columns_for, deck_tree, tile_width, view};
-use typr_core::store::{CardMode, Deck};
+use typr_core::store::{CardMode, Deck, Id};
 
 #[test]
 fn two_tiles_fit_at_482_points() {
@@ -433,7 +433,7 @@ fn the_sidebar_lists_saved_views_and_selects_one() {
 }
 
 #[test]
-fn the_sort_control_offers_every_order_and_the_shuffle_changes_none() {
+fn the_sort_control_offers_every_order() {
     let library = Library::seeded(10);
     let mut runtime = rune::Runtime::new(
         library,
@@ -497,5 +497,134 @@ fn the_sort_control_offers_every_order_and_the_shuffle_changes_none() {
     assert!(
         runtime.state.snapshot().views.is_empty(),
         "no shuffle was written anywhere"
+    );
+}
+
+#[test]
+fn the_list_is_ordered_by_the_chosen_key() {
+    use typr_core::store::{Sort, SortDir};
+
+    let mut library = Library::seeded(3);
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        let edited = [3, 2, 1];
+        let first = ["cabra", "abeja", "burro"];
+        let due = [None, Some(10), Some(5)];
+        for (index, card) in snapshot.cards.iter_mut().enumerate() {
+            card.updated_at = edited[index];
+            card.preview = first[index].to_string();
+            card.due_at = due[index];
+            card.prompts = u32::from(due[index].is_some());
+        }
+    }
+    let ids = |library: &Library| {
+        library
+            .cards()
+            .iter()
+            .map(|card| card.id)
+            .collect::<Vec<_>>()
+    };
+
+    library.refresh();
+    assert_eq!(
+        ids(&library),
+        vec![1, 2, 3],
+        "an untouched list opens newest first, because editing is the default order"
+    );
+
+    library.set_sort(Sort::FirstSide);
+    assert_eq!(library.dir, SortDir::Ascending, "a name reads A first");
+    assert_eq!(ids(&library), vec![2, 3, 1], "abeja, burro, cabra");
+
+    library.set_sort(Sort::DueDate);
+    assert_eq!(
+        ids(&library),
+        vec![3, 2, 1],
+        "the soonest due first, and the card with nothing scheduled last"
+    );
+
+    library.set_sort(Sort::Reviews);
+    assert_eq!(
+        library.dir,
+        SortDir::Descending,
+        "a count reads largest first"
+    );
+    assert_eq!(
+        ids(&library),
+        vec![1, 2, 3],
+        "every review count is equal, so the tie keeps the snapshot's order"
+    );
+}
+
+#[test]
+fn a_shuffle_is_not_saved_with_the_view() {
+    let mut library = Library::seeded(8);
+    let spec = typr_core::store::ViewSpec {
+        sort: typr_core::store::Sort::FirstSide,
+        ..typr_core::store::ViewSpec::default()
+    };
+    std::sync::Arc::make_mut(&mut library.snapshot)
+        .views
+        .push(typr_core::store::SavedView {
+            id: 4,
+            name: "A-Z".to_string(),
+            spec,
+        });
+    library.select_view(4);
+    let saved = library.cards().iter().map(|c| c.id).collect::<Vec<_>>();
+
+    library.shuffle_now();
+    assert!(library.shuffled());
+
+    library.select_view(4);
+    assert!(
+        !library.shuffled(),
+        "coming back to a view drops the shuffle"
+    );
+    assert_eq!(
+        library.cards().iter().map(|c| c.id).collect::<Vec<_>>(),
+        saved,
+        "the view's own order is what the list shows"
+    );
+}
+
+#[test]
+fn the_pinned_only_control_filters_the_list() {
+    let mut library = Library::seeded(3);
+    library.pin(1);
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (1200.0, 700.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    assert_eq!(
+        runtime.state.cards().len(),
+        3,
+        "every card before the press"
+    );
+
+    let (x, y) = runtime
+        .find("pinned-only")
+        .expect("the pinned-only control");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+
+    assert!(runtime.state.pinned_only, "the list asks for pinned cards");
+    let shown: Vec<Id> = runtime.state.cards().iter().map(|card| card.id).collect();
+    assert_eq!(shown, vec![1], "only the pinned card is left");
+
+    let (x, y) = runtime
+        .find("pinned-only")
+        .expect("the pinned-only control");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+    assert_eq!(
+        runtime.state.cards().len(),
+        3,
+        "pressing it again shows all"
     );
 }

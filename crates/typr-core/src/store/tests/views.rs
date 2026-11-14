@@ -216,3 +216,107 @@ fn a_view_whose_deck_is_gone_falls_back_to_every_card() {
         "a scope no deck carries shows the library, not an empty list"
     );
 }
+
+#[test]
+fn a_pin_survives_the_trash() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let id = card(&mut db, deck, "gato\n---\ncat");
+    schedule(&mut db, id, NOON);
+    db.apply(
+        &Command::SetPinned {
+            card: id,
+            pinned: true,
+        },
+        NOON,
+    )
+    .expect("pin");
+    let reviews: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT COUNT(*) FROM review_log WHERE card_id = ?1",
+            params![id],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("count");
+
+    db.apply(&Command::TrashCard { id }, NOON).expect("trash");
+    let trashed = db.snapshot().expect("snapshot");
+    assert!(
+        trashed
+            .cards
+            .iter()
+            .any(|card| card.id == id && card.pinned),
+        "the pin is still on the trashed card"
+    );
+
+    db.apply(&Command::RestoreCard { id }, NOON)
+        .expect("restore");
+    let restored = db
+        .snapshot()
+        .expect("snapshot")
+        .cards
+        .into_iter()
+        .find(|card| card.id == id)
+        .expect("the card");
+    assert!(restored.pinned, "and after the restore");
+    assert_eq!(
+        db.connection_for_test()
+            .query_row(
+                "SELECT COUNT(*) FROM review_log WHERE card_id = ?1",
+                params![id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count"),
+        reviews,
+        "the history is the same on both sides of the trash"
+    );
+}
+
+#[test]
+fn a_pinned_card_is_listed_without_a_deck() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let top = deck(&mut db, "Spanish");
+    let nested = match db
+        .apply(
+            &Command::CreateDeck {
+                parent: Some(top),
+                name: "Verbs".to_string(),
+            },
+            NOON,
+        )
+        .expect("nested deck")
+    {
+        Outcome::Deck(id) => id,
+        other => panic!("creating a deck: {other:?}"),
+    };
+    let neighbour = card(&mut db, top, "gato\n---\ncat");
+    let buried = card(&mut db, nested, "hablar\n---\nto speak");
+    db.apply(
+        &Command::SetPinned {
+            card: buried,
+            pinned: true,
+        },
+        NOON,
+    )
+    .expect("pin");
+
+    let spec = ViewSpec {
+        pinned_only: true,
+        ..ViewSpec::default()
+    };
+    let snapshot = db.snapshot().expect("snapshot");
+    let listed: Vec<Id> = snapshot
+        .cards_matching(&spec)
+        .into_iter()
+        .map(|card| card.id)
+        .collect();
+    assert_eq!(
+        listed,
+        vec![buried],
+        "the pinned card in the nested deck is listed and its neighbour is not"
+    );
+    assert!(!listed.contains(&neighbour));
+}

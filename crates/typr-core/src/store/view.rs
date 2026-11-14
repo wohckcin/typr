@@ -31,6 +31,15 @@ impl Sort {
         Sort::Reviews,
     ];
 
+    /// The direction this order runs in when it is chosen: an order of recency reads newest first,
+    /// while a name or a due date reads oldest first.
+    pub fn natural(self) -> SortDir {
+        match self {
+            Sort::LastEdited | Sort::Created | Sort::Reviews => SortDir::Descending,
+            Sort::FirstSide | Sort::DueDate => SortDir::Ascending,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Sort::LastEdited => "edited",
@@ -58,34 +67,54 @@ impl Sort {
         Sort::ALL.into_iter().find(|sort| sort.as_str() == text)
     }
 
-    /// The cards in this order. A stable sort, so cards that compare equal keep the order the
-    /// snapshot gave them, and the result is a new vector rather than a mutation of the snapshot.
+    /// The cards in this order.
+    ///
+    /// A card with nothing scheduled comes last in both directions, because it is neither early
+    /// nor late. Otherwise the direction applies to the order's own key alone: two cards whose
+    /// keys are equal keep the order the snapshot gave them rather than flipping with the arrow.
     pub fn order<'a>(&self, cards: Vec<&'a CardSummary>, dir: SortDir) -> Vec<&'a CardSummary> {
-        let mut cards = cards;
-        // A card with nothing scheduled is not early or late: it comes last in both directions, so
-        // the sort is not of the whole list but of its dated part.
-        if *self == Sort::DueDate {
-            let (mut dated, undated): (Vec<_>, Vec<_>) =
-                cards.into_iter().partition(|card| card.due_at.is_some());
-            dated.sort_by_cached_key(|card| card.due_at.unwrap_or_default());
-            if dir == SortDir::Descending {
-                dated.reverse();
+        // A card with nothing scheduled is not early or late: it comes last in both directions,
+        // so the sort is not of the whole list but of its dated part.
+        let mut undated = Vec::new();
+        let mut keyed: Vec<(Key, &'a CardSummary)> = Vec::with_capacity(cards.len());
+        for card in cards {
+            match self.key(card) {
+                Some(key) => keyed.push((key, card)),
+                None => undated.push(card),
             }
-            dated.extend(undated);
-            return dated;
         }
-        match self {
-            Sort::LastEdited => cards.sort_by_cached_key(|card| card.updated_at),
-            Sort::Created => cards.sort_by_cached_key(|card| card.created_at),
-            Sort::FirstSide => cards.sort_by_cached_key(|card| folded(&card.preview)),
-            Sort::Reviews => cards.sort_by_cached_key(|card| card.reviews),
-            Sort::DueDate => unreachable!("handled above, where the undated cards are moved"),
-        }
-        if dir == SortDir::Descending {
-            cards.reverse();
-        }
-        cards
+        keyed.sort_by(|(left_key, left), (right_key, right)| {
+            let order = left_key.cmp(right_key);
+            let order = if dir == SortDir::Descending {
+                order.reverse()
+            } else {
+                order
+            };
+            order.then_with(|| left.id.cmp(&right.id))
+        });
+        let mut ordered: Vec<&'a CardSummary> = keyed.into_iter().map(|(_, card)| card).collect();
+        ordered.extend(undated);
+        ordered
     }
+
+    /// The value an order ranks a card by, or `None` when the card has nothing to rank.
+    fn key(&self, card: &CardSummary) -> Option<Key> {
+        match self {
+            Sort::LastEdited => Some(Key::Int(card.updated_at)),
+            Sort::Created => Some(Key::Int(card.created_at)),
+            Sort::FirstSide => Some(Key::Text(folded(&card.preview))),
+            Sort::Reviews => Some(Key::Count(card.reviews)),
+            Sort::DueDate => card.due_at.map(Key::Int),
+        }
+    }
+}
+
+/// One card's place in an order.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Key {
+    Int(i64),
+    Count(u32),
+    Text(String),
 }
 
 /// Which way an order runs.
@@ -135,7 +164,8 @@ pub fn shuffled(cards: Vec<&CardSummary>, seed: u64) -> Vec<&CardSummary> {
         state
     };
     for index in (1..cards.len()).rev() {
-        let swap = (next() % (index as u64 + 1)) as usize;
+        // The modulus is below the card count, so the conversion cannot lose anything.
+        let swap = usize::try_from(next() % (index as u64 + 1)).unwrap_or(index);
         cards.swap(index, swap);
     }
     cards

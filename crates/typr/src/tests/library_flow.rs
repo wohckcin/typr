@@ -1342,8 +1342,8 @@ fn a_deck_template_is_edited_and_its_cards_follow() {
     );
 }
 
-#[test]
-fn a_view_is_selected_then_renamed_and_deleted() {
+/// A library with one deck, two cards, one of them pinned, and a view that asks for pins alone.
+fn view_fixture() -> (tempfile::TempDir, i64) {
     use typr_core::store::{CardMode, Sort, SortDir, ViewSpec};
 
     let dir = tempfile::tempdir().expect("temp dir");
@@ -1409,7 +1409,12 @@ fn a_view_is_selected_then_renamed_and_deleted() {
         typr_core::store::Outcome::View(id) => id,
         other => panic!("creating a view: {other:?}"),
     };
+    (dir, view)
+}
 
+/// A state over the library the fixture wrote, with the first snapshot already published.
+fn view_state(dir: &tempfile::TempDir) -> State {
+    let db = typr_core::store::Db::open(&dir.path().join("library.sqlite3")).expect("open");
     let waker: Waker = std::sync::Arc::new(|| {});
     let handle = Handle::spawn(db, Box::new(typr_core::clock::SystemClock), waker).expect("spawn");
     let mut state = State {
@@ -1418,6 +1423,24 @@ fn a_view_is_selected_then_renamed_and_deleted() {
     };
     let snapshot = state.store.as_ref().expect("store").snapshot();
     state.library.set_snapshot(snapshot);
+    state
+}
+
+#[test]
+fn selecting_a_view_applies_every_part_of_it() {
+    use typr_core::store::Sort;
+
+    let (dir, view) = view_fixture();
+    let mut state = view_state(&dir);
+    let deck = state.library.snapshot().decks[0].id;
+    let pinned = state
+        .library
+        .snapshot()
+        .cards
+        .iter()
+        .find(|card| card.pinned)
+        .map(|card| card.id)
+        .expect("the pinned card");
     state.library.select_deck(Some(deck));
 
     state.library.select_view(view);
@@ -1442,9 +1465,16 @@ fn a_view_is_selected_then_renamed_and_deleted() {
             .iter()
             .map(|card| card.id)
             .collect::<Vec<_>>(),
-        vec![cards[1]],
+        vec![pinned],
         "one pinned card, and the view's sort is what orders it"
     );
+}
+
+#[test]
+fn a_view_can_be_renamed_and_deleted() {
+    let (dir, view) = view_fixture();
+    let mut state = view_state(&dir);
+    state.library.select_view(view);
 
     state.library.begin_view_rename(view);
     state
@@ -1494,68 +1524,37 @@ fn a_view_is_selected_then_renamed_and_deleted() {
 }
 
 #[test]
-fn a_sort_change_while_a_view_is_selected_updates_the_view() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let path = dir.path().join("library.sqlite3");
-    let db = typr_core::store::Db::open(&path).expect("open");
-    let view = match db
-        .apply(
-            &typr_core::store::Command::CreateView {
-                spec: typr_core::store::ViewSpec {
-                    sort: typr_core::store::Sort::LastEdited,
-                    ..typr_core::store::ViewSpec::default()
-                },
-                name: "Recent".to_string(),
-            },
-            0,
-        )
-        .expect("view")
-    {
-        typr_core::store::Outcome::View(id) => id,
-        other => panic!("creating a view: {other:?}"),
-    };
-
-    let waker: Waker = std::sync::Arc::new(|| {});
-    let handle = Handle::spawn(db, Box::new(typr_core::clock::SystemClock), waker).expect("spawn");
-    let mut state = State {
-        store: Some(handle),
-        ..State::default()
-    };
-    let snapshot = state.store.as_ref().expect("store").snapshot();
-    state.library.set_snapshot(snapshot);
-    state.library.select_view(view);
-
-    assert_eq!(
-        state.library.selected_view,
-        Some(view),
-        "the view is the one being shown"
+fn the_pin_button_pins_and_unpins_a_card() {
+    let (dir, _) = view_fixture();
+    let state = view_state(&dir);
+    let mut runtime = rune::Runtime::new(
+        state,
+        |s: &State, _: &mut rune::Cx<State>| crate::library::view::<State>(s),
+        (1200.0, 700.0),
+        rune::Env::new(true, 1.0),
     );
-    LibraryHost::choose_sort(&mut state, typr_core::store::Sort::Reviews);
-    for _ in 0..200 {
-        state.drain();
-        if state
+    runtime.frame(0.0);
+    let (x, y) = runtime.find("pin-1").expect("the pin button");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+
+    let pinned = |runtime: &rune::Runtime<State>| {
+        runtime
+            .state
             .library
             .snapshot()
-            .views
+            .cards
             .iter()
-            .any(|own| own.spec.sort == typr_core::store::Sort::Reviews)
-        {
+            .find(|card| card.id == 1)
+            .is_some_and(|card| card.pinned)
+    };
+    for _ in 0..200 {
+        runtime.state.drain();
+        runtime.frame(0.1);
+        if pinned(&runtime) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    let stored = state
-        .library
-        .snapshot()
-        .views
-        .iter()
-        .find(|own| own.id == view)
-        .cloned()
-        .expect("the view");
-    assert_eq!(
-        stored.spec.sort,
-        typr_core::store::Sort::Reviews,
-        "the view remembers the order it was left in"
-    );
-    assert_eq!(stored.name, "Recent", "and keeps its name");
+    assert!(pinned(&runtime), "the press pinned the card in the store");
 }

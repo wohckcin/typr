@@ -177,6 +177,30 @@ pub trait Host: 'static {
         self.remember_order();
     }
 
+    /// Show only pinned cards, and remember that in the view being shown if there is one.
+    fn toggle_pinned_only(&mut self) {
+        self.library_mut().flip_pinned_only();
+        self.remember_pinned();
+    }
+
+    fn remember_pinned(&mut self) {
+        let Some(id) = self.library().selected_view else {
+            return;
+        };
+        let Some(mut spec) = self
+            .library()
+            .snapshot()
+            .views
+            .iter()
+            .find(|view| view.id == id)
+            .map(|view| view.spec.clone())
+        else {
+            return;
+        };
+        spec.pinned_only = self.library().pinned_only;
+        self.update_view(id, &spec);
+    }
+
     fn remember_order(&mut self) {
         let Some(id) = self.library().selected_view else {
             return;
@@ -334,7 +358,7 @@ impl Default for Library {
             query: TextEdit::default(),
             tag: None,
             sort: Sort::default(),
-            dir: SortDir::default(),
+            dir: Sort::default().natural(),
             shuffle: None,
             shuffles: 0,
             pinned_only: false,
@@ -569,6 +593,8 @@ impl Library {
     /// Order the list.
     pub fn set_sort(&mut self, sort: Sort) {
         self.sort = sort;
+        // A chosen order runs the way it reads; the arrow beside it is the way to run it backwards.
+        self.dir = sort.natural();
         // A shuffle is a moment: choosing an order ends it.
         self.shuffle = None;
         self.refresh();
@@ -577,6 +603,12 @@ impl Library {
     /// Run the order backwards.
     pub fn flip_dir(&mut self) {
         self.dir = self.dir.flipped();
+        self.refresh();
+    }
+
+    /// Show only pinned cards, or stop doing so.
+    pub fn flip_pinned_only(&mut self) {
+        self.pinned_only = !self.pinned_only;
         self.refresh();
     }
 
@@ -616,6 +648,22 @@ impl Library {
     }
 
     /// A snapshot with `count` cards in one deck, for scenes and for the virtualised-list check.
+    /// Seed the sidebar with saved views, for scenes and tests.
+    pub fn seed_views(&mut self, views: Vec<SavedView>) {
+        let mut snapshot = (*self.snapshot).clone();
+        snapshot.views = views;
+        self.set_snapshot(std::sync::Arc::new(snapshot));
+    }
+
+    /// Mark a card as pinned in the seeded snapshot, for scenes and tests.
+    pub fn pin(&mut self, card: Id) {
+        let mut snapshot = (*self.snapshot).clone();
+        if let Some(found) = snapshot.cards.iter_mut().find(|found| found.id == card) {
+            found.pinned = true;
+        }
+        self.set_snapshot(std::sync::Arc::new(snapshot));
+    }
+
     pub fn seeded(count: usize) -> Library {
         let deck = Deck {
             id: 1,
@@ -1018,6 +1066,21 @@ fn views_section<S: Host>(s: &S) -> El {
     for view in library.views() {
         section = section.child(view_row::<S>(s, view));
     }
+    section = section.child(
+        text(if library.pinned_only {
+            "★ Pinned only"
+        } else {
+            "☆ Pinned only"
+        })
+        .key("pinned-only")
+        .font(type_::MONO_CAPTION)
+        .color(if library.pinned_only {
+            tok::accent(0, true)
+        } else {
+            t.text_secondary
+        })
+        .on_press(|s: &mut S| s.toggle_pinned_only()),
+    );
     if library.new_view || library.naming_view.is_some() {
         let saving = library.new_view;
         section = section.child(

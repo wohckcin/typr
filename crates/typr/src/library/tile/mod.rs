@@ -162,6 +162,24 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
         footer = footer.child(chip_row(card.tags.clone(), chip_space));
     }
     let library = s.library();
+    // A pinned card says so where its actions are, and the same control is how it is pinned and
+    // unpinned: one place, so the state cannot disagree with the way to change it.
+    footer = footer.child(
+        Button::new(if card.pinned { "\u{2605}" } else { "\u{2606}" })
+            .variant(ButtonVariant::Ghost)
+            .on_press(move |s: &mut S| {
+                let pinned = s
+                    .library()
+                    .snapshot()
+                    .cards
+                    .iter()
+                    .find(|own| own.id == id)
+                    .is_some_and(|own| own.pinned);
+                s.set_pinned(id, !pinned);
+            })
+            .build(&KIT)
+            .key(format!("pin-{id}")),
+    );
     footer = footer.child(
         Button::new("\u{22ef}")
             .variant(ButtonVariant::Ghost)
