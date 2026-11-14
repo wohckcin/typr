@@ -24,6 +24,9 @@ pub trait Host: 'static {
     /// Replace the tags on a card. A host with no store cannot, and says so by doing nothing.
     fn set_tags(&mut self, _card: Id, _tags: &[String]) {}
 
+    /// The buffer changed. A host that keeps a draft writes it down here.
+    fn note_typing(&mut self) {}
+
     /// Leave the editor, if the host has somewhere to go.
     fn close_editor(&mut self);
 
@@ -241,8 +244,18 @@ impl Editor {
         }
         self.refused = false;
         self.saved = self.buffer.text.clone();
+        self.saved_tags = self.tags.text.trim().to_string();
         self.settle();
         true
+    }
+
+    /// Put a draft back into a card that has nothing typed into it yet.
+    pub fn restore_draft(&mut self, text: &str) {
+        if text.is_empty() || !self.buffer.text.trim().is_empty() {
+            return;
+        }
+        self.buffer.replace_text(text.to_string());
+        self.settle();
     }
 
     /// Ask before closing an unsaved card; a clean one closes straight away.
@@ -304,7 +317,10 @@ fn source_pane<S: Host>(s: &S) -> El {
             t.text_secondary,
         )
         .on_edit(|s: &mut S| &mut s.editor_mut().buffer)
-        .on_input_change(|s: &mut S, _| s.editor_mut().settle())
+        .on_input_change(|s: &mut S, _| {
+            s.editor_mut().settle();
+            s.note_typing();
+        })
 }
 
 fn preview_pane<S: Host>(s: &S) -> El {
@@ -391,6 +407,7 @@ fn tag_field<S: Host>(s: &S) -> El {
         .single_line()
         .placeholder("tags, comma separated", t.text_secondary)
         .on_edit(|s: &mut S| &mut s.editor_mut().tags)
+        .on_input_change(|s: &mut S, _| s.note_typing())
         .on_submit(|s: &mut S, _| {
             let Some(card) = s.editor().card else {
                 return;

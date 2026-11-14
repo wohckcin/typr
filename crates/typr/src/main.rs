@@ -80,6 +80,12 @@ struct State {
     due_request: Option<u64>,
     /// The new-queue request in flight.
     new_request: Option<u64>,
+    /// Tags typed on a card that does not exist yet; they go on as soon as it has an id.
+    pending_tags: Vec<String>,
+    /// The draft last written down, so typing one key does not write it again.
+    last_draft: String,
+    /// The draft request in flight, whose answer fills a new card.
+    draft_request: Option<u64>,
     /// The mid-session due request in flight, whose answer joins the running queue.
     arrivals: Option<u64>,
     /// The deck the running session was opened for, so arrivals stay inside it.
@@ -112,6 +118,9 @@ impl Default for State {
             wanted: None,
             due_request: None,
             new_request: None,
+            pending_tags: Vec::new(),
+            last_draft: String::new(),
+            draft_request: None,
             arrivals: None,
             session_deck: None,
             history_request: None,
@@ -142,6 +151,24 @@ impl editor::Host for State {
         self.screen = Screen::Library;
     }
 
+    fn note_typing(&mut self) {
+        let text = self.editor.buffer.text.clone();
+        if text == self.last_draft {
+            return;
+        }
+        let key = self.editor.draft_key();
+        let sent = match &self.store {
+            Some(store) if text.trim().is_empty() => store.set_draft(key, None),
+            Some(store) => store.set_draft(key, Some(&text)),
+            None => return,
+        };
+        if let Err(error) = sent {
+            self.fail(&error);
+            return;
+        }
+        self.last_draft = text;
+    }
+
     fn leave_editor(&mut self) {
         if self.editor.request_leave() == editor::Leaving::Leave {
             self.close_editor();
@@ -163,6 +190,27 @@ impl editor::Host for State {
 /// shuffle may move it. A prompt that is not due yet counts as zero.
 fn overdue_days(now_ms: i64, due_at_ms: i64, offset_ms: i64) -> i64 {
     (day::study_day(now_ms, offset_ms) - day::study_day(due_at_ms, offset_ms)).max(0)
+}
+
+/// Remember the id of a command that went out, answering whether it did.
+fn remember_sent(
+    in_flight: &mut HashMap<u64, (&'static str, Instant)>,
+    request: &mut Option<u64>,
+    failure: &mut Option<String>,
+    sent: Result<u64, StoreError>,
+) -> bool {
+    match sent {
+        Ok(id) => {
+            in_flight.insert(id, ("create_card", Instant::now()));
+            *request = Some(id);
+            true
+        }
+        Err(error) => {
+            log::warn!(target: "typr", "{}", logging::describe(&error));
+            *failure = Some(error.to_string());
+            false
+        }
+    }
 }
 
 /// Remember the id of a command that went out, and say why when one could not.
@@ -275,6 +323,8 @@ impl library::Host for State {
         };
         self.editor = Editor::new(Some(card), summary.markdown.clone());
         self.editor.load_tags(&summary.tags);
+        self.last_draft = summary.markdown.clone();
+        self.pending_tags.clear();
         self.screen = Screen::Editor;
     }
 
@@ -288,7 +338,21 @@ impl library::Host for State {
 
     fn new_card(&mut self) {
         self.editor = Editor::new(None, String::new());
+        self.last_draft.clear();
+        self.pending_tags.clear();
         self.screen = Screen::Editor;
+        // A card that was typed and never saved is still waiting under the draft key of zero.
+        let sent = match &self.store {
+            Some(store) => store.draft(0),
+            None => return,
+        };
+        remember(
+            &mut self.sent,
+            "draft",
+            &mut self.draft_request,
+            &mut self.failure,
+            sent,
+        );
     }
 
     fn new_deck(&mut self) {
@@ -371,6 +435,10 @@ impl study::Host for State {
             return Err(StoreError::Closed);
         };
         let sent = store.grade(card, "fwd", grade, None);
+        // A grade is a command like any other: it is timed, so a slow one is written down.
+        if let Ok(id) = &sent {
+            self.sent.insert(*id, ("grade", Instant::now()));
+        }
         if let Err(error) = &sent {
             self.fail(error);
         }
@@ -451,43 +519,77 @@ impl State {
         }
     }
 
-    /// Write the editor's buffer to the library, and mark it saved once the command is sent.
+    /// Write the editor's buffer to the library, and mark it saved only once it was stored.
     fn persist(&mut self) -> bool {
         if !self.editor.saveable() {
             self.editor.refused = true;
             return false;
         }
         let text = self.editor.buffer.text.clone();
-        match (self.editor.card, self.store.as_ref()) {
+        let tags = self.editor.tag_list();
+        let stored = match (self.editor.card, &self.store) {
             (Some(card), Some(store)) => {
-                if let Err(error) = store.save_card(card, &text) {
-                    self.fail(&error);
-                }
-            }
-            (None, Some(store)) => match self.deck_for_new_card() {
-                Some(deck) => {
-                    let sent = store.create_card(deck, &text);
-                    remember(
-                        &mut self.sent,
-                        "create_card",
-                        &mut self.card_request,
-                        &mut self.failure,
-                        sent,
-                    );
-                }
-                None => {
-                    // A library with no deck yet: the first card brings one with it.
-                    self.pending_new_card = Some(text.clone());
-                    if let Err(error) = store.create_deck(None, "Library") {
+                // A card that exists takes its sides and its tags in one go, so a refused write
+                // leaves neither half applied.
+                let sent = store
+                    .save_card(card, &text)
+                    .and_then(|_| store.set_tags(card, &tags));
+                if let Err(error) = &sent {
+                    self.fail(error);
+                    false
+                } else {
+                    if let Err(error) = store.set_draft(card, None) {
                         self.fail(&error);
                     }
+                    true
                 }
-            },
+            }
+            (None, Some(store)) => {
+                if self.card_request.is_some() {
+                    self.say("The card is still being saved.".to_string());
+                    return false;
+                }
+                self.pending_tags = tags;
+                match self.deck_for_new_card() {
+                    Some(deck) => {
+                        let sent = store.create_card(deck, &text);
+                        remember_sent(
+                            &mut self.sent,
+                            &mut self.card_request,
+                            &mut self.failure,
+                            sent,
+                        )
+                    }
+                    None => {
+                        // A library with no deck yet: the first card brings one with it.
+                        self.pending_new_card = Some(text.clone());
+                        let name = self.free_deck_name();
+                        if let Err(error) = store.create_deck(None, &name) {
+                            self.fail(&error);
+                            self.pending_new_card = None;
+                            self.pending_tags.clear();
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                }
+            }
             (_, None) => {
                 self.say("The library is not open, so nothing was saved.".to_string());
                 return false;
             }
+        };
+        if !stored {
+            return false;
         }
+        // The draft stops being needed the moment the card is stored.
+        if let Some(store) = &self.store
+            && let Err(error) = store.set_draft(self.editor.draft_key(), None)
+        {
+            self.fail(&error);
+        }
+        self.last_draft.clear();
         self.editor.save()
     }
 
@@ -647,6 +749,23 @@ impl State {
                 Ok(Outcome::Card(id)) if self.card_request == Some(event.id) => {
                     self.card_request = None;
                     self.editor.card = Some(id);
+                    let tags = std::mem::take(&mut self.pending_tags);
+                    if !tags.is_empty() {
+                        let sent = match &self.store {
+                            Some(store) => store.set_tags(id, &tags),
+                            None => Err(StoreError::Closed),
+                        };
+                        if let Err(error) = sent {
+                            self.fail(&error);
+                        }
+                    }
+                }
+                Ok(Outcome::Draft(text)) if self.draft_request == Some(event.id) => {
+                    self.draft_request = None;
+                    if let Some(text) = text {
+                        self.editor.restore_draft(&text);
+                        self.last_draft = self.editor.buffer.text.clone();
+                    }
                 }
                 Ok(Outcome::Deck(id)) => {
                     if let Some(text) = self.pending_new_card.take()

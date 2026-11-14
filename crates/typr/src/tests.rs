@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use crate::*;
 use rune::{Key, KeyEvent, Mods};
+use typr::library::Host as LibraryHost;
 use typr_core::clock::{Clock, LEARNING_STEP_MS};
 use typr_core::store::Db;
 
@@ -1453,4 +1454,183 @@ fn a_prompt_that_falls_due_during_a_session_joins_it() {
         "the card that fell due mid-session joined the running queue"
     );
     assert!(!state.session.finished(), "and the session is still going");
+}
+
+/// Pump the app until `done` holds, refreshing the library each turn.
+fn wait_for(state: &mut State, what: &str, done: impl Fn(&State) -> bool) {
+    for _ in 0..300 {
+        let now = Clock::now_ms(&typr_core::clock::SystemClock);
+        let mut wake = None;
+        frame_step(state, now, &mut wake);
+        refresh_library(state);
+        if done(state) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("timed out waiting for {what}");
+}
+
+/// A library on disk holding one deck and one card, and a handle onto it.
+fn library_with_a_card(dir: &tempfile::TempDir) -> Handle {
+    library_with_one_card(dir)
+}
+
+#[test]
+fn a_save_the_library_refuses_leaves_the_card_dirty() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_a_card(&dir);
+    store.close();
+
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+    state.editor = crate::editor::Editor::new(Some(1), "front\n---\nback".to_string());
+    state
+        .editor
+        .buffer
+        .replace_text("front\n---\nchanged".to_string());
+
+    assert!(!state.persist(), "a refused save is not a save");
+    assert!(
+        state.editor.dirty(),
+        "the card still holds work the library never took"
+    );
+    assert!(state.failure.is_some(), "and the reader is told why");
+}
+
+#[test]
+fn a_second_save_of_a_new_card_does_not_make_a_second_card() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_a_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+
+    LibraryHost::new_card(&mut state);
+    wait_for(&mut state, "the draft answer", |s| {
+        s.draft_request.is_none()
+    });
+    state
+        .editor
+        .buffer
+        .replace_text("one\n---\ntwo".to_string());
+
+    assert!(state.persist(), "the first save goes out");
+    assert!(
+        !state.persist(),
+        "a second save while the first is in flight is refused"
+    );
+
+    wait_for(&mut state, "the new card to be adopted", |s| {
+        s.editor.card.is_some()
+    });
+    wait_for(&mut state, "the library to hold both cards", |s| {
+        s.library.cards().len() == 2
+    });
+    assert_eq!(
+        state.library.cards().len(),
+        2,
+        "one card from the fixture and one new card, not three"
+    );
+}
+
+#[test]
+fn the_tags_typed_before_a_save_go_on_the_card() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_a_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+
+    LibraryHost::new_card(&mut state);
+    wait_for(&mut state, "the draft answer", |s| {
+        s.draft_request.is_none()
+    });
+    state
+        .editor
+        .buffer
+        .replace_text("one\n---\ntwo".to_string());
+    state.editor.tags.replace_text("Grammar, verbs".to_string());
+
+    assert!(state.persist(), "the save goes out");
+    wait_for(&mut state, "the tags to reach the library", |s| {
+        s.library
+            .cards()
+            .iter()
+            .any(|card| card.tags == vec!["Grammar".to_string(), "verbs".to_string()])
+    });
+    assert!(
+        !state.editor.dirty(),
+        "the card reads as saved once its tags are stored"
+    );
+}
+
+#[test]
+fn text_typed_and_never_saved_is_there_after_a_restart() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let store = library_with_a_card(&dir);
+
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+    LibraryHost::new_card(&mut state);
+    wait_for(&mut state, "the draft answer", |s| {
+        s.draft_request.is_none()
+    });
+    state
+        .editor
+        .buffer
+        .replace_text("half a thought".to_string());
+    crate::editor::Host::note_typing(&mut state);
+
+    // Dropping the handle flushes the queue the way quitting would.
+    drop(state.store.take());
+    let db = Db::open(&path).expect("open");
+    assert_eq!(
+        db.draft(0).expect("draft"),
+        Some("half a thought".to_string()),
+        "the text of a card that was never saved is on disk"
+    );
+    drop(db);
+
+    let waker: Waker = Arc::new(|| {});
+    let mut reopened = State {
+        store: Some(
+            Handle::spawn(
+                Db::open(&path).expect("open"),
+                Box::new(typr_core::clock::SystemClock),
+                waker,
+            )
+            .expect("spawn"),
+        ),
+        ..State::default()
+    };
+    LibraryHost::new_card(&mut reopened);
+    wait_for(&mut reopened, "the draft to come back", |s| {
+        s.editor.buffer.text == "half a thought"
+    });
+}
+
+#[test]
+fn a_grade_is_timed_like_any_other_command() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_a_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        session: session_on(1),
+        screen: Screen::Session,
+        ..State::default()
+    };
+
+    let id = state.submit_grade(1, Grade::Remembered).expect("sent");
+    assert!(
+        state.sent.contains_key(&id),
+        "a grade is timed, so a slow one can be written down"
+    );
 }

@@ -319,3 +319,38 @@ fn the_tag_field_keeps_each_keystroke() {
     }
     assert_eq!(runtime.state.tags.text, "abc");
 }
+
+#[test]
+fn saving_marks_the_tags_as_stored_too() {
+    let mut editor = Editor::new(Some(1), "front\n---\nback".to_string());
+    editor.load_tags(&["Grammar".to_string()]);
+    assert!(!editor.dirty(), "a loaded card is clean");
+
+    editor.tags.replace_text("Grammar, verbs".to_string());
+    assert!(editor.dirty(), "the tag line counts as unsaved work");
+
+    assert!(editor.save());
+    assert!(
+        !editor.dirty(),
+        "saving stores the tags as well as the sides"
+    );
+    assert_eq!(editor.tag_list(), vec!["Grammar", "verbs"]);
+}
+
+#[test]
+fn a_draft_lands_in_a_card_that_has_nothing_typed() {
+    let mut editor = Editor::new(None, String::new());
+    editor.restore_draft("");
+    assert_eq!(editor.buffer.text, "", "an empty draft changes nothing");
+
+    editor.restore_draft("half a thought");
+    assert_eq!(editor.buffer.text, "half a thought");
+
+    let mut typed = Editor::new(None, String::new());
+    typed.buffer.replace_text("what the user typed".to_string());
+    typed.restore_draft("a stale draft");
+    assert_eq!(
+        typed.buffer.text, "what the user typed",
+        "a draft never overwrites what is on screen"
+    );
+}
