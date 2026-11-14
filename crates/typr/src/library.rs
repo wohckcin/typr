@@ -468,7 +468,7 @@ fn filter_bar<S: Host>(s: &S) -> El {
         .child(
             text(
                 match (library.visible.len(), library.snapshot.cards.len()) {
-                    (shown, total) if shown == total => format!("{total} cards"),
+                    (shown, total) if shown == total => format!("{total} {}", plural(total)),
                     (shown, total) => format!("{shown} of {total}"),
                 },
             )
@@ -498,6 +498,11 @@ fn filter_bar<S: Host>(s: &S) -> El {
 }
 
 /// One row of the card list.
+/// "card" for one, "cards" for everything else, so the count never reads "1 cards".
+fn plural(count: usize) -> &'static str {
+    if count == 1 { "card" } else { "cards" }
+}
+
 fn card_row<S: Host>(card: &CardSummary, selected: bool, mode: CardMode) -> El {
     let t = tok::theme(true);
     let id = card.id;
@@ -572,7 +577,12 @@ fn card_row<S: Host>(card: &CardSummary, selected: bool, mode: CardMode) -> El {
                 .key(format!("restore-{id}")),
         );
     }
-    line.on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
+    // The row is the card's primary action, and the only one assistive technology offers: a
+    // press opens it, because the row is what the accessibility tree exposes as a button.
+    line.on_press(move |s: &mut S| {
+        s.library_mut().selected_card = Some(id);
+        s.open_card(id);
+    })
 }
 
 /// The library screen.

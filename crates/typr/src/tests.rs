@@ -1030,7 +1030,23 @@ fn the_library_offers_a_way_into_the_editor() {
     runtime.frame(0.0);
     assert!(runtime.find("edit-1").is_some(), "a card can be opened");
     assert!(runtime.find("new-card").is_some(), "and a new one started");
+
+    // Pressing the row itself is the affordance the accessibility tree exposes, so it has to open
+    // the card, not just select it.
+    let (x, y) = runtime.find("card-1").expect("the card row");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
     let mut state = runtime.state;
+    assert!(
+        matches!(state.screen, Screen::Editor),
+        "pressing a row opens that card"
+    );
+    assert_eq!(state.editor.card, Some(1), "the row's own card opens");
+    assert_eq!(
+        state.editor.buffer.text, "front\n---\nback",
+        "the row's markdown is in the buffer"
+    );
 
     library::Host::new_card(&mut state);
     assert!(matches!(state.screen, Screen::Editor), "a new card opens");
