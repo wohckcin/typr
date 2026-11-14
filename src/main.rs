@@ -81,6 +81,16 @@ impl editor::Host for State {
     fn close_editor(&mut self) {
         self.screen = Screen::Library;
     }
+
+    fn set_tags(&mut self, card: Id, tags: &[String]) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.set_tags(card, tags),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
+    }
 }
 
 /// Remember the id of a command that went out, and say why when one could not.
@@ -143,6 +153,27 @@ impl library::Host for State {
         if let Err(error) = sent {
             self.failure = Some(error.to_string());
         }
+    }
+
+    fn open_card(&mut self, card: Id) {
+        let summary = self
+            .library
+            .snapshot()
+            .cards
+            .iter()
+            .find(|own| own.id == card)
+            .cloned();
+        let Some(summary) = summary else {
+            return;
+        };
+        self.editor = Editor::new(Some(card), summary.markdown.clone());
+        self.editor.load_tags(&summary.tags);
+        self.screen = Screen::Editor;
+    }
+
+    fn new_card(&mut self) {
+        self.editor = Editor::new(None, String::new());
+        self.screen = Screen::Editor;
     }
 
     fn new_deck(&mut self) {

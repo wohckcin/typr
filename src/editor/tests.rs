@@ -273,3 +273,25 @@ fn an_attachment_that_fails_says_so_in_the_header() {
     assert!(refusal.contains("not attached"), "got {refusal}");
     assert_eq!(editor.buffer.text, "card", "and nothing was inserted");
 }
+
+#[test]
+fn the_tag_line_keeps_one_spelling_of_each_tag() {
+    let mut editor = Editor::new(Some(1), "front".to_string());
+    editor.load_tags(&["Grammar".to_string(), "verbs".to_string()]);
+    assert_eq!(
+        editor.tag_list(),
+        vec!["Grammar", "verbs"],
+        "it shows the card's tags"
+    );
+    assert!(!editor.dirty(), "loading the card's tags is not an edit");
+
+    editor
+        .tags
+        .replace_text("Grammar, grammar  , Verbs, ".to_string());
+    assert_eq!(
+        editor.tag_list(),
+        vec!["Grammar", "Verbs"],
+        "a tag that differs only by case is dropped, keeping the first spelling and the typed case"
+    );
+    assert!(editor.dirty(), "a changed tag line is an unsaved change");
+}

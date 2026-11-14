@@ -892,3 +892,90 @@ fn archiving_a_deck_that_holds_cards_asks_first() {
         "an empty deck archives without asking"
     );
 }
+
+#[test]
+fn a_card_opens_in_the_editor_with_the_tags_it_holds() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let tagged = store
+        .set_tags(1, &["Grammar".to_string(), "verbs".to_string()])
+        .expect("sent");
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    settle(&mut state, tagged);
+    refresh_library(&mut state);
+
+    library::Host::open_card(&mut state, 1);
+    assert!(matches!(state.screen, Screen::Editor), "the editor opens");
+    assert_eq!(state.editor.card, Some(1), "on the card that was clicked");
+    assert_eq!(
+        state.editor.tag_list(),
+        vec!["Grammar", "verbs"],
+        "carrying the tags the card holds"
+    );
+    assert!(!state.editor.dirty(), "with nothing to save yet");
+
+    // The field is drawn, and so is the way in from the list.
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    assert!(runtime.find("tags").is_some(), "the tag field is drawn");
+    let mut state = runtime.state;
+
+    // Saving new tags reaches the store and comes back on the card.
+    state.editor.tags.replace_text("Grammar, nouns".to_string());
+    let tags = state.editor.tag_list();
+    editor::Host::set_tags(&mut state, 1, &tags);
+    for _ in 0..200 {
+        let snapshot = state.store.as_ref().expect("store").snapshot();
+        if snapshot
+            .cards
+            .iter()
+            .any(|card| card.tags == vec!["Grammar".to_string(), "nouns".to_string()])
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let snapshot = state.store.as_ref().expect("store").snapshot();
+    assert_eq!(
+        snapshot.cards[0].tags,
+        vec!["Grammar".to_string(), "nouns".to_string()],
+        "the card now carries what was typed"
+    );
+}
+
+#[test]
+fn the_library_offers_a_way_into_the_editor() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    settle(&mut state, 0);
+    refresh_library(&mut state);
+
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    assert!(runtime.find("edit-1").is_some(), "a card can be opened");
+    assert!(runtime.find("new-card").is_some(), "and a new one started");
+    let mut state = runtime.state;
+
+    library::Host::new_card(&mut state);
+    assert!(matches!(state.screen, Screen::Editor), "a new card opens");
+    assert_eq!(state.editor.card, None, "with no id until it is saved");
+}

@@ -32,7 +32,12 @@
 ## 4. Card library
 
 - [x] 4.1 Implement deck creation, nesting and reparenting with cycle rejection and per-parent name uniqueness, and verify tests for a move into the deck's own child and for a duplicate name under the same parent
-- [x] 4.2 Implement card creation, edit and reassignment between decks, and verify a test that a moved card keeps its `prompt` row and due date
+- [ ] 4.2 Implement card creation, edit and reassignment between decks
+
+  **Open**: the store half is done and tested (`move_card` keeps the prompt row and its due
+  date). The screen half is not: nothing in the library opened the editor, so a card could not be
+  edited at all, and no control moves a card between decks. Opening a card is 4.12; reassigning it
+  is 4.13., and verify a test that a moved card keeps its `prompt` row and due date
 - [x] 4.3 Implement tags stored on the card, case-insensitive matching with first-seen casing preserved, and verify a test that filters by `grammar` and matches `Grammar`, and that a `#` heading produces no tag
 - [x] 4.4 Implement card search over `search_text` with case and diacritic folding, and verify `cancion` finds `Canción` and that results stay within the selected deck's subtree
 - [x] 4.5 Implement archive for cards and decks with the archived view and restore, and verify an archived due card is absent from the due queue and its due date survives restore
@@ -49,7 +54,21 @@
 - [x] 4.10 Add deck actions to the sidebar: create, rename, archive and reparent, using the store commands that already exist, with the deck name editable in place and the archive action behind a confirmation when the deck holds cards
 
   **Verification**: a scripted run renames a deck, moves it under another, and archives it, then asserts the sidebar shows the new name, the new parent, and the deck's cards absent from both queues; a duplicate name under one parent is refused and shown as a failure
-- [ ] 4.11 Add tag editing to the editor: a control that sets a card's tags through `Command::SetTags`, showing the tags the card holds and refusing duplicates that differ only by case
+- [x] 4.11 Add tag editing to the editor: a control that sets a card's tags through `Command::SetTags`, showing the tags the card holds and refusing duplicates that differ only by case
+
+  **Verification**: `the_tag_line_keeps_one_spelling_of_each_tag` proves `Grammar, grammar, Verbs`
+  becomes `Grammar, Verbs` and that a changed line counts as unsaved; the app-level test opens a
+  tagged card, finds the `tags` field in a rendered frame, sets new tags through the host and reads
+  them back off the card.
+
+- [x] 4.12 Open a card in the editor from the library, and start a new card from it
+
+  **Verification**: `the_library_offers_a_way_into_the_editor` finds `edit-1` and `new-card` in a
+  rendered frame, opens a new card and finds no id until it is saved;
+  `a_card_opens_in_the_editor_with_the_tags_it_holds` opens a card and finds the editor holding its
+  text and tags with nothing to save.
+
+- [ ] 4.13 Move a card to another deck from the library, and verify the card leaves the old deck's list, arrives in the new one, and keeps its due date: a control that sets a card's tags through `Command::SetTags`, showing the tags the card holds and refusing duplicates that differ only by case
 
   **Verification**: a scripted run adds "Grammar" then "grammar" and asserts one tag remains, displayed with the first casing, and that the library's tag filter lists it once
 

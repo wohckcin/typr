@@ -21,6 +21,9 @@ pub trait Host: 'static {
     /// Write the buffer to the library, answering whether it was stored.
     fn persist(&mut self) -> bool;
 
+    /// Replace the tags on a card. A host with no store cannot, and says so by doing nothing.
+    fn set_tags(&mut self, _card: Id, _tags: &[String]) {}
+
     /// Leave the editor, if the host has somewhere to go.
     fn close_editor(&mut self);
 }
@@ -62,6 +65,10 @@ pub struct Editor {
     pub showing_history: bool,
     /// This card's review count and records, when the panel is open.
     pub history: crate::history::History,
+    /// The tags, as one line the user types into.
+    pub tags: TextEdit,
+    /// The tag line as stored, so a change to it counts as unsaved.
+    pub saved_tags: String,
 }
 
 /// What the user asked for when leaving an unsaved card.
@@ -118,12 +125,43 @@ impl Editor {
             attachments: Attachments::default(),
             showing_history: false,
             history: crate::history::History::default(),
+            tags: TextEdit::default(),
+            saved_tags: String::new(),
         }
     }
 
-    /// Whether the buffer holds something the card does not.
+    /// Hold the tags the card carries now, so the field starts where the card is.
+    pub fn load_tags(&mut self, tags: &[String]) {
+        let line = tags.join(", ");
+        self.tags.replace_text(line.clone());
+        self.saved_tags = line;
+    }
+
+    /// The tags the field holds, split on commas or spaces and de-duplicated, keeping the first
+    /// spelling of each so `Grammar` and `grammar` cannot both be added.
+    pub fn tag_list(&self) -> Vec<String> {
+        let mut kept: Vec<String> = Vec::new();
+        for raw in self
+            .tags
+            .text
+            .split(|character: char| character == ',' || character.is_whitespace())
+        {
+            let tag = raw.trim();
+            if tag.is_empty() {
+                continue;
+            }
+            let folded = tag.to_lowercase();
+            if kept.iter().any(|own| own.to_lowercase() == folded) {
+                continue;
+            }
+            kept.push(tag.to_string());
+        }
+        kept
+    }
+
+    /// Whether the buffer or the tag line holds something the card does not.
     pub fn dirty(&self) -> bool {
-        self.buffer.text != self.saved
+        self.buffer.text != self.saved || self.tags.text != self.saved_tags
     }
 
     /// The sides the buffer splits into right now, so the preview and the save agree.
@@ -322,6 +360,26 @@ fn save_button<S: Host>() -> El {
         .key("save-card")
 }
 
+/// The tag line, which stores what it holds as soon as the user presses Enter.
+fn tag_field<S: Host>() -> El {
+    let t = tok::theme(true);
+    text_input(&TextEdit::default(), type_::LABEL)
+        .key("tags")
+        .w(240.0)
+        .single_line()
+        .placeholder("tags, comma separated", t.text_secondary)
+        .on_edit(|s: &mut S| &mut s.editor_mut().tags)
+        .on_submit(|s: &mut S, _| {
+            let Some(card) = s.editor().card else {
+                return;
+            };
+            let tags = s.editor().tag_list();
+            s.set_tags(card, &tags);
+            let line = s.editor().tags.text.clone();
+            s.editor_mut().saved_tags = line;
+        })
+}
+
 fn attach_button<S: Host>() -> El {
     Button::new("Attach image")
         .variant(ButtonVariant::Ghost)
@@ -398,6 +456,7 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                     t.text_secondary
                 }),
         )
+        .child(tag_field::<S>())
         .child(rune::el().grow(1.0))
         .child(attach_button::<S>())
         .child(save_button::<S>());
