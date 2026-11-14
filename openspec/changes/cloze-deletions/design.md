@@ -85,6 +85,6 @@ editor needs it for the preview.
   An unclosed brace stays text, and the preview shows the mask before saving, which is the mitigation.
 - `cloze:<n>` numbering is user-visible in history and in the data file. Renaming a group drops its
   schedule; the alternative, a surrogate id, would need a mapping table for a feature nobody asked for.
-- A card whose group is deleted keeps that prompt row (history is preserved by design), so the review
-  count can exceed the groups on screen. `reset_history` remains the way out, and the diagnostics work
-  already treats orphaned prompts as acceptable.
+- A card whose group is deleted keeps that prompt row, so its records stay and the review count can
+  exceed the groups on screen. The row is retired, so it leaves the queues, the cap and the deck's due
+  count until the spans come back; `reset_history` remains the way to forget it.

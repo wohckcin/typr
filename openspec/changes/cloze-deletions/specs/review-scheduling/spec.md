@@ -19,7 +19,8 @@ new keys are only created for cards that hold hidden text.
 The system SHALL track scheduling state per prompt, identified by a card and a key, SHALL hold exactly
 one prompt per review variant a card carries, and SHALL hold none for a card with no variant. The keys
 are `fwd` for two or more sides, `cloze:<n>` per numbered hidden-text group, and `cloze:0` for unnumbered
-hidden text. Each variant SHALL keep its own schedule and history.
+hidden text. Each variant SHALL keep its own schedule and history, and a variant the card no longer
+holds SHALL leave the queues until the text asks for it again.
 
 #### Scenario: One prompt per two-sided card
 
@@ -35,6 +36,12 @@ hidden text. Each variant SHALL keep its own schedule and history.
 
 - **WHEN** a card holds `{{1::insulin}}` and `{{2::pancreas}}`
 - **THEN** it has prompts `cloze:1` and `cloze:2`, and grading one leaves the other untouched
+
+#### Scenario: A group whose spans are gone leaves the queue but keeps its records
+
+- **WHEN** a card that held `{{1::insulin}}` and `{{2::pancreas}}` is saved holding only the first group
+- **THEN** `cloze:2` is in no queue and counts against neither the cap nor the deck's due count, its
+  records stay, and saving the second group back puts it in the queue with the schedule it kept
 
 #### Scenario: Sides and groups never coexist
 
