@@ -828,6 +828,71 @@ fn a_library_from_before_templates_renders_as_before() {
     );
 }
 
+#[test]
+fn a_library_from_before_views_keeps_its_list() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let before = {
+        let db = Db::open(&path).expect("open");
+        let deck = match db
+            .apply(
+                &Command::CreateDeck {
+                    parent: None,
+                    name: "Deck".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            Outcome::Deck(id) => id,
+            other => panic!("creating a deck: {other:?}"),
+        };
+        db.apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "front\n---\nback".to_string(),
+            },
+            0,
+        )
+        .expect("two-sided card");
+        // Written before V8 existed: no pins anywhere and no view table.
+        rewind_for_test(db.connection_for_test(), 7);
+        assert_eq!(schema_version_at(&path), 7, "the file is a version-7 one");
+        capture(&db)
+    };
+
+    let db = Db::open(&path).expect("reopen");
+    assert!(
+        columns(&db, "card").contains(&"pinned".to_string()),
+        "the card lost its pinned column"
+    );
+    assert!(
+        columns(&db, "view").contains(&"sort_key".to_string()),
+        "the view table arrived without its order"
+    );
+    let pinned: i64 = db
+        .connection_for_test()
+        .query_row("SELECT COUNT(*) FROM card WHERE pinned <> 0", [], |row| {
+            row.get(0)
+        })
+        .expect("count");
+    assert_eq!(pinned, 0, "no card from before the pins is pinned");
+    assert_eq!(
+        capture(&db),
+        before,
+        "text, sides and queue are the same on both sides of V8"
+    );
+    let snapshot = db.snapshot().expect("snapshot");
+    assert!(
+        snapshot.views.is_empty(),
+        "a library from before has no views"
+    );
+    assert!(
+        snapshot.cards.iter().all(|card| !card.pinned),
+        "and no card of it is pinned"
+    );
+}
+
 /// What a card's text and its prompts are, for comparing a library across a migration.
 fn capture(db: &Db) -> Vec<(Id, String, i64, String)> {
     let mut statement = db

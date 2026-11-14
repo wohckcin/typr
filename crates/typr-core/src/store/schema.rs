@@ -16,7 +16,30 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8];
+
+/// Custom views: a pin on a card, and the filters the user saved.
+///
+/// `view.deck` is a plain integer rather than a foreign key: a view whose deck is deleted keeps its
+/// id, and the library reads a scope no deck carries as the whole library. That is a deliberate
+/// choice of "show everything and say why" over "silently empty".
+///
+/// Tags are one string joined by ASCII unit separator, which the tag editor cannot produce: a tag
+/// is trimmed text, and a set of them has no other column to live in.
+const V8: &str = r#"
+ALTER TABLE card ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE view (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    deck        INTEGER,
+    query       TEXT NOT NULL,
+    tags        TEXT NOT NULL,
+    mode        TEXT NOT NULL,
+    pinned_only INTEGER NOT NULL,
+    sort_key    TEXT NOT NULL,
+    sort_dir    TEXT NOT NULL
+);
+"#;
 
 /// Card templates: a card's text can be rendered from a template and a set of named fields.
 ///
