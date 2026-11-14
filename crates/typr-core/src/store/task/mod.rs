@@ -14,7 +14,7 @@ use std::thread::JoinHandle;
 
 use crate::clock::Clock;
 
-use super::{Command, Db, Event, Grade, Id, Outcome, Snapshot, Store, StoreError};
+use super::{Command, Db, Event, Grade, Id, MaskRect, Outcome, Snapshot, Store, StoreError};
 
 /// What the worker calls once its answer is published and readable.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
@@ -284,6 +284,50 @@ impl Store for Handle {
 
     fn set_deck_reverse(&self, deck: Id, reverse: Option<bool>) -> Result<u64, StoreError> {
         self.submit(Command::SetDeckReverse { deck, reverse })
+    }
+
+    fn create_diagram(&self, deck: Id, image: &str, caption: &str) -> Result<u64, StoreError> {
+        self.submit(Command::CreateDiagram {
+            deck,
+            image: image.to_string(),
+            caption: caption.to_string(),
+        })
+    }
+
+    fn set_diagram(&self, card: Id, image: &str, caption: &str) -> Result<u64, StoreError> {
+        self.submit(Command::SetDiagram {
+            card,
+            image: image.to_string(),
+            caption: caption.to_string(),
+        })
+    }
+
+    fn add_mask(&self, card: Id, group: u32, rect: MaskRect) -> Result<u64, StoreError> {
+        self.submit(Command::AddMask { card, group, rect })
+    }
+
+    fn set_mask_group(&self, card: Id, rect: MaskRect, group: u32) -> Result<u64, StoreError> {
+        self.submit(Command::SetMaskGroup { card, rect, group })
+    }
+
+    fn remove_mask(&self, card: Id, rect: MaskRect) -> Result<u64, StoreError> {
+        self.submit(Command::RemoveMask { card, rect })
+    }
+
+    fn merge_masks(&self, card: Id, rects: &[MaskRect], group: u32) -> Result<u64, StoreError> {
+        self.submit(Command::MergeMasks {
+            card,
+            rects: rects.to_vec(),
+            group,
+        })
+    }
+
+    fn mask_groups(&self, card: Id) -> Result<u64, StoreError> {
+        self.submit(Command::MaskGroups { card })
+    }
+
+    fn masks(&self, card: Id) -> Result<u64, StoreError> {
+        self.submit(Command::Masks { card })
     }
 
     fn history(&self, card: Id) -> Result<u64, StoreError> {

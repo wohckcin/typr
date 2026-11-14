@@ -275,8 +275,45 @@ pub struct ReviewRow {
     pub duration_ms: Option<i64>,
 }
 
+/// A rectangle over a diagram, as fractions of the image's width and height.
+///
+/// Fractions rather than pixels: the same card is drawn 400 points wide on a tile and 900 wide in a
+/// review, and a pixel rectangle would drift between them and between the scene renders and a window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MaskRect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+impl MaskRect {
+    pub fn new(x: f32, y: f32, w: f32, h: f32) -> MaskRect {
+        MaskRect { x, y, w, h }
+    }
+
+    /// Whether the rectangle sits inside the image's own square of fractions.
+    pub fn inside_the_image(&self) -> bool {
+        self.w > 0.0
+            && self.h > 0.0
+            && self.x >= 0.0
+            && self.y >= 0.0
+            && self.x + self.w <= 1.0
+            && self.y + self.h <= 1.0
+    }
+}
+
+/// One rectangle of one group, as the library holds it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MaskRow {
+    pub group: u32,
+    pub rect: MaskRect,
+}
+
 /// A typed mutation or query. Every command produces exactly one [`Event`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// `PartialEq` and not `Eq`: a mask's corners are fractions, and a float has no total equality.
+#[derive(Clone, Debug, PartialEq)]
 pub enum Command {
     CreateDeck {
         parent: Option<Id>,
@@ -297,6 +334,46 @@ pub enum Command {
     CreateCard {
         deck: Id,
         markdown: String,
+    },
+    /// A card whose faces are groups of rectangles drawn on an image.
+    CreateDiagram {
+        deck: Id,
+        image: String,
+        caption: String,
+    },
+    /// Replace the picture and the caption of a diagram card; the masks stay where they are.
+    SetDiagram {
+        card: Id,
+        image: String,
+        caption: String,
+    },
+    AddMask {
+        card: Id,
+        group: u32,
+        rect: MaskRect,
+    },
+    /// Move one rectangle into another group. The pair of groups may end up as one.
+    SetMaskGroup {
+        card: Id,
+        rect: MaskRect,
+        group: u32,
+    },
+    RemoveMask {
+        card: Id,
+        rect: MaskRect,
+    },
+    /// Put every listed rectangle into one group, which is how a rectangle that is one answer is
+    /// made from several.
+    MergeMasks {
+        card: Id,
+        rects: Vec<MaskRect>,
+        group: u32,
+    },
+    MaskGroups {
+        card: Id,
+    },
+    Masks {
+        card: Id,
     },
     SaveCard {
         id: Id,
@@ -376,7 +453,7 @@ pub enum Command {
 }
 
 /// What a command did.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Outcome {
     Deck(Id),
     Card(Id),
@@ -394,6 +471,10 @@ pub enum Outcome {
     },
     Due(Vec<DuePrompt>),
     New(Vec<NewPrompt>),
+    /// The groups a diagram card asks about, in ascending order.
+    MaskGroups(Vec<u32>),
+    /// Every rectangle a diagram card holds, ordered by group and then by position.
+    Masks(Vec<MaskRow>),
     Draft(Option<String>),
     Stats(Stats),
     Ok,
@@ -409,6 +490,7 @@ impl Outcome {
             | Outcome::Changed(_)
             | Outcome::Graded { .. }
             | Outcome::Ok => true,
+            Outcome::MaskGroups(_) | Outcome::Masks(_) => false,
             Outcome::History { .. }
             | Outcome::Due(_)
             | Outcome::New(_)
@@ -476,6 +558,8 @@ pub enum StoreError {
     #[error("a file operation on the library failed")]
     Io(#[from] std::io::Error),
     /// The worker thread is gone, so nothing was sent and no answer will come.
+    #[error("a mask on card {card} does not sit inside its image")]
+    MaskOutsideImage { card: Id },
     #[error("the library is closed")]
     Closed,
     /// The background library work panicked. The connection is suspect, so nothing restarts it.
@@ -541,6 +625,14 @@ pub trait Store: Send + Sync {
     fn set_setting(&self, key: &str, value: &str) -> Result<u64, StoreError>;
     fn set_card_reverse(&self, card: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
     fn set_deck_reverse(&self, deck: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
+    fn create_diagram(&self, deck: Id, image: &str, caption: &str) -> Result<u64, StoreError>;
+    fn set_diagram(&self, card: Id, image: &str, caption: &str) -> Result<u64, StoreError>;
+    fn add_mask(&self, card: Id, group: u32, rect: MaskRect) -> Result<u64, StoreError>;
+    fn set_mask_group(&self, card: Id, rect: MaskRect, group: u32) -> Result<u64, StoreError>;
+    fn remove_mask(&self, card: Id, rect: MaskRect) -> Result<u64, StoreError>;
+    fn merge_masks(&self, card: Id, rects: &[MaskRect], group: u32) -> Result<u64, StoreError>;
+    fn mask_groups(&self, card: Id) -> Result<u64, StoreError>;
+    fn masks(&self, card: Id) -> Result<u64, StoreError>;
     fn history(&self, card: Id) -> Result<u64, StoreError>;
     fn stats(&self, from_ms: i64, to_ms: i64) -> Result<u64, StoreError>;
 }

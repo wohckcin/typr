@@ -12,8 +12,8 @@ use crate::hidden::{self, Shape};
 use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
 
 use super::{
-    CardSummary, Command, Deck, DuePrompt, Grade, Id, NewPrompt, Outcome, Phase, ReviewRow,
-    Settings, Snapshot, Stats, StoreError,
+    CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow, NewPrompt, Outcome, Phase,
+    ReviewRow, Settings, Snapshot, Stats, StoreError,
     schema::{self, SchemaFacts},
 };
 use unicode_normalization::UnicodeNormalization;
@@ -175,6 +175,96 @@ impl Db {
                 )?;
                 Ok(Outcome::Card(id))
             }
+            Command::CreateDiagram {
+                deck,
+                image,
+                caption,
+            } => {
+                self.conn.execute(
+                    "INSERT INTO card
+                        (deck_id, kind, image, caption, markdown, sides, search_text,
+                         created_at, updated_at)
+                     VALUES (?1, 'diagram', ?2, ?3, '', 0, '', ?4, ?4)",
+                    params![deck, image, caption, now_ms],
+                )?;
+                let id = self.conn.last_insert_rowid();
+                self.sync_prompts(id, &hidden::shape(""))?;
+                self.conn.execute(
+                    "DELETE FROM editor_draft WHERE card_id IN (0, ?1)",
+                    params![id],
+                )?;
+                Ok(Outcome::Card(id))
+            }
+            Command::SetDiagram {
+                card,
+                image,
+                caption,
+            } => {
+                let changed = self.conn.execute(
+                    "UPDATE card SET kind = 'diagram', image = ?2, caption = ?3, updated_at = ?4
+                     WHERE id = ?1",
+                    params![card, image, caption, now_ms],
+                )?;
+                if changed == 0 {
+                    return Err(StoreError::Missing {
+                        what: "card",
+                        id: *card,
+                    });
+                }
+                Ok(Outcome::Changed(changed))
+            }
+            Command::AddMask { card, group, rect } => {
+                check_mask(*card, *rect)?;
+                self.place_mask(*card, *rect, *group)?;
+                self.sync_prompts(*card, &self.shape_of(*card)?)?;
+                Ok(Outcome::Changed(1))
+            }
+            Command::SetMaskGroup { card, rect, group } => {
+                check_mask(*card, *rect)?;
+                let changed = self.conn.execute(
+                    "UPDATE mask SET group_no = ?2 WHERE card_id = ?1 AND x = ?3 AND y = ?4 AND w = ?5 AND h = ?6",
+                    params![card, group, rect.x, rect.y, rect.w, rect.h],
+                )?;
+                if changed == 0 {
+                    return Err(StoreError::Missing {
+                        what: "mask",
+                        id: *card,
+                    });
+                }
+                self.sync_prompts(*card, &self.shape_of(*card)?)?;
+                Ok(Outcome::Changed(changed))
+            }
+            Command::RemoveMask { card, rect } => {
+                let changed = self.conn.execute(
+                    "DELETE FROM mask WHERE card_id = ?1 AND x = ?2 AND y = ?3 AND w = ?4 AND h = ?5",
+                    params![card, rect.x, rect.y, rect.w, rect.h],
+                )?;
+                if changed == 0 {
+                    return Err(StoreError::Missing {
+                        what: "mask",
+                        id: *card,
+                    });
+                }
+                self.sync_prompts(*card, &self.shape_of(*card)?)?;
+                Ok(Outcome::Changed(changed))
+            }
+            Command::MergeMasks { card, rects, group } => {
+                let mut changed = 0;
+                for rect in rects {
+                    check_mask(*card, *rect)?;
+                    changed += self.place_mask(*card, *rect, *group)?;
+                }
+                if changed == 0 {
+                    return Err(StoreError::Missing {
+                        what: "mask",
+                        id: *card,
+                    });
+                }
+                self.sync_prompts(*card, &self.shape_of(*card)?)?;
+                Ok(Outcome::Changed(changed))
+            }
+            Command::MaskGroups { card } => Ok(Outcome::MaskGroups(self.mask_groups(*card)?)),
+            Command::Masks { card } => Ok(Outcome::Masks(self.masks(*card)?)),
             Command::SaveCard { id, markdown } => {
                 let shape = hidden::shape(markdown);
                 let changed = self.conn.execute(
@@ -445,6 +535,59 @@ impl Db {
 
     /// The prompt keys a card holds. A card that became a note keeps them: its schedule, due date
     /// and history stay intact and come back when it has two sides again.
+    /// The groups a diagram card asks about, in ascending order. A group exists when a rectangle
+    /// names it, so removing the last rectangle of a group takes the group away with it.
+    pub fn mask_groups(&self, card: Id) -> Result<Vec<u32>, StoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT group_no FROM mask WHERE card_id = ?1 ORDER BY group_no")?;
+        let rows = stmt.query_map(params![card], |row| row.get::<_, i64>(0))?;
+        Ok(rows
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(count_of)
+            .collect())
+    }
+
+    /// Every rectangle of a diagram card, ordered by group and then top-left first.
+    pub fn masks(&self, card: Id) -> Result<Vec<MaskRow>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT group_no, x, y, w, h FROM mask WHERE card_id = ?1
+             ORDER BY group_no, y, x",
+        )?;
+        let rows = stmt.query_map(params![card], |row| {
+            Ok(MaskRow {
+                group: count_of(row.get::<_, i64>(0)?),
+                rect: MaskRect::new(row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?),
+            })
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Whether the card is a diagram, and what it hides, in one read.
+    fn shape_of(&self, card: Id) -> Result<Shape, StoreError> {
+        let markdown: String = self.conn.query_row(
+            "SELECT markdown FROM card WHERE id = ?1",
+            params![card],
+            |row| row.get(0),
+        )?;
+        Ok(hidden::shape(&markdown))
+    }
+
+    /// Put one rectangle in one group. A rectangle belongs to one group, so an existing row with
+    /// the same corners is replaced rather than duplicated under a second group.
+    fn place_mask(&self, card: Id, rect: MaskRect, group: u32) -> Result<usize, StoreError> {
+        self.conn.execute(
+            "DELETE FROM mask WHERE card_id = ?1 AND x = ?2 AND y = ?3 AND w = ?4 AND h = ?5",
+            params![card, rect.x, rect.y, rect.w, rect.h],
+        )?;
+        self.conn.execute(
+            "INSERT INTO mask (card_id, group_no, x, y, w, h) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![card, group, rect.x, rect.y, rect.w, rect.h],
+        )?;
+        Ok(1)
+    }
+
     pub fn prompt_keys(&self, card: Id) -> Result<Vec<String>, StoreError> {
         let mut stmt = self
             .conn
@@ -1015,6 +1158,16 @@ fn flag(value: Option<i64>) -> Option<bool> {
 
 fn count_of(value: i64) -> u32 {
     u32::try_from(value.max(0)).unwrap_or(u32::MAX)
+}
+
+/// A rectangle has to sit inside the image, or the fraction it stores would draw outside the pane
+/// and a cover would land on nothing.
+fn check_mask(card: Id, rect: MaskRect) -> Result<(), StoreError> {
+    if rect.inside_the_image() {
+        Ok(())
+    } else {
+        Err(StoreError::MaskOutsideImage { card })
+    }
 }
 
 fn is_combining_mark(character: char) -> bool {

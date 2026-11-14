@@ -788,3 +788,153 @@ fn a_note_snapshots_no_prompts() {
     assert_eq!(summary.unscheduled, 0);
     assert_eq!(summary.due_at, None, "and so has no due time");
 }
+
+#[test]
+fn a_diagram_card_holds_the_masks_it_was_given() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let id = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: "The heart".to_string(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a diagram: {other:?}"),
+    };
+
+    let first = MaskRect::new(0.1, 0.2, 0.3, 0.4);
+    let second = MaskRect::new(0.5, 0.1, 0.2, 0.2);
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 1,
+            rect: first,
+        },
+        0,
+    )
+    .expect("first mask");
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 2,
+            rect: second,
+        },
+        0,
+    )
+    .expect("second mask");
+
+    assert_eq!(db.mask_groups(id).expect("groups"), vec![1, 2]);
+    assert_eq!(
+        db.masks(id).expect("masks"),
+        vec![
+            MaskRow {
+                group: 1,
+                rect: first
+            },
+            MaskRow {
+                group: 2,
+                rect: second
+            },
+        ],
+        "the corners come back as they went in, ordered by group"
+    );
+
+    let picture: (String, String) = db
+        .connection_for_test()
+        .query_row("SELECT kind, image FROM card WHERE id = ?1", [id], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .expect("the card row");
+    assert_eq!(picture, ("diagram".to_string(), "plate.png".to_string()));
+}
+
+#[test]
+fn merging_two_rectangles_leaves_one_group() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let id = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: String::new(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a diagram: {other:?}"),
+    };
+
+    let left = MaskRect::new(0.1, 0.1, 0.2, 0.2);
+    let right = MaskRect::new(0.6, 0.1, 0.2, 0.2);
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 1,
+            rect: left,
+        },
+        0,
+    )
+    .expect("left");
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 2,
+            rect: right,
+        },
+        0,
+    )
+    .expect("right");
+    assert_eq!(db.mask_groups(id).expect("groups"), vec![1, 2]);
+
+    db.apply(
+        &Command::MergeMasks {
+            card: id,
+            rects: vec![left, right],
+            group: 1,
+        },
+        0,
+    )
+    .expect("merge");
+
+    assert_eq!(
+        db.mask_groups(id).expect("groups"),
+        vec![1],
+        "two rectangles can be one answer"
+    );
+    assert_eq!(db.masks(id).expect("masks").len(), 2, "both survived");
+
+    db.apply(
+        &Command::RemoveMask {
+            card: id,
+            rect: left,
+        },
+        0,
+    )
+    .expect("remove");
+    assert_eq!(db.masks(id).expect("masks").len(), 1);
+
+    // A rectangle has to sit inside the picture, or its cover would land on nothing.
+    let outside = db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 1,
+            rect: MaskRect::new(0.9, 0.9, 0.3, 0.3),
+        },
+        0,
+    );
+    assert!(
+        matches!(outside, Err(StoreError::MaskOutsideImage { card }) if card == id),
+        "{outside:?}"
+    );
+}
