@@ -12,7 +12,7 @@ static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(
 
 use crate::attachments::Attachments;
 use typr_core::hidden::{self, Shape};
-use typr_core::store::{CardKind, CardSummary, Id, MaskRect, MaskRow};
+use typr_core::store::{CardKind, CardRef, CardSummary, Id, MaskRect, MaskRow};
 use typr_core::template;
 
 /// The app state an editor screen draws from.
@@ -46,6 +46,9 @@ pub trait Host: 'static {
     fn set_fields(&mut self, _card: Id, _fields: &[(String, String)]) -> bool {
         false
     }
+
+    /// Open another card, which a reference or a backlink asks for.
+    fn open_card(&mut self, _card: Id) {}
 }
 
 impl Host for Editor {
@@ -124,6 +127,10 @@ pub struct Editor {
     pub deck_name: Option<String>,
     /// The card's stored name, shown in the header: what every other screen calls this card.
     pub name: String,
+    /// The cards this one's text refers to, as the last save recorded them.
+    pub references: Vec<CardRef>,
+    /// The cards whose text refers to this one.
+    pub backlinks: Vec<CardRef>,
     /// The card's text as the template renders it, kept up to date as fields are typed into.
     pub rendered: String,
 }
@@ -217,6 +224,8 @@ impl Editor {
             deck: None,
             deck_name: None,
             name: String::new(),
+            references: Vec::new(),
+            backlinks: Vec::new(),
             rendered: String::new(),
         }
     }
@@ -253,6 +262,8 @@ impl Editor {
         self.deck = Some(card.deck);
         self.deck_name = deck_name.map(str::to_string);
         self.name = card.name.clone();
+        self.references = card.references.clone();
+        self.backlinks = card.backlinks.clone();
         // The table is the template's field list first, in the order the template asks for them,
         // so a card that has never been filled still has somewhere to type. A stored field the
         // template no longer names keeps its row after those, so its value is not lost.
@@ -369,6 +380,47 @@ impl Editor {
         } else {
             &self.buffer.text
         }
+    }
+
+    /// `text` with every reference this card resolves turned into a link the preview can open.
+    ///
+    /// The key is the name as this text writes it, so a reference typed `[[krebs cycle]]` still
+    /// reaches the card named `Krebs cycle`: the same folding the store resolves with.
+    pub fn link_up(&self, text: &str) -> String {
+        let mut resolved = std::collections::HashMap::new();
+        for name in typr_core::reference::links(text) {
+            let wanted = typr_core::store::folded(name);
+            if let Some(target) = self
+                .references
+                .iter()
+                .find(|card| typr_core::store::folded(&card.name) == wanted)
+            {
+                resolved.insert(name.to_string(), target.id);
+            }
+        }
+        typr_core::reference::rewrite(text, &resolved)
+    }
+
+    /// The references in the text that name no card, in the order they were written.
+    ///
+    /// The editor says so where the preview is: a reference that resolves to nothing is still the
+    /// author's sentence, but it is a sentence that does not take a reader anywhere.
+    pub fn unresolved(&self) -> Vec<String> {
+        let mut found: Vec<String> = Vec::new();
+        for name in typr_core::reference::links(self.text()) {
+            let wanted = typr_core::store::folded(name);
+            let known = self
+                .references
+                .iter()
+                .any(|card| typr_core::store::folded(&card.name) == wanted);
+            let seen = found
+                .iter()
+                .any(|own| typr_core::store::folded(own) == wanted);
+            if !known && !seen {
+                found.push(name.to_string());
+            }
+        }
+        found
     }
 
     /// Whether this card asks over a picture.
@@ -722,11 +774,20 @@ pub fn preview_key(card: Option<Id>, text: &str) -> u64 {
     hasher.finish()
 }
 
-fn markdown(attachments: &Attachments, text: &str, key: u64) -> El {
+fn markdown<S: Host>(attachments: &Attachments, text: &str, key: u64) -> El {
     let images = attachments.clone();
     memo("preview", key, move || {
         Markdown::new(text.to_string())
             .images(move |src| images.picture(src))
+            // The reference pass wrote this target: a card id, not a place on the web. Handled
+            // here rather than on the built element so rune-kit draws it as the link it is.
+            .on_link(|s: &mut S, target: &str| {
+                if let Some(rest) = target.strip_prefix(typr_core::reference::SCHEME)
+                    && let Ok(id) = rest.parse::<Id>()
+                {
+                    s.open_card(id);
+                }
+            })
             .render(&MarkdownStyle::neutral(true))
     })
 }
@@ -812,7 +873,9 @@ fn field_pane<S: Host>(s: &S) -> El {
 fn preview_pane<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let editor = s.editor();
-    let drawn = preview_body(editor.text());
+    // The reference pass runs on the drawn text: a reference the card hides is masked before it is
+    // rewritten, so the preview cannot leak the answer through a link.
+    let drawn = editor.link_up(&preview_body(editor.text()));
     col()
         .key("preview-pane")
         .grow(1.0)
@@ -824,7 +887,11 @@ fn preview_pane<S: Host>(s: &S) -> El {
         .padding(16.0)
         .fill(t.card)
         .child(if editor.saveable() {
-            markdown(&editor.attachments, &drawn, editor.memo())
+            markdown::<S>(
+                &editor.attachments,
+                &drawn,
+                preview_key(editor.card, &drawn),
+            )
         } else {
             text("Nothing to save yet. Write the front of the card.")
                 .key("preview-empty")
@@ -836,6 +903,50 @@ fn preview_pane<S: Host>(s: &S) -> El {
                 .font(type_::LABEL)
                 .color(t.text_secondary),
         )
+        .child(unresolved_note::<S>(s))
+        .child(backlink_panel::<S>(s))
+}
+
+/// The references in this card that name nothing, said where the preview is: the sentence still
+/// reads, but it does not take a reader anywhere until a card takes that name.
+fn unresolved_note<S: Host>(s: &S) -> El {
+    let mut note = col().key("unresolved").w_full().gap(2.0);
+    for (index, name) in s.editor().unresolved().iter().enumerate() {
+        note = note.child(
+            text(format!("[[{name}]] names no card"))
+                .key(format!("unresolved-{index}"))
+                .font(type_::LABEL)
+                .color(KIT.c.danger.fg),
+        );
+    }
+    note
+}
+
+/// The cards that refer to this one, each a control that opens it: the other half of a reference,
+/// and the only way back from a card that was reached through one.
+fn backlink_panel<S: Host>(s: &S) -> El {
+    let t = tok::theme(true);
+    let mut panel = col().key("backlinks").w_full().gap(4.0);
+    if s.editor().backlinks.is_empty() {
+        return panel;
+    }
+    panel = panel.child(
+        text("Referenced by")
+            .key("backlinks-title")
+            .font(type_::LABEL)
+            .color(t.text_secondary),
+    );
+    for card in s.editor().backlinks.clone() {
+        let id = card.id;
+        panel = panel.child(
+            Button::new(card.name)
+                .variant(ButtonVariant::Ghost)
+                .on_press(move |s: &mut S| s.open_card(id))
+                .build(&KIT)
+                .key(format!("backlink-{id}")),
+        );
+    }
+    panel
 }
 
 fn button<S: Host>(label: &'static str, variant: ButtonVariant, choice: Choice) -> El {

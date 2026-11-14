@@ -246,6 +246,10 @@ impl editor::Host for State {
             self.fail(&error);
         }
     }
+
+    fn open_card(&mut self, card: Id) {
+        <State as crate::library::Host>::open_card(self, card);
+    }
 }
 
 /// How many whole study days a prompt is past its due date, which is what decides whether a

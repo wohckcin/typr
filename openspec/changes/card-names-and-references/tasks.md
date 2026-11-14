@@ -28,7 +28,7 @@ that shows names.
 
 - [x] 4.1 Rows and the editor header show the card's name; the row still shows the preview as its second line.
   - **Verification**: `the_list_shows_the_name_even_when_the_preview_differs`.
-- [ ] 4.2 The editor renders references as controls, opens the target on use, and lists backlinks in a panel.
+- [x] 4.2 The editor renders references as controls, opens the target on use, and lists backlinks in a panel.
   - **Verification**: `a_reference_opens_the_card_it_names`, `an_unresolved_reference_says_so`, `the_backlink_panel_lists_every_referrer` — each driven through `rune::Runtime`.
 - [ ] 4.3 A reference picker completes names while typing between `[[` and `]]`.
   - **Verification**: `typing_two_brackets_offers_names_and_a_choice_fills_them`.

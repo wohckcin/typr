@@ -638,3 +638,180 @@ fn a_new_card_in_a_templated_deck_is_typed_through_fields() {
     );
     assert!(!state.editor.dirty(), "the card is saved");
 }
+
+/// A library with a card, two cards that refer to it, and one that names nothing.
+fn referencing_library(dir: &tempfile::TempDir) -> (Handle, Id, Id, Id, Id) {
+    use typr_core::store::{Command, Db, Outcome};
+
+    let path = dir.path().join("library.sqlite3");
+    let (target, first, second, dangling);
+    {
+        let db = Db::open(&path).expect("open");
+        let deck = match db
+            .apply(
+                &Command::CreateDeck {
+                    parent: None,
+                    name: "Biology".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            Outcome::Deck(id) => id,
+            other => panic!("expected a deck, got {other:?}"),
+        };
+        let card = |markdown: &str| match db
+            .apply(
+                &Command::CreateCard {
+                    deck,
+                    markdown: markdown.to_string(),
+                },
+                0,
+            )
+            .expect("card")
+        {
+            Outcome::Card(id) => id,
+            other => panic!("expected a card, got {other:?}"),
+        };
+        target = card("Krebs cycle\n---\nThe second stage");
+        first = card("Notes\n---\nSee [[Krebs cycle]]");
+        second = card("More notes\n---\nAlso [[Krebs cycle]]");
+        dangling = card("Loose\n---\nSee [[Glycolysis]]");
+    }
+    let handle = Handle::spawn(
+        Db::open(&path).expect("open"),
+        Box::new(typr_core::clock::SystemClock),
+        std::sync::Arc::new(|| {}),
+    )
+    .expect("spawn");
+    (handle, target, first, second, dangling)
+}
+
+/// The editor on `card`, with the library published from the store it came from.
+fn editing(handle: Handle, card: Id) -> State {
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    <State as crate::library::Host>::open_card(&mut state, card);
+    state
+}
+
+/// The centre of the drawn link reading `label`, in window points.
+fn link_at(runtime: &rune::Runtime<State>, label: &str) -> Option<(f32, f32)> {
+    runtime
+        .elements()
+        .into_iter()
+        .find(|element| {
+            element.role == "link"
+                && (element.label.as_deref() == Some(label)
+                    || element.text.as_deref() == Some(label))
+        })
+        .map(|element| {
+            (
+                element.rect[0] + element.rect[2] * 0.5,
+                element.rect[1] + element.rect[3] * 0.5,
+            )
+        })
+}
+
+/// A reference drawn in the preview opens the card it names.
+#[test]
+fn a_reference_opens_the_card_it_names() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (handle, target, referrer, _, _) = referencing_library(&dir);
+    let state = editing(handle, referrer);
+    assert_eq!(state.editor.card, Some(referrer));
+    assert!(
+        state.editor.unresolved().is_empty(),
+        "the reference resolves, so nothing is reported"
+    );
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+    let (x, y) = link_at(&runtime, "Krebs cycle").expect("the reference is drawn as a link");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+    assert_eq!(
+        runtime.state.editor.card,
+        Some(target),
+        "the reference opened the card it names"
+    );
+}
+
+/// A reference that names no card is still the author's sentence, and the editor says so.
+#[test]
+fn an_unresolved_reference_says_so() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (handle, _, _, _, dangling) = referencing_library(&dir);
+    let state = editing(handle, dangling);
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+    assert!(
+        runtime.find("unresolved-0").is_some(),
+        "the unresolved reference is reported where the preview is"
+    );
+    let shown: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    assert!(
+        shown.iter().any(|text| text.contains("[[Glycolysis]]")),
+        "it names the reference that resolves to nothing: {shown:?}"
+    );
+}
+
+/// The other half of a reference: every card that names this one, and a way to reach it.
+#[test]
+fn the_backlink_panel_lists_every_referrer() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (handle, target, first, second, _) = referencing_library(&dir);
+    let state = editing(handle, target);
+    assert_eq!(
+        state.editor.backlinks.len(),
+        2,
+        "both referrers are listed on the card they name"
+    );
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+    for card in [first, second] {
+        assert!(
+            runtime.find(&format!("backlink-{card}")).is_some(),
+            "the referrer {card} is a control"
+        );
+    }
+    let (x, y) = runtime
+        .find(&format!("backlink-{first}"))
+        .expect("the first referrer is drawn");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+    assert_eq!(
+        runtime.state.editor.card,
+        Some(first),
+        "the backlink opened the card that refers here"
+    );
+}
