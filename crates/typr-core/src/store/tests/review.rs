@@ -1337,3 +1337,39 @@ fn the_scheduler_is_chosen_by_name_and_the_weights_in_one_go() {
     assert_eq!(settings.retention, 85);
     assert_eq!(settings.weights, tuned, "the list round-trips as text");
 }
+
+#[test]
+fn the_export_holds_every_record_with_its_grade() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let card = card(&mut db, deck, "gato\n---\ncat");
+    grade(&mut db, card, "fwd", Grade::Forgot, NOON);
+    grade(&mut db, card, "fwd", Grade::Remembered, NOON + TEN_MINUTES);
+    grade(&mut db, card, "fwd", Grade::Remembered, NOON + DAY);
+
+    let exported = db.export_reviews().expect("export");
+    let lines: Vec<&str> = exported.lines().collect();
+    let records = usize::try_from(db.record_total().expect("the log")).expect("a count");
+    assert_eq!(
+        lines[0], "card_id,review_time,grade,phase,interval_ms,due_at,duration_ms",
+        "the header names every column the optimiser reads"
+    );
+    assert_eq!(
+        lines.len(),
+        records + 1,
+        "one row per record and one header, nothing lost and nothing invented"
+    );
+
+    // Oldest first, so a file read in order is each card's history in the order it happened.
+    assert!(
+        lines[1].starts_with(&format!("{card},{NOON},forgot,")),
+        "the first record: {}",
+        lines[1]
+    );
+    assert!(
+        lines[2].starts_with(&format!("{card},{},remembered,", NOON + TEN_MINUTES)),
+        "the second: {}",
+        lines[2]
+    );
+}

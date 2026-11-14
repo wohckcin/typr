@@ -1945,6 +1945,44 @@ impl Db {
             .map_err(Into::into)
     }
 
+    /// Every record in the library, as the table an external FSRS optimiser reads.
+    ///
+    /// One row per record, oldest first, so a file walked in order shows each card's reviews in the
+    /// order they happened. The columns are all fixed words or numbers — no markdown, no card text
+    /// — which is why nothing here needs quoting. The optimiser is not run: this is history out,
+    /// weights in.
+    pub fn export_reviews(&self) -> Result<String, StoreError> {
+        use std::fmt::Write as _;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT card_id, at, grade, phase, interval_ms, due_at, duration_ms
+             FROM review_log ORDER BY at, rowid",
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut out =
+            String::from("card_id,review_time,grade,phase,interval_ms,due_at,duration_ms\n");
+        while let Some(row) = rows.next()? {
+            let card: Id = row.get(0)?;
+            let at: i64 = row.get(1)?;
+            let grade: String = row.get(2)?;
+            let phase: String = row.get(3)?;
+            let interval: i64 = row.get(4)?;
+            let due: Option<i64> = row.get(5)?;
+            let duration: Option<i64> = row.get(6)?;
+            let due = due.map(|at| at.to_string()).unwrap_or_default();
+            let duration = duration.map(|ms| ms.to_string()).unwrap_or_default();
+            writeln!(
+                out,
+                "{card},{at},{grade},{phase},{interval},{due},{duration}"
+            )
+            .map_err(|_| StoreError::Text {
+                column: "review_log",
+                value: "row".to_string(),
+            })?;
+        }
+        Ok(out)
+    }
+
     /// Every grade a card ever got, oldest first, learning cycles included.
     pub fn history(&self, card: Id) -> Result<Vec<ReviewRow>, StoreError> {
         let mut stmt = self.conn.prepare(
