@@ -276,3 +276,47 @@ fn a_reshuffle_reorders_only_within_one_due_day() {
         "different seeds give different orders, or the shuffle does nothing"
     );
 }
+
+#[test]
+fn a_grade_lands_on_the_card_it_was_given_for() {
+    let mut session = Session::new(
+        Queue::Due,
+        vec![entry(1, &["a"]), entry(2, &["b"]), entry(3, &["c"])],
+    );
+    assert!(session.reveal());
+    assert_eq!(
+        session.grade(Grade::Remembered),
+        Some((1, Grade::Remembered))
+    );
+    session.sent(11);
+    assert!(session.forward(), "the user moves on before the answer lands");
+
+    assert!(session.acknowledge(11, NOON));
+
+    assert_eq!(
+        session.order(),
+        vec![2, 3],
+        "the graded card leaves the queue and nothing else moves"
+    );
+    assert_eq!(session.current().map(|entry| entry.card), Some(2));
+}
+
+#[test]
+fn a_reshuffle_never_hands_over_a_revealed_card() {
+    let cards = || -> Vec<Entry> { (1..=8).map(|card| entry(card, &["a"])).collect() };
+    let mut moved = 0;
+    for seed in 1..40u64 {
+        let mut session = Session::new(Queue::Due, cards());
+        assert!(session.reveal());
+        let before = session.current().map(|entry| entry.card);
+        session.reshuffle(seed);
+        if session.current().map(|entry| entry.card) == before {
+            assert_eq!(session.revealed(), 1, "seed {seed} kept the card and its reveal");
+            continue;
+        }
+        moved += 1;
+        assert_eq!(session.revealed(), 0, "seed {seed} carried the reveal along");
+        assert!(!session.gradeable(), "seed {seed} offered a grade for a side never shown");
+    }
+    assert!(moved > 0, "no seed reordered the front of the queue");
+}
