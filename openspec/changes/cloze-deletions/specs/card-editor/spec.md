@@ -10,8 +10,13 @@ the three-hyphen separator, so the preview shows one face rather than two sides.
 
 #### Scenario: The preview shows the mask, not the answer
 
-- **WHEN** the user types `The hormone {{insulin}} is produced by the {{pancreas}}.`
+- **WHEN** the user types `Our lungs pull {{2::oxygen}} from the {{1::air}}.`
 - **THEN** the preview shows the sentence with both spans masked and reports two prompts
+
+#### Scenario: Unnumbered spans are one prompt
+
+- **WHEN** the user types `The hormone {{insulin}} is produced by the {{pancreas}}.`
+- **THEN** the preview masks both spans and reports one prompt
 
 #### Scenario: A separator stops splitting a hidden-text card
 

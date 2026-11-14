@@ -35,7 +35,10 @@ The system SHALL start a session for the whole library or for one deck, and a de
 
 ### Requirement: Sides are revealed in order within one review
 
-The system SHALL show the first side of a prompt's card and SHALL reveal each later side only on the user's request, in order, with the grade offered only after the last side has been revealed. This SHALL hold in both queues. Revealing sides SHALL constitute one review, not several.
+The system SHALL show one face of the reviewed prompt at a time, SHALL reveal each later face only on
+the user's request and in order, and SHALL offer the grade only after the last face has been revealed.
+This SHALL hold in both queues, and revealing faces SHALL count as one review, not several. A face SHALL
+carry the text to show while hidden and the text to show once revealed.
 
 #### Scenario: Three-sided card is one review
 
@@ -46,6 +49,12 @@ The system SHALL show the first side of a prompt's card and SHALL reveal each la
 
 - **WHEN** the first side of a two-sided card is showing
 - **THEN** the remembered and forgot actions are not available until the second side is revealed
+
+#### Scenario: One hidden-text face unmasks
+
+- **WHEN** the prompt `cloze:1` is reviewed
+- **THEN** the sentence is shown with that group masked, one reveal unmasks it, and the grade is
+  offered straight away
 
 ### Requirement: Forgot in the learning queue cycles without rescheduling
 

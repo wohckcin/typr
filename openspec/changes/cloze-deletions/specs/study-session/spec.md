@@ -4,12 +4,10 @@
 
 ### Requirement: Sides are revealed in order within one review
 
-The system SHALL show one face of the prompt under review at a time, SHALL show the first face and
-reveal each later face only on the user's request, in order, with the grade offered only after the last
-face has been revealed. This SHALL hold in both queues. Revealing faces SHALL constitute one review,
-not several. A face SHALL carry the text to show while hidden and the text to show once revealed: for a
-card built from sides the two are the same, and for a hidden-text group they differ only in the masked
-span.
+The system SHALL show one face of the reviewed prompt at a time, SHALL reveal each later face only on
+the user's request and in order, and SHALL offer the grade only after the last face has been revealed.
+This SHALL hold in both queues, and revealing faces SHALL count as one review, not several. A face SHALL
+carry the text to show while hidden and the text to show once revealed.
 
 #### Scenario: Three-sided card is one review
 
