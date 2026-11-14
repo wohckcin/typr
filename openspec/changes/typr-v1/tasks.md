@@ -35,10 +35,23 @@
 - [x] 4.2 Implement card creation, edit and reassignment between decks, and verify a test that a moved card keeps its `prompt` row and due date
 - [x] 4.3 Implement tags stored on the card, case-insensitive matching with first-seen casing preserved, and verify a test that filters by `grammar` and matches `Grammar`, and that a `#` heading produces no tag
 - [x] 4.4 Implement card search over `search_text` with case and diacritic folding, and verify `cancion` finds `Canción` and that results stay within the selected deck's subtree
-- [x] 4.5 Implement archive for cards and decks with the archived view and restore, and verify an archived due card is absent from the due queue and its due date survives restore
+- [ ] 4.5 Implement archive for cards and decks with the archived view and restore, and verify an archived due card is absent from the due queue and its due date survives restore
+
+  **Open**: `Command::ArchiveCard` and `Db::archive_card` exist and are tested, but nothing in `src/` calls them and no control switches `Library::mode`, so the archived view cannot be reached. The remaining work is the screen, not the store.
 - [x] 4.6 Implement the studyable predicate (not archived, not trashed, no archived ancestor), and verify a card under an archived deck is absent from both queues while a sibling deck's cards remain
-- [x] 4.7 Implement trash, restore and empty, and verify restored cards keep their history while emptied ones are gone with their `review_log` rows and appear nowhere in the library
+- [ ] 4.7 Implement trash, restore and empty, and verify restored cards keep their history while emptied ones are gone with their `review_log` rows and appear nowhere in the library
+
+  **Open**: `trash_card`, `restore_card` and `empty_trash` exist and are tested, but no screen calls them, so deletion, restore and emptying are unreachable.
 - [x] 4.8 Build the library view: sidebar of decks, virtualised card list as a growth stack — `col().growth(GrowthSpec::default()).virtual_rows(count, row_height, key, build)` — tag filter and search box, and verify its scene renders with 5000 seeded cards while building only the mounted rows (assert the build closure ran for far fewer than 5000 indices)
+- [ ] 4.9 Add the archived and trash views: a control that switches `Library::mode` between active, archived and trash, a restore action in each, and an empty-trash action behind a confirmation dialog, with a headless scene per view
+
+  **Verification**: a scripted run archives a card, switches to the archived view, restores it, and finds it active again; a second run trashes a card, switches to trash, empties it behind the dialog, and asserts the card and its `review_log` rows are gone; a scene per mode snaps non-blank
+- [ ] 4.10 Add deck actions to the sidebar: create, rename, archive and reparent, using the store commands that already exist, with the deck name editable in place and the archive action behind a confirmation when the deck holds cards
+
+  **Verification**: a scripted run renames a deck, moves it under another, and archives it, then asserts the sidebar shows the new name, the new parent, and the deck's cards absent from both queues; a duplicate name under one parent is refused and shown as a failure
+- [ ] 4.11 Add tag editing to the editor: a control that sets a card's tags through `Command::SetTags`, showing the tags the card holds and refusing duplicates that differ only by case
+
+  **Verification**: a scripted run adds "Grammar" then "grammar" and asserts one tag remains, displayed with the first casing, and that the library's tag filter lists it once
 
 ## 5. Card editor
 
@@ -58,9 +71,14 @@
 - [x] 6.3 Implement sequential side reveal with the grade offered only after the last side, in both queues, and verify a three-sided card produces one review and that grade actions are unavailable before the last reveal
 - [x] 6.4 Bind the keyboard actions (reveal, remembered, forgot, forward, backward) and show the bindings in the session, and verify a scripted run of a whole queue that uses no pointer, that moving backward shows a graded card read-only, and that moving forward past an ungraded card leaves it queued
 - [x] 6.5 Advance the session only on the store's acknowledgement for the grade and implement resume, and verify that quitting after 5 of 12 due cards leaves 7 in the next session
-- [x] 6.6 Implement re-shuffling the due queue within equal-overdue groups, and verify the order changes inside a group, the order between groups does not, and every `prompt.due_at` stays identical
+- [ ] 6.6 Implement re-shuffling the due queue within equal-overdue groups, and verify the order changes inside a group, the order between groups does not, and every `prompt.due_at` stays identical
+
+  **Open**: the seeded shuffle inside `Db::due_prompts` is tested, but no key or button re-rolls a queue, and `Session::Entry` does not carry its overdue day, so the session cannot regroup. Task 6.9 is the missing half.
 - [x] 6.7 Add prompts that fall due mid-session to the running due queue, and verify that a `forgot` grade producing a 10-minute relearning step returns within the same session when the clock is advanced
 - [x] 6.8 Build the session summary: grades recorded in this session, prompts due at that moment, and a way back to the library, and verify against a scripted session's known grade sequence
+- [ ] 6.9 Give the queue a reshuffle the user can reach: carry each entry's overdue study day so a new seed can reorder entries within equal days only, bind it to a key and a button, and keep every prompt's `due_at` untouched
+
+  **Verification**: a scripted session with four prompts on one overdue day and two on another reshuffles twice and asserts the within-day order changed at least once, the two-day boundary order never changed, and every `prompt.due_at` is identical afterwards; the key and the button both produce a reorder
 
 ## 7. Integration and headless verification
 
