@@ -27,7 +27,7 @@
 
 - [x] 4.1 README documents the two schedulers, the retention default and the export; the settings screen (a later change) is named as where they will be exposed.
   - **Verification**: the README section exists and names both settings keys.
-- [ ] 4.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
+- [x] 4.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.
 
 ## Workflow follow-up
