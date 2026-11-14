@@ -4,7 +4,7 @@
 //! what keeps the threaded part (`task.rs`) down to plumbing.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
@@ -12,7 +12,8 @@ use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
 
 use super::{
     CardSummary, Command, Deck, DuePrompt, Grade, Id, NewPrompt, Outcome, Phase, ReviewRow,
-    Settings, Snapshot, Stats, StoreError, schema,
+    Settings, Snapshot, Stats, StoreError,
+    schema::{self, SchemaFacts},
 };
 use unicode_normalization::UnicodeNormalization;
 
@@ -43,6 +44,8 @@ pub struct Folded {
 #[derive(Debug)]
 pub struct Db {
     conn: Connection,
+    schema: SchemaFacts,
+    path: PathBuf,
 }
 
 impl Db {
@@ -57,11 +60,29 @@ impl Db {
                 | OpenFlags::SQLITE_OPEN_CREATE
                 | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        let mut db = Self { conn };
+        let mut db = Self {
+            conn,
+            schema: SchemaFacts {
+                found: 0,
+                written: 0,
+                applied: 0,
+            },
+            path: path.to_path_buf(),
+        };
         db.conn.pragma_update(None, "journal_mode", "WAL")?;
         db.conn.pragma_update(None, "foreign_keys", true)?;
-        schema::migrate(&mut db.conn)?;
+        db.schema = schema::migrate(&mut db.conn)?;
         Ok(db)
+    }
+
+    /// What the file recorded about its schema before it was opened, and what it records now.
+    pub fn schema_facts(&self) -> SchemaFacts {
+        self.schema
+    }
+
+    /// The file this library lives in, for a log line or an error message.
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     /// Apply one command and report what it did. `now_ms` is the caller's clock, never this

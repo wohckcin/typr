@@ -4,6 +4,17 @@ use rusqlite::Connection;
 
 use super::StoreError;
 
+/// What a library recorded about its schema before it was opened, and what it records now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SchemaFacts {
+    /// The `user_version` the file held before migration.
+    pub found: i64,
+    /// The `user_version` it holds afterwards.
+    pub written: i64,
+    /// How many migration steps ran.
+    pub applied: usize,
+}
+
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
 pub const MIGRATIONS: &[&str] = &[V1, V2, V3];
 
@@ -116,7 +127,7 @@ pub const CURRENT_VERSION: i64 = MIGRATIONS.len() as i64;
 
 /// Bring `conn` up to [`CURRENT_VERSION`], or refuse a database from a newer build without
 /// touching it.
-pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
+pub fn migrate(conn: &mut Connection) -> Result<SchemaFacts, StoreError> {
     let recorded: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     let version =
         usize::try_from(recorded).map_err(|_| StoreError::Corrupt { version: recorded })?;
@@ -126,11 +137,17 @@ pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
             supported: CURRENT_VERSION,
         });
     }
+    let mut applied = 0;
     for (index, sql) in MIGRATIONS.iter().enumerate().skip(version) {
         let tx = conn.transaction()?;
         tx.execute_batch(sql)?;
         tx.pragma_update(None, "user_version", (index + 1) as i64)?;
         tx.commit()?;
+        applied += 1;
     }
-    Ok(())
+    Ok(SchemaFacts {
+        found: recorded,
+        written: recorded + applied as i64,
+        applied,
+    })
 }

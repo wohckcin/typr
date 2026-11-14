@@ -6,6 +6,7 @@
 //! the frame loop. `poll` returns only the events that arrived since the last call, which is what
 //! lets `AppSpec::poll` report "nothing happened" and cost an idle frame nothing.
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -29,11 +30,30 @@ struct Shared {
     waker: Waker,
 }
 
+/// How the worker's thread ended, readable after the [`Handle`] is gone.
+///
+/// `Drop for Handle` runs during `rune::run`'s teardown, so nothing can ask the handle anything
+/// afterwards. The application keeps a clone of this instead, and records it at quit.
+#[derive(Clone, Default)]
+pub struct WorkerStatus(Arc<Mutex<Option<Arc<StoreError>>>>);
+
+impl WorkerStatus {
+    /// The error the worker ended with, if it ended abnormally.
+    pub fn ended(&self) -> Option<Arc<StoreError>> {
+        lock(&self.0).as_ref().map(Arc::clone)
+    }
+
+    fn set(&self, error: StoreError) {
+        *lock(&self.0) = Some(Arc::new(error));
+    }
+}
+
 /// The UI's end of the store task.
 pub struct Handle {
     tx: Mutex<Option<Sender<Message>>>,
     worker: Mutex<Option<JoinHandle<()>>>,
     shared: Arc<Shared>,
+    status: WorkerStatus,
     next_id: AtomicU64,
 }
 
@@ -56,18 +76,26 @@ impl Handle {
             waker,
         });
         let (tx, rx) = mpsc::channel();
+        let status = WorkerStatus::default();
         let worker = {
             let shared = Arc::clone(&shared);
+            let status = status.clone();
             std::thread::Builder::new()
                 .name("typr-store".to_string())
-                .spawn(move || work(db, rx, shared, clock))?
+                .spawn(move || work(db, rx, shared, clock, status))?
         };
         Ok(Self {
             tx: Mutex::new(Some(tx)),
             worker: Mutex::new(Some(worker)),
             shared,
+            status,
             next_id: AtomicU64::new(0),
         })
+    }
+
+    /// How the worker's thread ends, observable after this handle is dropped.
+    pub fn status(&self) -> WorkerStatus {
+        self.status.clone()
     }
 
     /// Send the last flush and wait for it: the one place the frame thread blocks, because a
@@ -75,8 +103,13 @@ impl Handle {
     pub fn close(&self) {
         drop(lock(&self.tx).take());
         let worker = lock(&self.worker).take();
-        if let Some(worker) = worker {
-            let _ = worker.join();
+        if let Some(worker) = worker
+            && let Err(payload) = worker.join()
+        {
+            // A panic that escaped the boundary inside the loop: record it rather than swallow it.
+            self.status.set(StoreError::WorkerPanicked {
+                message: panic_message(&payload),
+            });
         }
     }
 
@@ -240,29 +273,83 @@ impl Store for Handle {
     }
 }
 
-fn work(db: Db, rx: Receiver<Message>, shared: Arc<Shared>, clock: Box<dyn Clock + Send + Sync>) {
-    let mut dirty = false;
+fn work(
+    db: Db,
+    rx: Receiver<Message>,
+    shared: Arc<Shared>,
+    clock: Box<dyn Clock + Send + Sync>,
+    status: WorkerStatus,
+) {
     while let Ok(message) = rx.recv() {
         let mut batch = Vec::new();
-        dirty |= apply(&db, &*clock, message, &mut batch);
+        // The id is copied out before `apply` consumes the message: if that call panics, this is
+        // the only place the answer can still be addressed to.
+        let in_flight = message.id;
         // Coalesce: apply everything already queued before paying for the snapshot re-read, so a
-        // bulk import costs one read rather than one per row. The batch's events are published
-        // after the snapshot, so an event always means the library it describes is visible.
-        while let Ok(next) = rx.try_recv() {
-            dirty |= apply(&db, &*clock, next, &mut batch);
-        }
-        if dirty {
-            if let Some(error) = publish(&db, &shared) {
+        // bulk import costs one read rather than one per row.
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            let mut dirty = apply(&db, &*clock, message, &mut batch);
+            while let Ok(next) = rx.try_recv() {
+                dirty |= apply(&db, &*clock, next, &mut batch);
+            }
+            dirty
+        }));
+        let dirty = match outcome {
+            Ok(wrote) => wrote,
+            Err(payload) => {
+                // `AssertUnwindSafe` is sound here because the boundary never reuses what the
+                // panic may have left half-touched: it answers the ids and stops the loop. The
+                // database is consistent because `Db::apply` runs one transaction per command.
+                let message = panic_message(&payload);
+                batch.push(Event {
+                    id: in_flight,
+                    result: Err(StoreError::WorkerPanicked {
+                        message: message.clone(),
+                    }),
+                });
+                // Everything still queued was accepted, so every one of those sends answered with
+                // an id. Those messages die with the receiver, so they are answered here.
+                while let Ok(orphan) = rx.try_recv() {
+                    batch.push(Event {
+                        id: orphan.id,
+                        result: Err(StoreError::Closed),
+                    });
+                }
+                // Last, so the failure line ends up saying what actually happened.
                 batch.push(Event {
                     id: UNPROMPTED,
-                    result: Err(error),
+                    result: Err(StoreError::WorkerPanicked {
+                        message: message.clone(),
+                    }),
                 });
+                lock(&shared.events).extend(batch);
+                (shared.waker)();
+                status.set(StoreError::WorkerPanicked { message });
+                return;
             }
-            dirty = false;
+        };
+        if dirty && let Some(error) = publish(&db, &shared) {
+            batch.push(Event {
+                id: UNPROMPTED,
+                result: Err(error),
+            });
         }
         lock(&shared.events).extend(batch);
         (shared.waker)();
     }
+}
+
+/// The text a panic payload carries, or its type when it carries none.
+fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
+    if let Some(text) = payload.downcast_ref::<&str>() {
+        return (*text).to_string();
+    }
+    if let Some(text) = payload.downcast_ref::<String>() {
+        return text.clone();
+    }
+    // A payload that is neither `&str` nor `String` carries no readable text, and its concrete
+    // type is erased behind `dyn Any`, so the record says what it can.
+    "panic with a payload that carries no message".to_string()
 }
 
 /// Apply one command and record its answer. Returns whether the command wrote to the library.

@@ -21,6 +21,14 @@ pub fn attachments_root(dirs: &AppDirs) -> PathBuf {
     dirs.data().join("attachments")
 }
 
+/// The logs folder of the root this process uses, created if needed.
+pub fn logs_root_from_environment() -> Result<PathBuf, StoreError> {
+    let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;
+    let logs = dirs.logs().to_path_buf();
+    std::fs::create_dir_all(&logs)?;
+    Ok(logs)
+}
+
 /// The attachments folder for the process environment.
 pub fn attachments_root_from_environment() -> Result<PathBuf, StoreError> {
     let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;

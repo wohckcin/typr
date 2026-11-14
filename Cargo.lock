@@ -3522,6 +3522,7 @@ dependencies = [
 name = "typr"
 version = "0.1.0"
 dependencies = [
+ "log",
  "rune",
  "rune-kit",
  "rusqlite",

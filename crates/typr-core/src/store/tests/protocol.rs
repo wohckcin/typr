@@ -2,6 +2,7 @@
 //! library that never lies about what was written.
 
 use super::*;
+use crate::store::task::UNPROMPTED;
 
 #[test]
 fn each_command_produces_exactly_one_event() {
@@ -246,4 +247,213 @@ fn an_error_keeps_the_cause_that_produced_it() {
         std::error::Error::source(&StoreError::from(rusqlite::Error::InvalidQuery)).is_some(),
         "the SQLite error is reachable through the chain"
     );
+}
+
+/// A clock that panics on the `trigger`-th reading, so a test can make the worker fail at a
+/// chosen command without inventing a command that panics.
+struct ExplodesOn {
+    seen: std::sync::atomic::AtomicUsize,
+    trigger: usize,
+    payload: Option<u32>,
+}
+
+impl ExplodesOn {
+    fn new(trigger: usize) -> Self {
+        Self {
+            seen: std::sync::atomic::AtomicUsize::new(0),
+            trigger,
+            payload: None,
+        }
+    }
+
+    fn with_payload(trigger: usize, payload: u32) -> Self {
+        Self {
+            payload: Some(payload),
+            ..Self::new(trigger)
+        }
+    }
+}
+
+impl crate::clock::Clock for ExplodesOn {
+    fn now_ms(&self) -> i64 {
+        let seen = self.seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if seen >= self.trigger {
+            match self.payload {
+                Some(payload) => std::panic::panic_any(payload),
+                None => panic!("clock exploded"),
+            }
+        }
+        NOON
+    }
+}
+
+/// A clock that holds the first reading until the test lets go, so three commands are provably
+/// queued when the first one fails.
+struct Held {
+    released: std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
+}
+
+impl crate::clock::Clock for Held {
+    fn now_ms(&self) -> i64 {
+        let (flag, cvar) = &*self.released;
+        let mut released = flag.lock().expect("gate");
+        while !*released {
+            released = cvar.wait(released).expect("gate");
+        }
+        panic!("clock exploded after the queue filled");
+    }
+}
+
+#[test]
+fn a_stoppage_names_itself_and_has_no_cause() {
+    let error = StoreError::WorkerPanicked {
+        message: "clock exploded".to_string(),
+    };
+    assert_eq!(error.to_string(), "the library stopped: clock exploded");
+    assert!(std::error::Error::source(&error).is_none());
+}
+
+#[test]
+fn a_worker_panic_answers_the_request_it_was_applying() {
+    let dir = TempDir::new().expect("temp dir");
+    let store =
+        Handle::spawn(open_temp(&dir), Box::new(ExplodesOn::new(1)), noop_waker()).expect("spawn");
+
+    let id = store.create_deck(None, "Japanese").expect("sent");
+    let events = wait_for(&store, 2);
+    assert_eq!(events.len(), 2, "one answer and one report: {events:?}");
+    assert_eq!(events[0].id, id);
+    match &events[0].result {
+        Err(StoreError::WorkerPanicked { message }) => assert!(message.contains("clock exploded")),
+        other => panic!("expected a panic answer, got {other:?}"),
+    }
+    assert_eq!(events[1].id, UNPROMPTED, "the report answers no request");
+    assert!(
+        matches!(&events[1].result, Err(StoreError::WorkerPanicked { message }) if message.contains("clock exploded")),
+        "{:?}",
+        events[1].result
+    );
+}
+
+#[test]
+fn a_panic_answers_every_command_that_was_already_queued() {
+    let dir = TempDir::new().expect("temp dir");
+    let gate = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+    let store = Handle::spawn(
+        open_temp(&dir),
+        Box::new(Held {
+            released: std::sync::Arc::clone(&gate),
+        }),
+        noop_waker(),
+    )
+    .expect("spawn");
+
+    let ids = [
+        store.create_deck(None, "One").expect("sent"),
+        store.create_deck(None, "Two").expect("sent"),
+        store.create_deck(None, "Three").expect("sent"),
+    ];
+    {
+        let (flag, cvar) = &*gate;
+        *flag.lock().expect("gate") = true;
+        cvar.notify_all();
+    }
+
+    let events = wait_for(&store, 4);
+    assert_eq!(events.len(), 4, "three answers and one report: {events:?}");
+    let mut answered: Vec<(u64, String)> = events
+        .iter()
+        .map(|event| {
+            (
+                event.id,
+                match &event.result {
+                    Ok(_) => "ok".to_string(),
+                    Err(error) => error.to_string(),
+                },
+            )
+        })
+        .collect();
+    answered.sort();
+    assert_eq!(
+        answered,
+        vec![
+            (
+                UNPROMPTED,
+                "the library stopped: clock exploded after the queue filled".to_string()
+            ),
+            (
+                ids[0],
+                "the library stopped: clock exploded after the queue filled".to_string()
+            ),
+            (ids[1], "the library is closed".to_string()),
+            (ids[2], "the library is closed".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn a_panic_payload_without_text_is_still_reported() {
+    let dir = TempDir::new().expect("temp dir");
+    let store = Handle::spawn(
+        open_temp(&dir),
+        Box::new(ExplodesOn::with_payload(1, 7)),
+        noop_waker(),
+    )
+    .expect("spawn");
+
+    let _ = store.create_deck(None, "Japanese").expect("sent");
+    let events = wait_for(&store, 2);
+    let report = events
+        .iter()
+        .find(|event| event.id == UNPROMPTED)
+        .expect("a report");
+    match &report.result {
+        Err(StoreError::WorkerPanicked { message }) => {
+            assert!(message.contains("no message"), "{message}");
+        }
+        other => panic!("expected a panic answer, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_send_after_a_panic_is_refused() {
+    let dir = TempDir::new().expect("temp dir");
+    let store =
+        Handle::spawn(open_temp(&dir), Box::new(ExplodesOn::new(1)), noop_waker()).expect("spawn");
+
+    let _ = store.create_deck(None, "Japanese").expect("sent");
+    let _ = wait_for(&store, 2);
+    let refused = store.create_deck(None, "Later");
+    assert!(matches!(refused, Err(StoreError::Closed)), "{refused:?}");
+}
+
+#[test]
+fn the_worker_status_outlives_the_handle() {
+    let dir = TempDir::new().expect("temp dir");
+    let store =
+        Handle::spawn(open_temp(&dir), Box::new(ExplodesOn::new(1)), noop_waker()).expect("spawn");
+    let status = store.status();
+
+    let _ = store.create_deck(None, "Japanese").expect("sent");
+    let _ = wait_for(&store, 2);
+    drop(store);
+
+    let ended = status.ended().expect("the worker ended abnormally");
+    assert!(
+        matches!(&*ended, StoreError::WorkerPanicked { message } if message.contains("clock exploded")),
+        "{ended}"
+    );
+}
+
+#[test]
+fn a_worker_that_shut_down_cleanly_leaves_no_status() {
+    let dir = TempDir::new().expect("temp dir");
+    let store = spawn_temp(&dir);
+    let status = store.status();
+
+    let id = store.create_deck(None, "Japanese").expect("sent");
+    let _ = wait_for(&store, 1);
+    assert!(status.ended().is_none(), "still running after {id}");
+    drop(store);
+    assert!(status.ended().is_none(), "a clean quit records nothing");
 }

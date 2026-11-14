@@ -11,8 +11,8 @@ mod task;
 use std::sync::Arc;
 
 pub use db::{Db, Folded, folded};
-pub use schema::CURRENT_VERSION;
-pub use task::{Handle, Waker};
+pub use schema::{CURRENT_VERSION, SchemaFacts};
+pub use task::{Handle, Waker, WorkerStatus};
 
 /// A deck, card, prompt or log row.
 pub type Id = i64;
@@ -399,8 +399,9 @@ pub struct Event {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum StoreError {
-    /// The database refused a statement.
-    #[error("database error: {0}")]
+    /// The database refused a statement. The cause is reachable through `source()`, not repeated
+    /// here, so a chain-aware description reads once.
+    #[error("the database refused the statement")]
     Sqlite(#[from] rusqlite::Error),
     /// No home folder, so there is nowhere to keep the library.
     #[error("no home folder to keep the library in")]
@@ -425,12 +426,15 @@ pub enum StoreError {
     /// A setting the store cannot honour.
     #[error("{value} is not a valid value for {key}")]
     Setting { key: String, value: String },
-    /// A file operation on the library failed.
-    #[error("a file operation on the library failed: {0}")]
+    /// A file operation on the library failed. The cause is reachable through `source()`.
+    #[error("a file operation on the library failed")]
     Io(#[from] std::io::Error),
     /// The worker thread is gone, so nothing was sent and no answer will come.
     #[error("the library is closed")]
     Closed,
+    /// The background library work panicked. The connection is suspect, so nothing restarts it.
+    #[error("the library stopped: {message}")]
+    WorkerPanicked { message: String },
 }
 
 /// The only way the UI reaches the store.

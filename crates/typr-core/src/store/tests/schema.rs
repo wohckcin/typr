@@ -1,6 +1,7 @@
 //! Opening a file: migrations, refusals and drafts that outlive a restart.
 
 use super::*;
+use crate::store::SchemaFacts;
 
 #[test]
 fn a_fresh_database_applies_every_migration_exactly_once() {
@@ -189,5 +190,53 @@ fn a_library_from_before_the_view_gains_it_on_open() {
         db.new_prompts(0, 0, 1).expect("the view answers").len(),
         0,
         "a deck with no cards has nothing studyable"
+    );
+}
+
+#[test]
+fn opening_reports_what_the_schema_did() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    assert_eq!(
+        db.schema_facts(),
+        SchemaFacts {
+            found: 0,
+            written: CURRENT_VERSION,
+            applied: usize::try_from(CURRENT_VERSION).expect("a version that fits"),
+        }
+    );
+    drop(db);
+
+    let reopened = open_temp(&dir);
+    assert_eq!(
+        reopened.schema_facts(),
+        SchemaFacts {
+            found: CURRENT_VERSION,
+            written: CURRENT_VERSION,
+            applied: 0,
+        },
+        "a second open migrates nothing and says so"
+    );
+}
+
+#[test]
+fn a_library_from_one_version_back_reports_the_step_it_ran() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    drop(Db::open(&path).expect("create"));
+    let raw = Connection::open(&path).expect("raw");
+    raw.execute_batch("DROP VIEW studyable_prompt;")
+        .expect("rewind the view too");
+    raw.pragma_update(None, "user_version", CURRENT_VERSION - 1)
+        .expect("rewind");
+
+    let db = Db::open(&path).expect("reopen");
+    assert_eq!(
+        db.schema_facts(),
+        SchemaFacts {
+            found: CURRENT_VERSION - 1,
+            written: CURRENT_VERSION,
+            applied: 1,
+        }
     );
 }

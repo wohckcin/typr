@@ -804,11 +804,12 @@ fn decks_are_created_renamed_and_moved_from_the_sidebar() {
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
+    // The screen carries one line; the cause the database gave goes to the log.
     assert!(
         state
             .failure
             .as_deref()
-            .is_some_and(|why| why.contains("UNIQUE")),
+            .is_some_and(|why| why.contains("refused the statement")),
         "a duplicate name is refused out loud, got {:?}",
         state.failure
     );

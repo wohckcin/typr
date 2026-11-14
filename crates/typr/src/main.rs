@@ -1,5 +1,9 @@
 //! `typr` — a local-first flashcard app on Rune.
 
+use std::collections::HashMap;
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
+
 use rune::tok::{self, type_};
 use rune::{AppSpec, Cx, El, Tx, Waker, col, row, text};
 use typr::attachments::Attachments;
@@ -7,17 +11,24 @@ use typr::day_offset;
 use typr::editor::{self, Editor};
 use typr::history::{self, History};
 use typr::library::{self, Library};
+use typr::logging;
 use typr::paths;
 use typr::screen::Screen;
 use typr::study::{self, Host};
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
-use typr_core::store::{CardMode, Grade, Handle, Id, Outcome, Store, StoreError};
+use typr_core::store::{CardMode, Grade, Handle, Id, Outcome, Store, StoreError, WorkerStatus};
 use typr_core::{day, sides};
 
 /// A named starting state for a headless `--scene` run.
 type Scene = (&'static str, fn(&mut State));
+
+/// How long a command may take before its answer is worth a record.
+const SLOW_COMMAND: Duration = Duration::from_millis(250);
+
+/// The worker's end, kept where it outlives the state that owns the handle.
+static WORKER: OnceLock<WorkerStatus> = OnceLock::new();
 
 struct State {
     /// The screen on display.
@@ -47,6 +58,8 @@ struct State {
     seed: u64,
     /// A new card waiting for the deck that has to be created for it.
     pending_new_card: Option<String>,
+    /// Every command that went out and has not been answered: what it was, and when it left.
+    sent: HashMap<u64, (&'static str, Instant)>,
 }
 
 impl Default for State {
@@ -67,6 +80,7 @@ impl Default for State {
             seeded: false,
             seed: 1,
             pending_new_card: None,
+            sent: HashMap::new(),
         }
     }
 }
@@ -94,7 +108,7 @@ impl editor::Host for State {
             None => Err(StoreError::Closed),
         };
         if let Err(error) = sent {
-            self.failure = Some(error.to_string());
+            self.fail(&error);
         }
     }
 }
@@ -107,17 +121,61 @@ fn overdue_days(now_ms: i64, due_at_ms: i64, offset_ms: i64) -> i64 {
 
 /// Remember the id of a command that went out, and say why when one could not.
 fn remember(
+    in_flight: &mut HashMap<u64, (&'static str, Instant)>,
+    name: &'static str,
     request: &mut Option<u64>,
     failure: &mut Option<String>,
     sent: Result<u64, StoreError>,
 ) {
     match sent {
-        Ok(id) => *request = Some(id),
-        Err(error) => *failure = Some(error.to_string()),
+        Ok(id) => {
+            in_flight.insert(id, (name, Instant::now()));
+            *request = Some(id);
+        }
+        Err(error) => {
+            log::warn!(target: "typr", "{}", logging::describe(&error));
+            *failure = Some(error.to_string());
+        }
     }
 }
 
 impl State {
+    /// Say what went wrong on the failure line, and put the whole chain in the log.
+    fn fail(&mut self, error: &StoreError) {
+        log::warn!(target: "typr", "{}", logging::describe(error));
+        self.failure = Some(error.to_string());
+    }
+
+    /// Record a command whose answer took long enough to matter, then forget it.
+    fn note_round_trip(&mut self, id: u64) {
+        if let Some((name, started)) = self.sent.remove(&id) {
+            let elapsed = started.elapsed();
+            if elapsed > SLOW_COMMAND {
+                log::warn!(
+                    target: "typr",
+                    "{name} answered after {} ms",
+                    elapsed.as_millis()
+                );
+            }
+        }
+    }
+
+    /// Note when a command went out, or say why it could not.
+    fn track(&mut self, name: &'static str, result: Result<u64, StoreError>) {
+        match result {
+            Ok(id) => {
+                self.sent.insert(id, (name, Instant::now()));
+            }
+            Err(error) => self.fail(&error),
+        }
+    }
+
+    /// Say something that is not a store error, and record it too.
+    fn say(&mut self, message: String) {
+        log::warn!(target: "typr", "{message}");
+        self.failure = Some(message);
+    }
+
     /// A deck name nothing else is called, so asking for a new deck always works.
     fn free_deck_name(&self) -> String {
         let taken: Vec<&str> = self
@@ -152,9 +210,7 @@ impl library::Host for State {
             Some(store) => store.archive_card(card, true),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("archive_card", sent);
     }
 
     fn trash_card(&mut self, card: Id) {
@@ -162,9 +218,7 @@ impl library::Host for State {
             Some(store) => store.trash_card(card),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("trash_card", sent);
     }
 
     fn open_card(&mut self, card: Id) {
@@ -188,9 +242,7 @@ impl library::Host for State {
             Some(store) => store.move_card(card, deck),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("move_card", sent);
     }
 
     fn new_card(&mut self) {
@@ -205,9 +257,7 @@ impl library::Host for State {
             Some(store) => store.create_deck(parent, &name),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("create_deck", sent);
     }
 
     fn rename_deck(&mut self, deck: Id, name: &str) {
@@ -215,9 +265,7 @@ impl library::Host for State {
             Some(store) => store.rename_deck(deck, name),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("rename_deck", sent);
     }
 
     fn move_deck(&mut self, deck: Id, parent: Option<Id>) {
@@ -225,9 +273,7 @@ impl library::Host for State {
             Some(store) => store.move_deck(deck, parent),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("move_deck", sent);
     }
 
     fn archive_deck(&mut self, deck: Id) {
@@ -235,9 +281,7 @@ impl library::Host for State {
             Some(store) => store.archive_deck(deck, true),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("archive_deck", sent);
     }
 
     fn restore_card(&mut self, card: Id) {
@@ -249,9 +293,7 @@ impl library::Host for State {
             Some(store) => store.archive_card(card, false),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("restore_card", sent);
     }
 
     fn empty_trash(&mut self) {
@@ -259,9 +301,7 @@ impl library::Host for State {
             Some(store) => store.empty_trash(),
             None => Err(StoreError::Closed),
         };
-        if let Err(error) = sent {
-            self.failure = Some(error.to_string());
-        }
+        self.track("empty_trash", sent);
     }
 }
 
@@ -286,12 +326,12 @@ impl study::Host for State {
 
     fn submit_grade(&mut self, card: Id, grade: Grade) -> Result<u64, StoreError> {
         let Some(store) = &self.store else {
-            self.failure = Some(StoreError::Closed.to_string());
+            self.fail(&StoreError::Closed);
             return Err(StoreError::Closed);
         };
         let sent = store.grade(card, "fwd", grade, None);
         if let Err(error) = &sent {
-            self.failure = Some(error.to_string());
+            self.fail(error);
         }
         sent
     }
@@ -318,14 +358,43 @@ impl State {
         if rune::tooling::is_headless() {
             return;
         }
+        // The log is the only record that outlives a crash, so it is installed before anything
+        // else can fail.
+        let log_path = paths::logs_root_from_environment().and_then(|logs| {
+            logging::install(&logs, logging::level_from_env()).map_err(StoreError::Io)
+        });
+        let log_path = match log_path {
+            Ok(path) => Some(path),
+            Err(error) => {
+                self.say(format!(
+                    "The log could not be opened: {}",
+                    logging::describe(&error)
+                ));
+                None
+            }
+        };
         let draw = waker.clone();
         let opened = paths::attachments_root_from_environment().and_then(|root| {
             let db = paths::open_from_environment()?;
+            let facts = db.schema_facts();
+            let database = db.path().to_path_buf();
             let handle = Handle::spawn(db, Box::new(SystemClock), waker)?;
-            Ok((root, handle))
+            Ok((root, handle, facts, database))
         });
         match opened {
-            Ok((root, handle)) => {
+            Ok((root, handle, facts, database)) => {
+                log::info!(
+                    target: "typr",
+                    "library {} (schema {} found, {} written, {} applied), log {}",
+                    database.display(),
+                    facts.found,
+                    facts.written,
+                    facts.applied,
+                    log_path
+                        .as_ref()
+                        .map_or_else(|| "not written".to_string(), |path| path.display().to_string()),
+                );
+                let _ = WORKER.set(handle.status());
                 if !self.seeded {
                     self.library.set_snapshot(handle.snapshot());
                 }
@@ -333,7 +402,10 @@ impl State {
                 self.store = Some(handle);
             }
             Err(error) => {
-                self.failure = Some(format!("The library could not be opened: {error}"));
+                self.say(format!(
+                    "The library could not be opened: {}",
+                    logging::describe(&error)
+                ));
             }
         }
     }
@@ -348,24 +420,30 @@ impl State {
         match (self.editor.card, self.store.as_ref()) {
             (Some(card), Some(store)) => {
                 if let Err(error) = store.save_card(card, &text) {
-                    self.failure = Some(error.to_string());
+                    self.fail(&error);
                 }
             }
             (None, Some(store)) => match self.deck_for_new_card() {
                 Some(deck) => {
                     let sent = store.create_card(deck, &text);
-                    remember(&mut self.card_request, &mut self.failure, sent);
+                    remember(
+                        &mut self.sent,
+                        "create_card",
+                        &mut self.card_request,
+                        &mut self.failure,
+                        sent,
+                    );
                 }
                 None => {
                     // A library with no deck yet: the first card brings one with it.
                     self.pending_new_card = Some(text.clone());
                     if let Err(error) = store.create_deck(None, "Library") {
-                        self.failure = Some(error.to_string());
+                        self.fail(&error);
                     }
                 }
             },
             (_, None) => {
-                self.failure = Some("The library is not open, so nothing was saved.".to_string());
+                self.say("The library is not open, so nothing was saved.".to_string());
                 return false;
             }
         }
@@ -391,10 +469,22 @@ impl State {
         let offset = day_offset::local_offset_ms();
         let seed = now as u64;
         let due = store.due_prompts(now, offset, seed);
-        remember(&mut self.due_request, &mut self.failure, due);
+        remember(
+            &mut self.sent,
+            "due_prompts",
+            &mut self.due_request,
+            &mut self.failure,
+            due,
+        );
         if queue == Queue::New {
             let new = store.new_prompts(now, offset, seed);
-            remember(&mut self.new_request, &mut self.failure, new);
+            remember(
+                &mut self.sent,
+                "new_prompts",
+                &mut self.new_request,
+                &mut self.failure,
+                new,
+            );
         }
         self.wanted = Some(queue);
     }
@@ -438,6 +528,7 @@ impl State {
         let mut wrote = false;
         for event in events {
             changed = true;
+            self.note_round_trip(event.id);
             wrote |= event.result.as_ref().is_ok_and(Outcome::writes);
             match event.result {
                 Ok(Outcome::Graded { .. }) => {
@@ -485,13 +576,19 @@ impl State {
                         && let Some(store) = &self.store
                     {
                         let sent = store.create_card(id, &text);
-                        remember(&mut self.card_request, &mut self.failure, sent);
+                        remember(
+                            &mut self.sent,
+                            "create_card",
+                            &mut self.card_request,
+                            &mut self.failure,
+                            sent,
+                        );
                     }
                 }
                 Ok(_) => {}
                 Err(error) => {
                     self.session.refuse(event.id);
-                    self.failure = Some(error.to_string());
+                    self.fail(&error);
                 }
             }
         }
@@ -576,7 +673,7 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
                 {
                     match store.history(card) {
                         Ok(id) => s.history_request = Some((id, card)),
-                        Err(error) => s.failure = Some(error.to_string()),
+                        Err(error) => s.fail(&error),
                     }
                 }
                 true
@@ -708,6 +805,11 @@ fn main() {
             state.due_now = 7;
             state.screen = Screen::Summary;
         }),
+        ("failure", |state: &mut State| {
+            state.library = Library::seeded(3);
+            state.seeded = true;
+            state.failure = Some("The library stopped: a command panicked".to_string());
+        }),
         ("editor-leave", |state: &mut State| {
             state.screen = Screen::Editor;
             state.editor = Editor::new(
@@ -725,6 +827,18 @@ fn main() {
         on_key: Some(on_key),
         ..AppSpec::new("typr", (960.0, 640.0), State::default, view)
     });
+
+    // The worker's end is only knowable after its handle went with the state, inside `rune::run`.
+    if let Some(status) = WORKER.get()
+        && let Some(error) = status.ended()
+    {
+        log::error!(
+            target: "typr",
+            "the library worker ended badly: {}",
+            logging::describe(&*error)
+        );
+    }
+    logging::shutdown();
 }
 
 #[cfg(test)]

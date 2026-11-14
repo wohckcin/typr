@@ -169,7 +169,7 @@ fn deck_names_are_unique_under_one_parent_and_free_elsewhere() {
             0,
         )
         .expect_err("duplicate");
-    assert!(error.to_string().contains("UNIQUE"), "{error}");
+    assert!(chain(&error).contains("UNIQUE"), "{}", chain(&error));
 
     db.apply(
         &Command::CreateDeck {

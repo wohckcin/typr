@@ -36,6 +36,18 @@ fn spawn_temp(dir: &TempDir) -> Handle {
     .expect("spawn")
 }
 
+/// Every message in an error's chain, so a test can assert on the cause the top line leaves out.
+fn chain(error: &StoreError) -> String {
+    let mut text = error.to_string();
+    let mut cause = std::error::Error::source(error);
+    while let Some(inner) = cause {
+        text.push_str(": ");
+        text.push_str(&inner.to_string());
+        cause = inner.source();
+    }
+    text
+}
+
 /// Ids the snapshot's own filter keeps, which is what the library screen shows.
 fn matching(db: &Db, query: &str, deck: Option<Id>, mode: CardMode) -> Vec<Id> {
     let snapshot = db.snapshot().expect("snapshot");
