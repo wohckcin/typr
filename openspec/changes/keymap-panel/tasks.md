@@ -2,9 +2,9 @@
 
 ## 1. The table
 
-- [ ] 1.1 Add `crates/typr-core/src/keymap.rs` with `Surface`, `Command`, `Chord`, `Binding`, `bindings()` and `chord_of`, seeded with the bindings that exist today (library `s`/`n`/`h`, editor `Esc`/save, session Space/J/F/Left/Right/R/Esc). Verification: `every_chord_that_exists_today_is_in_the_table` compares the table against the old arms in a test fixture.
-- [ ] 1.2 Add `pub fn conflicts(..)` and a test asserting it is empty. Verification: `no_chord_is_bound_twice_on_one_surface`, and a mutation test that a duplicated chord is reported with both commands.
-- [ ] 1.3 Implement `Chord::from_event(&KeyEvent)` in `crates/typr/src/keymap/mod.rs`, folding letter case. Verification: `an_uppercase_letter_dispatches_the_lowercase_binding`.
+- [x] 1.1 Add `crates/typr-core/src/keymap.rs` with `Surface`, `Command`, `Chord`, `Binding`, `bindings()` and `chord_of`, seeded with the bindings that exist today (library `s`/`n`/`h`, editor `Esc`/save, session Space/J/F/Left/Right/R/Esc). Verification: `every_chord_that_exists_today_is_in_the_table` compares the table against the old arms in a test fixture.
+- [x] 1.2 Add `pub fn conflicts(..)` and a test asserting it is empty. Verification: `no_chord_is_bound_twice_on_one_surface`, and a mutation test that a duplicated chord is reported with both commands.
+- [x] 1.3 Implement `Chord::from_event(&KeyEvent)` in `crates/typr/src/keymap/mod.rs`, folding letter case. Verification: `an_uppercase_letter_dispatches_the_lowercase_binding`.
 
 ## 2. Dispatch
 

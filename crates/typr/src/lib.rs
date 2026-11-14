@@ -1,4 +1,5 @@
 //! `typr` — a local-first flashcard app on Rune.
+pub mod keymap;
 
 pub mod attachments;
 pub mod day_offset;
