@@ -6,7 +6,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rune::tok::{self, type_};
-use rune::{El, GrowthSpec, ScrollSpec, TextEdit, col, row, text, text_input};
+use rune::{
+    El, FileDialogOptions, GrowthSpec, ScrollSpec, TextEdit, Tx, col, row, text, text_input,
+};
 use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root};
 
 use typr_core::keymap::{Command, Surface};
@@ -280,6 +282,17 @@ pub trait Host: 'static {
 
     /// Replace a saved view's filter. A host with no store cannot.
     fn update_view(&mut self, _id: Id, _spec: &ViewSpec) {}
+
+    /// Import the file the user chose. Answers the command sent, so a flow test can wait for
+    /// its answer; a host with no store answers `None`.
+    fn import_file(&mut self, _path: std::path::PathBuf) -> Option<u64> {
+        None
+    }
+
+    /// Export the library, or its selected deck, to the file the user chose.
+    fn export_file(&mut self, _path: std::path::PathBuf) -> Option<u64> {
+        None
+    }
 }
 
 impl Host for Library {
@@ -1461,6 +1474,50 @@ fn filter_bar<S: Host>(s: &S) -> El {
                 .key("archive-deck"),
         );
     }
+    bar = bar.child(
+        Button::new("Import")
+            .variant(ButtonVariant::Ghost)
+            .on_press_tx(|_: &mut S, tx: &mut Tx| {
+                tx.open_file(
+                    FileDialogOptions {
+                        title: "Import cards".to_string(),
+                        ..FileDialogOptions::default()
+                    }
+                    .filter("Mochi export", &["mochi"])
+                    .filter("Spreadsheet", &["csv"])
+                    .filter("Markdown", &["md", "markdown"]),
+                    |s: &mut S, result, _| {
+                        if let Ok(Some(path)) = result {
+                            let _ = s.import_file(path);
+                        }
+                    },
+                );
+            })
+            .build(&KIT)
+            .key("import"),
+    );
+    bar = bar.child(
+        Button::new("Export")
+            .variant(ButtonVariant::Ghost)
+            .on_press_tx(|_: &mut S, tx: &mut Tx| {
+                tx.save_file(
+                    FileDialogOptions {
+                        title: "Export cards".to_string(),
+                        ..FileDialogOptions::default()
+                    }
+                    .filter("typr library", &["typr"])
+                    .filter("Spreadsheet", &["csv"])
+                    .filter("Markdown", &["md"]),
+                    |s: &mut S, result, _| {
+                        if let Ok(Some(path)) = result {
+                            let _ = s.export_file(path);
+                        }
+                    },
+                );
+            })
+            .build(&KIT)
+            .key("export"),
+    );
     bar
 }
 

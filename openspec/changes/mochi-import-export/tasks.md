@@ -29,7 +29,7 @@ Depends on `card-templates` (fields), `diagram-cards` (masks) and `cloze-deletio
 
 ## 4. UI and close out
 
-- [ ] 4.1 The library offers Import and Export through the native file dialog, runs the work on the store thread, and reports progress and failure on the failure line.
+- [x] 4.1 The library offers Import and Export through the native file dialog, runs the work on the store thread, and reports progress and failure on the failure line.
   - **Verification**: `importing_a_mochi_export_from_the_library_adds_its_cards` drives the command path and settles the answer; an unreadable file leaves the count unchanged and the reason on screen.
 - [ ] 4.2 README documents the four formats, the CSV header and what a `.typr` file is; the new dependency is recorded with its reason.
   - **Verification**: the README section exists and `cargo tree -p typr-core --edges normal` shows the archive crate and no toolkit crate.

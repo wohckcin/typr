@@ -159,6 +159,34 @@ it back at the end of the same run and a card leaves only when it is remembered.
 how many answers were given and that nothing was scheduled, and it can save the run's filter as a
 view: the name is yours to type, and nothing is saved unless you press the button.
 
+## Import and export
+
+The library screen has **Import** and **Export** beside the other filter controls. Both open the
+native file dialog; the file's extension decides the format.
+
+- **Import** reads a Mochi `.mochi` archive, a `.csv` file, or a `.md`/`.markdown` file. CSV and
+  Markdown write into the deck selected in the sidebar; a `.mochi` archive brings its own decks.
+- **Export** writes the whole library as one `.typr` file, or the selected deck as `.csv` or
+  `.md`. The line at the bottom of the screen says what was written, or why the export failed.
+
+A `.typr` file is the library itself — decks, cards, prompts, fields, masks and every review
+record — copied by SQLite, so it reopens exactly as it was. It is not a backup of your pictures:
+images live beside the library in its own folder and are not inside the file, so a `.typr` opened
+on another machine shows the cards but not their pictures.
+
+CSV and Markdown are for reading and editing text outside the app. Both carry cards' text, sides,
+tags and template fields, and nothing else: diagram cards are left out because no column carries a
+picture or a mask, and templates, review history, reverse settings and pins stay behind. CSV has a
+header — `deck, sides, tags, fields, markdown` — where tags and fields are JSON cells so a comma or
+a newline inside one does not split the row; `deck` records where the row came from, and importing
+writes into the deck you have selected. Markdown separates cards with a blank line and starts each
+file with the deck's name as a heading, so a card that itself contains a blank line cannot round
+trip through Markdown (use CSV or `.typr` for those).
+
+Importing adds. It does not merge, update or skip cards that are already there, so importing the
+same file twice gives you the cards twice. A duplicate deck name inside one Mochi archive is
+refused rather than silently merged, and a refused import writes nothing.
+
 ## Keyboard
 
 Every binding lives in one table, `typr_core::keymap::TABLE`, and the app draws its hints from
@@ -202,6 +230,10 @@ add it here.
 
 `dev` is fast-forward-only, so a revision is a stable target and upgrades are deliberate: bump the
 revision, re-read Rune's `[patch.crates-io]`, rebuild.
+
+`typr-core` also depends on `zip` (with the pure-Rust `zlib-rs` deflate backend) and `serde_json`:
+a Mochi archive is a zip of JSON, and the import has to read it on the store's worker thread, which
+cannot use the UI crate's readers.
 
 ## Logs
 

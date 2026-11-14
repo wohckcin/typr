@@ -254,6 +254,18 @@ fn overdue_days(now_ms: i64, due_at_ms: i64, offset_ms: i64) -> i64 {
     (day::study_day(now_ms, offset_ms) - day::study_day(due_at_ms, offset_ms)).max(0)
 }
 
+/// `1 card`, `2 cards`, so a report line never reads like a template.
+fn count_of(count: usize, one: &str, many: &str) -> String {
+    format!("{count} {}", if count == 1 { one } else { many })
+}
+
+/// The lower-case extension a transfer reads its format from.
+fn transfer_format(path: &std::path::Path) -> Option<String> {
+    path.extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(str::to_ascii_lowercase)
+}
+
 /// Remember the id of a command that went out, answering whether it did, and say why when it did
 /// not.
 fn remember(
@@ -307,6 +319,114 @@ impl State {
     fn say(&mut self, message: String) {
         log::warn!(target: "typr", "{message}");
         self.failure = Some(message);
+    }
+
+    /// Send a transfer and put its progress on the failure line; its answer replaces that line.
+    fn send_transfer(&mut self, name: &'static str, sent: Result<u64, StoreError>) -> Option<u64> {
+        match sent {
+            Ok(id) => {
+                self.sent.insert(id, (name, Instant::now()));
+                self.report(
+                    if name == "import" {
+                        "Importing…"
+                    } else {
+                        "Exporting…"
+                    }
+                    .to_string(),
+                );
+                Some(id)
+            }
+            Err(error) => {
+                self.fail(&error);
+                None
+            }
+        }
+    }
+
+    /// Say what a transfer did on the line a failure would use, so success is not silent.
+    fn report(&mut self, message: String) {
+        log::info!(target: "typr", "{message}");
+        self.failure = Some(message);
+    }
+
+    /// Import a file the user chose, picking the reader from its extension.
+    fn import_path(&mut self, path: std::path::PathBuf) -> Option<u64> {
+        let Some(format) = transfer_format(&path) else {
+            self.say(format!(
+                "{} has no extension, so its format is unknown.",
+                path.display()
+            ));
+            return None;
+        };
+        if !matches!(format.as_str(), "mochi" | "csv" | "md" | "markdown") {
+            self.say(format!(
+                "A .{format} file is not something this library can import."
+            ));
+            return None;
+        }
+        let deck = if matches!(format.as_str(), "csv" | "md" | "markdown") {
+            match self.library.selected_deck {
+                Some(deck) => Some(deck),
+                None => {
+                    self.say(
+                        "Choose a deck first: this format holds one deck's cards.".to_string(),
+                    );
+                    return None;
+                }
+            }
+        } else {
+            None
+        };
+        let Some(store) = self.store.as_ref() else {
+            self.say("There is no library to import into.".to_string());
+            return None;
+        };
+        let sent = match format.as_str() {
+            "mochi" => store.import_archive(&path, self.editor.attachments.root()),
+            "csv" => store.import_csv(deck?, &path),
+            _ => store.import_markdown(deck?, &path),
+        };
+        self.send_transfer("import", sent)
+    }
+
+    /// Export the library, or its selected deck, to a file the user chose.
+    fn export_path(&mut self, path: std::path::PathBuf) -> Option<u64> {
+        let Some(format) = transfer_format(&path) else {
+            self.say(format!(
+                "{} has no extension, so the format to write is unknown.",
+                path.display()
+            ));
+            return None;
+        };
+        if !matches!(format.as_str(), "typr" | "csv" | "md" | "markdown") {
+            self.say(format!(
+                "A .{format} file is not something this library can export."
+            ));
+            return None;
+        }
+        let deck = if matches!(format.as_str(), "csv" | "md" | "markdown") {
+            match self.library.selected_deck {
+                Some(deck) => Some(deck),
+                None => {
+                    self.say(
+                        "Choose a deck first: this format holds one deck's cards.".to_string(),
+                    );
+                    return None;
+                }
+            }
+        } else {
+            None
+        };
+        let Some(store) = self.store.as_ref() else {
+            self.say("There is no library to export from.".to_string());
+            return None;
+        };
+        let sent = match format.as_str() {
+            "typr" => store.export_library(&path),
+            "csv" => store.export_csv(deck?, &path),
+            _ => store.export_markdown(deck?, &path),
+        };
+        self.send_transfer("export", sent)
     }
 
     /// A deck name nothing else is called, so asking for a new deck always works.
@@ -559,6 +679,14 @@ impl library::Host for State {
             None => Err(StoreError::Closed),
         };
         self.track("empty_trash", sent);
+    }
+
+    fn import_file(&mut self, path: std::path::PathBuf) -> Option<u64> {
+        self.import_path(path)
+    }
+
+    fn export_file(&mut self, path: std::path::PathBuf) -> Option<u64> {
+        self.export_path(path)
     }
 }
 
@@ -1241,6 +1369,23 @@ impl State {
                         }
                     }
                 }
+                Ok(Outcome::Imported(report)) => {
+                    // A spreadsheet or Markdown import writes into a deck that already existed,
+                    // so it has no deck of its own to report.
+                    let across = if report.decks == 0 {
+                        String::new()
+                    } else {
+                        format!(" across {}", count_of(report.decks, "deck", "decks"))
+                    };
+                    self.report(format!(
+                        "Imported {}{across}: {}, {}, {}.",
+                        count_of(report.cards, "card", "cards"),
+                        count_of(report.reviews, "review", "reviews"),
+                        count_of(report.images, "picture", "pictures"),
+                        count_of(report.masks, "mask", "masks"),
+                    ));
+                }
+                Ok(Outcome::Exported) => self.report("Exported.".to_string()),
                 Ok(_) => {}
                 Err(error) => {
                     self.session.refuse(event.id);

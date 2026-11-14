@@ -1715,3 +1715,94 @@ fn cramming_a_tag_with_nothing_due_visits_exactly_its_cards() {
     assert_ne!(walked, vec![sol], "the untagged card stays out");
     assert!(state.session.grades.is_empty(), "nothing is answered yet");
 }
+
+#[test]
+fn importing_a_mochi_export_from_the_library_adds_its_cards() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    state.editor.attachments = Attachments::detached(dir.path().join("attachments"));
+    refresh_library(&mut state);
+    let source =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/mochi-import.mochi");
+    let _ = library::Host::import_file(&mut state, source).expect("sent");
+    // The import is answered on the store thread; the screen follows when it lands.
+    wait_for(&mut state, "the imported cards", |s| {
+        s.library.snapshot().cards.len() == 3
+            || s.failure
+                .as_deref()
+                .is_some_and(|line| line != "Importing…")
+    });
+    assert_eq!(
+        state.library.snapshot().cards.len(),
+        3,
+        "the import answered instead of adding cards: {:?}",
+        state.failure
+    );
+    let snapshot = state.library.snapshot();
+    assert_eq!(snapshot.decks.len(), 2, "the archive's deck arrived");
+    assert_eq!(snapshot.cards.len(), 3, "both archive cards arrived");
+    assert_eq!(
+        snapshot
+            .cards
+            .iter()
+            .filter(|card| card.kind == CardKind::Diagram)
+            .count(),
+        1,
+        "the picture card stayed a diagram"
+    );
+    assert!(
+        snapshot
+            .cards
+            .iter()
+            .any(|card| card.image.as_deref() == Some("pixel.png") && card.masks.len() == 1),
+        "the picture and its mask arrived"
+    );
+    assert!(
+        state
+            .failure
+            .as_deref()
+            .is_some_and(|line| line.contains("Imported 2 cards across 1 deck")),
+        "the line reports what was imported: {:?}",
+        state.failure
+    );
+}
+
+#[test]
+fn exporting_and_importing_a_deck_through_the_library_round_trips() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    state.library.selected_deck = Some(state.library.snapshot().decks[0].id);
+    let target = dir.path().join("biology.csv");
+    let _ = library::Host::export_file(&mut state, target.clone()).expect("sent");
+    wait_for(&mut state, "the export", |s| {
+        target.exists() && s.failure.as_deref() == Some("Exported.")
+    });
+    let _ = library::Host::import_file(&mut state, target).expect("sent");
+    wait_for(&mut state, "the re-import", |s| {
+        s.library.snapshot().cards.len() == 2
+    });
+    assert_eq!(
+        state.library.snapshot().cards.len(),
+        2,
+        "the exported card came back beside the one it came from"
+    );
+    assert!(
+        state
+            .failure
+            .as_deref()
+            .is_some_and(|line| line.contains("Imported 1 card:")),
+        "the line reports the re-import: {:?}",
+        state.failure
+    );
+}
