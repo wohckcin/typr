@@ -122,6 +122,8 @@ pub struct Editor {
     pub deck: Option<Id>,
     /// The name of the deck this card sits in, which `<<Deck>>` renders.
     pub deck_name: Option<String>,
+    /// The card's stored name, shown in the header: what every other screen calls this card.
+    pub name: String,
     /// The card's text as the template renders it, kept up to date as fields are typed into.
     pub rendered: String,
 }
@@ -214,6 +216,7 @@ impl Editor {
             saved_fields: Vec::new(),
             deck: None,
             deck_name: None,
+            name: String::new(),
             rendered: String::new(),
         }
     }
@@ -249,6 +252,7 @@ impl Editor {
         self.template_from = card.template_from;
         self.deck = Some(card.deck);
         self.deck_name = deck_name.map(str::to_string);
+        self.name = card.name.clone();
         // The table is the template's field list first, in the order the template asks for them,
         // so a card that has never been filled still has somewhere to type. A stored field the
         // template no longer names keeps its row after those, so its value is not lost.
@@ -1150,12 +1154,23 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
     let t = tok::theme(true);
     let unsaved = s.editor().dirty();
     let refusal = s.editor().refusal();
-    let header = row()
+    let mut header = row()
         .key("editor-header")
         .h(44.0)
         .px(16.0)
         .center_y()
-        .gap(8.0)
+        .gap(8.0);
+    if !s.editor().name.is_empty() {
+        // Every other screen identifies this card by its name, so the editor says it too.
+        header = header.child(
+            text(s.editor().name.clone())
+                .key("editor-name")
+                .font(type_::LABEL)
+                .color(t.text)
+                .shrink(),
+        );
+    }
+    let header = header
         .child(
             text(if unsaved { "Unsaved changes" } else { "Saved" })
                 .font(type_::LABEL)

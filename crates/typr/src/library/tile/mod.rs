@@ -113,14 +113,28 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
 
     // No `grow` here: in an auto-height column a grown child contributes no height to its parent,
     // which left the tile box shorter than its own content and put the footer out of its hit area.
+    let side = first_side(card);
+    let named = !opens_with_name(card, &side);
     let mut body = col()
         .key(format!("tile-body-{id}"))
         .w_full()
         .padding(PADDING)
-        .gap(4.0)
-        .child(memo("tile-side", side_key(card), || {
-            Markdown::new(first_side(card)).render(&MarkdownStyle::neutral(true))
-        }));
+        .gap(4.0);
+    if named {
+        // The name reads first and the text under it, which is what makes a templated card
+        // distinguishable from its own first line: a card named `hablar (verb)` opens with
+        // `hablar`, and the tile would otherwise never say which card this is.
+        body = body.child(
+            text(card.name.clone())
+                .key(format!("tile-name-{id}"))
+                .font(type_::LABEL)
+                .color(t.text)
+                .w_full(),
+        );
+    }
+    body = body.child(memo("tile-side", side_key(card), || {
+        Markdown::new(side).render(&MarkdownStyle::neutral(true))
+    }));
     if sides > 0 {
         body = body.child(hidden_strip(sides));
     }
@@ -378,6 +392,18 @@ fn chip_row(tags: Vec<String>, width: f32) -> El {
         );
     }
     chips
+}
+
+/// Whether the body already opens with the name.
+///
+/// A name derived from the first side is that side's first line, so heading the tile with it would
+/// repeat the line underneath. Only a name a template wrote says something the body does not.
+pub fn opens_with_name(card: &CardSummary, side: &str) -> bool {
+    !card.name.is_empty()
+        && side
+            .lines()
+            .find(|line| !line.trim().is_empty())
+            .is_some_and(|line| line.trim() == card.name)
 }
 
 /// The card's first side, which is what a tile shows.

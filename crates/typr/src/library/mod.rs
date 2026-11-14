@@ -33,9 +33,9 @@ pub const GAP: f32 = 16.0;
 pub const WRAP_BELOW: f32 = 233.0;
 
 /// The height a tile is drawn at before it has been laid out, and the height every tile is drawn
-/// at, so a line's tiles match. It is the tallest measured anatomy: body, hidden-side strip, tags
-/// and footer.
-pub const TILE_HEIGHT: f32 = 100.0;
+/// at, so a line's tiles match. It is the tallest measured anatomy: name, body, hidden-side strip,
+/// tags and footer.
+pub const TILE_HEIGHT: f32 = 120.0;
 
 /// The sidebar's fixed width, which the grid's share of the window is measured against.
 pub const SIDEBAR_WIDTH: f32 = 200.0;

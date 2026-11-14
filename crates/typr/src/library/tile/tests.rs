@@ -315,3 +315,35 @@ fn a_card_asked_both_ways_says_so_on_its_tile() {
         "and a card that never set it says nothing: {forward:?}"
     );
 }
+
+#[test]
+fn the_list_shows_the_name_even_when_the_preview_differs() {
+    let mut library = Library::seeded(1);
+    let mut snapshot = (*library.snapshot).clone();
+    snapshot.cards[0].name = "hablar (verb)".to_string();
+    library.set_snapshot(std::sync::Arc::new(snapshot));
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| {
+            let card = s.cards().first().expect("one card").clone();
+            super::tile::<Library>(s, &card, 245.0, NOON)
+        },
+        (400.0, 400.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    let strings: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|el| el.text)
+        .collect();
+    assert!(
+        strings.iter().any(|text| text == "hablar (verb)"),
+        "the name heads the tile: {strings:?}"
+    );
+    assert!(
+        strings.iter().any(|text| text.contains("Card 1")),
+        "and the text is still under it as the second line: {strings:?}"
+    );
+}
