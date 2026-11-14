@@ -72,6 +72,7 @@ pub struct Editor {
     pub history: crate::history::History,
     /// The tags, as one line the user types into.
     pub tags: TextEdit,
+    /// The tag line for the input that shows it.
     /// The tag line as stored, so a change to it counts as unsaved.
     pub saved_tags: String,
 }
@@ -140,6 +141,11 @@ impl Editor {
         let line = tags.join(", ");
         self.tags.replace_text(line.clone());
         self.saved_tags = line;
+    }
+
+    /// The tag line as typed, for the input that shows it.
+    pub fn tags_text(&self) -> &TextEdit {
+        &self.tags
     }
 
     /// The tags the field holds, split on commas or spaces and de-duplicated, keeping the first
@@ -377,9 +383,9 @@ fn back_button<S: Host>() -> El {
 }
 
 /// The tag line, which stores what it holds as soon as the user presses Enter.
-fn tag_field<S: Host>() -> El {
+fn tag_field<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
-    text_input(&TextEdit::default(), type_::LABEL)
+    text_input(s.editor().tags_text(), type_::LABEL)
         .key("tags")
         .w(240.0)
         .single_line()
@@ -472,7 +478,7 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                     t.text_secondary
                 }),
         )
-        .child(tag_field::<S>())
+        .child(tag_field::<S>(s))
         .child(rune::el().grow(1.0))
         .child(back_button::<S>())
         .child(attach_button::<S>())

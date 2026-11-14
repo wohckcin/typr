@@ -295,3 +295,27 @@ fn the_tag_line_keeps_one_spelling_of_each_tag() {
     );
     assert!(editor.dirty(), "a changed tag line is an unsaved change");
 }
+
+#[test]
+fn the_tag_field_keeps_each_keystroke() {
+    let editor = Editor::new(Some(1 as Id), "front\n---\nback".to_string());
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (960.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    let (x, y) = runtime.find("tags").expect("the tag field");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+    for letter in ["a", "b", "c"] {
+        runtime.key(rune::KeyEvent {
+            key: rune::Key::Text(letter.to_string()),
+            mods: rune::Mods::default(),
+        });
+        runtime.frame(0.1);
+    }
+    assert_eq!(runtime.state.tags.text, "abc");
+}

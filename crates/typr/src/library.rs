@@ -190,6 +190,11 @@ impl Library {
         }
     }
 
+    /// The name being typed, for the input that shows it.
+    pub fn rename_text(&self) -> &TextEdit {
+        &self.rename_buffer
+    }
+
     /// The name field, for the input that edits it.
     pub fn rename_field(&mut self) -> &mut TextEdit {
         &mut self.rename_buffer
@@ -386,6 +391,7 @@ fn push_branch<'a>(
 fn deck_row<S: Host>(
     deck: &Deck,
     depth: usize,
+    name: &TextEdit,
     selected: bool,
     renaming: bool,
     moving: bool,
@@ -401,7 +407,7 @@ fn deck_row<S: Host>(
             .center_y()
             .fill(t.control_off)
             .child(
-                text_input(&TextEdit::default(), type_::LABEL)
+                text_input(name, type_::LABEL)
                     .key("deck-name")
                     .single_line()
                     .grow(1.0)
@@ -489,6 +495,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         sidebar = sidebar.child(deck_row::<S>(
             deck,
             depth,
+            library.rename_text(),
             library.selected_deck == Some(deck.id),
             renaming == Some(deck.id),
             library.moving.is_some() || library.moving_card.is_some(),

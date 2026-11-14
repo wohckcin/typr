@@ -175,3 +175,30 @@ fn the_rename_field_takes_what_is_typed_straight_after_the_press() {
         "typing after the press should replace the old name"
     );
 }
+
+#[test]
+fn the_rename_field_keeps_each_keystroke() {
+    let mut library = Library::seeded(1);
+    library.select_deck(Some(1));
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (960.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+
+    let (x, y) = runtime.find("rename-deck").expect("the rename button");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+
+    for letter in ["Z", "o", "o"] {
+        runtime.key(rune::KeyEvent {
+            key: rune::Key::Text(letter.to_string()),
+            mods: rune::Mods::default(),
+        });
+        runtime.frame(0.1);
+    }
+    assert_eq!(runtime.state.rename_buffer.text, "Zoo");
+}
