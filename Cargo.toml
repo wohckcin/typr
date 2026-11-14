@@ -1,24 +1,13 @@
-[package]
-name = "typr"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0", features = ["native-file-dialog"] }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0", features = ["markdown"] }
-rusqlite = { version = "0.42.0", features = ["bundled"] }
-thiserror = "2"
-time = { version = "0.3.55", default-features = false, features = ["std", "local-offset"] }
-unicode-normalization = "0.1.26"
+[workspace]
+resolver = "3"
+members = ["crates/typr-core", "crates/typr"]
 
 # Rune patches these four crates in its own workspace, and a dependency's `[patch]` does not reach
-# the workspace that depends on it. Same rev as `rune` above; when Rune's root `[patch.crates-io]`
-# gains an entry, add it here too.
+# the workspace that depends on it. A patch section is only honoured at the workspace root, which is
+# why it lives here rather than beside the package that names Rune. Same rev as `rune` in
+# `crates/typr/Cargo.toml`; when Rune's root `[patch.crates-io]` gains an entry, add it here too.
 [patch.crates-io]
 winit = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
 parley_engine = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
 wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
 accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
-
-[dev-dependencies]
-tempfile = "3.27.0"
