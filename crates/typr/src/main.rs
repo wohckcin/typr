@@ -122,6 +122,12 @@ impl editor::Host for State {
         self.screen = Screen::Library;
     }
 
+    fn leave_editor(&mut self) {
+        if self.editor.request_leave() == editor::Leaving::Leave {
+            self.close_editor();
+        }
+    }
+
     fn set_tags(&mut self, card: Id, tags: &[String]) {
         let sent = match self.store.as_ref() {
             Some(store) => store.set_tags(card, tags),
@@ -680,6 +686,11 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
         }
         // Two ways into a session from the library, so the keyboard can start one.
         Screen::Editor => match &event.key {
+            // Escape leaves, asking first when the buffer has unsaved work.
+            rune::Key::Escape => {
+                editor::Host::leave_editor(s);
+                true
+            }
             // `h` shows this card's review history beside the preview, or hides it again.
             rune::Key::Text(t) if t == "h" => {
                 s.editor.showing_history = !s.editor.showing_history;

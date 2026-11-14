@@ -1280,3 +1280,36 @@ fn a_grade_that_could_not_be_sent_is_not_waited_on() {
         "and the reason is on screen, got {drawn:?}"
     );
 }
+
+/// The editor is a door, not a trap: Escape leaves it, and asks first when the buffer is dirty.
+#[test]
+fn escaping_the_editor_returns_to_the_library_and_asks_first_when_dirty() {
+    let mut state = State {
+        screen: Screen::Editor,
+        editor: Editor::new(None, "front\n---\nback".to_string()),
+        ..State::default()
+    };
+    let escape = KeyEvent {
+        key: Key::Escape,
+        mods: Mods::default(),
+    };
+    let mut tx = Tx::default();
+
+    assert!(on_key(&mut state, &escape, &mut tx), "the escape is taken");
+    assert_eq!(state.screen, Screen::Library, "a clean buffer leaves");
+    assert!(!state.editor.asking, "nothing to answer");
+
+    // A dirty buffer asks, and stays put until the question is answered.
+    state.screen = Screen::Editor;
+    state.editor.buffer.replace_text("front\n---\nback\nedited");
+    assert!(on_key(&mut state, &escape, &mut tx), "the escape is taken");
+    assert_eq!(state.screen, Screen::Editor, "an unsaved card stays open");
+    assert!(state.editor.asking, "the confirmation is on screen");
+
+    state
+        .editor
+        .resolve(editor::Choice::Discard)
+        .expect("discard");
+    state.screen = Screen::Library;
+    assert!(!state.editor.asking, "the question is gone");
+}

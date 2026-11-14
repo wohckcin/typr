@@ -26,6 +26,11 @@ pub trait Host: 'static {
 
     /// Leave the editor, if the host has somewhere to go.
     fn close_editor(&mut self);
+
+    /// Leave the editor, asking first when the buffer has unsaved work.
+    fn leave_editor(&mut self) {
+        self.close_editor();
+    }
 }
 
 impl Host for Editor {
@@ -360,6 +365,17 @@ fn save_button<S: Host>() -> El {
         .key("save-card")
 }
 
+/// The way out of the editor: the library, asking first if the buffer is dirty.
+fn back_button<S: Host>() -> El {
+    Button::new("Library")
+        .variant(ButtonVariant::Ghost)
+        .on_press(|s: &mut S| {
+            s.leave_editor();
+        })
+        .build(&KIT)
+        .key("back-to-library")
+}
+
 /// The tag line, which stores what it holds as soon as the user presses Enter.
 fn tag_field<S: Host>() -> El {
     let t = tok::theme(true);
@@ -458,6 +474,7 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
         )
         .child(tag_field::<S>())
         .child(rune::el().grow(1.0))
+        .child(back_button::<S>())
         .child(attach_button::<S>())
         .child(save_button::<S>());
     let mut layer = Vec::new();
