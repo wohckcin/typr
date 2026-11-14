@@ -143,13 +143,15 @@ fn an_fsrs_grade_bootstraps_a_prompt_it_has_never_seen() {
     };
     let outcome = fsrs.grade(&scheduled, Grade::Remembered, AT);
     assert_eq!(outcome.phase, Phase::Review);
+    // Answered on its due date, so it has been held exactly five days: five-day stability, 90%
+    // recall, remembered. Starting from `initial` instead would give a different number, which is
+    // what makes this an assertion about bootstrapping rather than about the formula.
     assert_eq!(
-        outcome.interval_ms,
-        5 * DAY_MS,
-        "a five-day prompt at 90% keeps its five days"
+        outcome.interval_ms, 1_419_282_260,
+        "five days of stability, thirty-eight percent of it recovered, is sixteen days"
     );
     let memory = outcome.memory.expect("FSRS leaves a memory behind");
-    assert_eq!(memory.stability, 5.0, "bootstrapped from the interval");
+    assert_eq!(memory.stability, 16.42687800983301, "grown from five days");
     assert!(
         (5.4..5.6).contains(&memory.difficulty),
         "and middling difficulty, pulled a hair towards the easy anchor: {}",
@@ -181,6 +183,7 @@ fn a_failed_fsrs_review_waits_less_than_a_remembered_one() {
         phase: Phase::Review,
         interval_ms: 10 * DAY_MS,
         due_at: Some(AT),
+        last_at: Some(AT - 10 * DAY_MS),
         memory: Some(Memory {
             stability: 10.0,
             difficulty: 5.0,
@@ -220,4 +223,40 @@ fn the_fixed_scheduler_still_produces_the_same_numbers() {
         outcome.memory, None,
         "the fixed path keeps no memory, whatever the library is set to"
     );
+}
+
+#[test]
+fn a_review_on_its_due_date_still_raises_the_stability() {
+    let fsrs = Fsrs::defaults();
+    let mut state = PromptState {
+        phase: Phase::Review,
+        interval_ms: DAY_MS,
+        due_at: Some(AT),
+        last_at: Some(AT - DAY_MS),
+        memory: Some(Memory {
+            stability: 1.0,
+            difficulty: 5.0,
+        }),
+    };
+
+    // Twice in a row, each answer landing exactly on the due date.
+    for _ in 0..2 {
+        let outcome = fsrs.grade(&state, Grade::Remembered, state.due_at.expect("due"));
+        let memory = outcome.memory.expect("FSRS keeps a memory");
+        assert!(
+            memory.stability > state.memory.expect("a memory").stability,
+            "an on-time review is still an interval of forgetting"
+        );
+        assert!(
+            outcome.interval_ms > state.interval_ms,
+            "so the next wait is longer than the last"
+        );
+        state = PromptState {
+            phase: outcome.phase,
+            interval_ms: outcome.interval_ms,
+            due_at: outcome.due_at,
+            last_at: state.due_at,
+            memory: Some(memory),
+        };
+    }
 }

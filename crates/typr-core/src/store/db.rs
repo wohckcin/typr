@@ -8,8 +8,9 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
+use crate::fsrs::Memory;
 use crate::hidden::{self, Shape};
-use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
+use crate::schedule::{FixedMultiplier, Fsrs, PromptState, Scheduler};
 use crate::template;
 use crate::transfer::{self, mochi};
 
@@ -1510,7 +1511,7 @@ impl Db {
         at: i64,
     ) -> Result<Outcome, StoreError> {
         let state = self.prompt_state(card, key)?;
-        let outcome = FixedMultiplier.grade(&state, grade, at);
+        let outcome = self.scheduler()?.grade(&state, grade, at);
         self.conn.execute(
             "INSERT INTO review_log (card_id, key, phase, at, grade, interval_ms, due_at, duration_ms)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -1526,6 +1527,15 @@ impl Db {
             ],
         )?;
         self.refresh_prompt(card, key)?;
+        // The scheduler's memory is not derivable from the log, so it is written beside the
+        // prompt. A scheduler with no memory (the fixed one) leaves what is there untouched: an
+        // empty column would make a switch back re-bootstrap from a guess.
+        if let Some(memory) = outcome.memory {
+            self.conn.execute(
+                "UPDATE prompt SET stability = ?3, difficulty = ?4 WHERE card_id = ?1 AND key = ?2",
+                params![card, key, memory.stability, memory.difficulty],
+            )?;
+        }
         Ok(Outcome::Graded {
             phase: outcome.phase,
             due_at: outcome.due_at,
@@ -1540,7 +1550,8 @@ impl Db {
             params![card, key],
         )?;
         self.conn.execute(
-            "UPDATE prompt SET phase = 'learn', due_at = NULL, interval_ms = 0, reps = 0, lapses = 0
+            "UPDATE prompt SET phase = 'learn', due_at = NULL, interval_ms = 0, reps = 0, lapses = 0,
+                 stability = NULL, difficulty = NULL
              WHERE card_id = ?1 AND key = ?2",
             params![card, key],
         )?;
@@ -1579,25 +1590,52 @@ impl Db {
         Ok(count_of(count))
     }
 
+    /// The scheduler the library asked for, rebuilt from its settings on every grade so a settings
+    /// change needs no restart.
+    fn scheduler(&self) -> Result<Box<dyn Scheduler>, StoreError> {
+        let settings = self.settings()?;
+        Ok(match settings.scheduler {
+            SchedulerKind::Fixed => Box::new(FixedMultiplier),
+            SchedulerKind::Fsrs => Box::new(Fsrs {
+                weights: settings.weights,
+                retention: f64::from(settings.retention) / 100.0,
+            }),
+        })
+    }
+
     fn prompt_state(&self, card: Id, key: &str) -> Result<PromptState, StoreError> {
         self.conn
             .query_row(
-                "SELECT phase, interval_ms, due_at FROM prompt WHERE card_id = ?1 AND key = ?2",
+                "SELECT phase, interval_ms, due_at, stability, difficulty,
+                     (SELECT max(at) FROM review_log WHERE card_id = ?1 AND key = ?2)
+                 FROM prompt WHERE card_id = ?1 AND key = ?2",
                 params![card, key],
                 |row| {
+                    let stability: Option<f64> = row.get(3)?;
+                    let difficulty: Option<f64> = row.get(4)?;
                     Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, i64>(1)?,
                         row.get::<_, Option<i64>>(2)?,
+                        stability
+                            .zip(difficulty)
+                            .map(|(stability, difficulty)| Memory {
+                                stability,
+                                difficulty,
+                            }),
+                        row.get::<_, Option<i64>>(5)?,
                     ))
                 },
             )
-            .map(|(phase, interval_ms, due_at)| PromptState {
-                phase: Phase::parse(&phase).unwrap_or(Phase::Review),
-                interval_ms,
-                due_at,
-                memory: None,
-            })
+            .map(
+                |(phase, interval_ms, due_at, memory, last_at)| PromptState {
+                    phase: Phase::parse(&phase).unwrap_or(Phase::Review),
+                    interval_ms,
+                    due_at,
+                    last_at,
+                    memory,
+                },
+            )
             .map_err(|error| match error {
                 rusqlite::Error::QueryReturnedNoRows => StoreError::NoPrompt {
                     card,

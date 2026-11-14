@@ -1159,3 +1159,109 @@ fn a_malformed_weight_list_is_refused_without_replacing_the_old_one() {
         crate::fsrs::WEIGHT_COUNT
     );
 }
+
+#[test]
+fn fsrs_state_survives_reopening_the_library() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let card = card(&mut db, deck, "gato\n---\ncat");
+    db.apply(
+        &Command::SetSetting {
+            key: "scheduler".to_string(),
+            value: "fsrs".to_string(),
+        },
+        NOON,
+    )
+    .expect("choosing FSRS");
+
+    grade(&mut db, card, "fwd", Grade::Remembered, NOON);
+    let written = memory_of(&db, card, "fwd");
+
+    drop(db);
+    let mut db = open_temp(&dir);
+    assert_eq!(
+        memory_of(&db, card, "fwd"),
+        written,
+        "the memory is a column, not something the log could be asked for again"
+    );
+
+    // The second grade starts where the first one left off, so the interval grows — and it is
+    // graded exactly when it fell due, because a card answered on time has still waited a whole
+    // interval.
+    let first = interval_of(&db, card, "fwd");
+    grade(&mut db, card, "fwd", Grade::Remembered, NOON + first);
+    assert!(
+        interval_of(&db, card, "fwd") > first,
+        "a remembered card should wait longer than it did, got {first} then something shorter"
+    );
+}
+
+#[test]
+fn switching_schedulers_leaves_every_record_alone() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let card = card(&mut db, deck, "gato\n---\ncat");
+    grade(&mut db, card, "fwd", Grade::Remembered, NOON);
+    let before = db.history(card).expect("history");
+
+    db.apply(
+        &Command::SetSetting {
+            key: "scheduler".to_string(),
+            value: "fsrs".to_string(),
+        },
+        NOON,
+    )
+    .expect("choosing FSRS");
+    assert_eq!(
+        db.history(card).expect("history"),
+        before,
+        "choosing a scheduler is not a review"
+    );
+
+    grade(
+        &mut db,
+        card,
+        "fwd",
+        Grade::Remembered,
+        NOON + 10 * TEN_MINUTES,
+    );
+    let after = db.history(card).expect("history");
+    assert_eq!(
+        after.iter().take(before.len()).count(),
+        before.len(),
+        "the first record stands"
+    );
+    assert_eq!(
+        db.history(card).expect("history")[0],
+        before[0],
+        "and is unchanged"
+    );
+    assert_eq!(after.len(), before.len() + 1, "and exactly one was added");
+}
+
+/// The memory the prompt holds, or `None` when no scheduler wrote one.
+fn memory_of(db: &Db, card: Id, key: &str) -> Option<(f64, f64)> {
+    db.connection_for_test()
+        .query_row(
+            "SELECT stability, difficulty FROM prompt WHERE card_id = ?1 AND key = ?2",
+            rusqlite::params![card, key],
+            |row| {
+                let stability: Option<f64> = row.get(0)?;
+                let difficulty: Option<f64> = row.get(1)?;
+                Ok(stability.zip(difficulty))
+            },
+        )
+        .expect("the prompt")
+}
+
+fn interval_of(db: &Db, card: Id, key: &str) -> i64 {
+    db.connection_for_test()
+        .query_row(
+            "SELECT interval_ms FROM prompt WHERE card_id = ?1 AND key = ?2",
+            rusqlite::params![card, key],
+            |row| row.get(0),
+        )
+        .expect("the prompt")
+}

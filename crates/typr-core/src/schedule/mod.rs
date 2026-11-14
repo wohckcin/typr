@@ -31,6 +31,9 @@ pub struct PromptState {
     pub phase: Phase,
     pub interval_ms: i64,
     pub due_at: Option<i64>,
+    /// When this prompt was last reviewed. FSRS measures elapsed time from here, not from the due
+    /// date: a card answered on time has still waited a whole interval.
+    pub last_at: Option<i64>,
     pub memory: Option<Memory>,
 }
 
@@ -40,6 +43,7 @@ impl PromptState {
         phase: Phase::Learn,
         interval_ms: 0,
         due_at: None,
+        last_at: None,
         memory: None,
     };
 }
@@ -128,12 +132,19 @@ impl Fsrs {
         }
     }
 
-    /// How long ago the prompt fell due, in days; a prompt that never fell due is reviewed as if it
-    /// were on time, which is what gives a first grade its `initial` memory rather than an update.
+    /// How many days the card has been held, which is the time since its last review.
+    ///
+    /// Anchoring on the due date instead would make an on-time review look instantaneous: its
+    /// retrievability would be 1, its stability unchanged, and the card would never leave the
+    /// interval it started with. A prompt the fixed scheduler scheduled has no record of a review
+    /// time to read here, so its last review is where the interval that made it due began.
     fn elapsed_days(state: &PromptState, at_ms: i64) -> f64 {
-        match state.due_at {
+        let held_since = state
+            .last_at
+            .or_else(|| state.due_at.map(|due| due - state.interval_ms));
+        match held_since {
             None => 0.0,
-            Some(due) => ((at_ms - due).max(0) as f64) / (ONE_DAY_MS as f64),
+            Some(since) => ((at_ms - since).max(0) as f64) / (ONE_DAY_MS as f64),
         }
     }
 }
