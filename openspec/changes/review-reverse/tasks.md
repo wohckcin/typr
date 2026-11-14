@@ -29,23 +29,23 @@
 
 ## 3. Reviewing the reverse direction
 
-- [ ] 3.1 `Session` builds `faces` from `sides`, reversed when `prompt` starts with `rev`, and exposes `direction() -> &str`.
+- [x] 3.1 `Session` builds `faces` from `sides`, reversed when `prompt` starts with `rev`, and exposes `direction() -> &str`.
   - **Verification**: `a_reverse_entry_shows_the_last_side_first` asserts the first face text and that one reveal surfaces the question; every existing sides test passes unchanged.
-- [ ] 3.2 The session screen names the direction and the bindings row is unchanged.
+- [x] 3.2 The session screen names the direction and the bindings row is unchanged.
   - **Verification**: `crates/typr/src/tests.rs::a_reverse_review_says_so` reads the rendered elements for "Reverse" on a `rev` entry and its absence on a `fwd` entry.
 
 ## 4. Controls
 
-- [ ] 4.1 The library row shows a reverse marker and carries a toggle bound to `SetCardReverse`.
+- [x] 4.1 The library row shows a reverse marker and carries a toggle bound to `SetCardReverse`.
   - **Verification**: `the_row_toggles_reverse_for_one_card` turns it off and sees the `rev` prompt leave the due queue while a sibling card keeps its own.
-- [ ] 4.2 A deck shows its three-state setting and offers on, off and inherit.
+- [x] 4.2 A deck shows its three-state setting and offers on, off and inherit.
   - **Verification**: `a_deck_can_be_set_back_to_inherit` asserts the label changes and the queue follows the parent.
-- [ ] 4.3 The editor header shows the card's own reverse state, including "inherit".
+- [x] 4.3 The editor header shows the card's own reverse state, including "inherit".
   - **Verification**: `the_editor_says_a_card_inherits_its_reverse_setting` opens a card with no own value and finds "Inherit".
 
 ## 5. Close out
 
-- [ ] 5.1 Refresh the `library-5000` scene so it includes one reverse-enabled deck, and add `review-reverse` snapping a card asked from its answer side.
+- [x] 5.1 Refresh the `library-5000` scene so it includes one reverse-enabled deck, and add `review-reverse` snapping a card asked from its answer side.
   - **Verification**: `--list-scenes` lists it and its `--snap` is non-blank.
 - [ ] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.

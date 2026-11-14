@@ -989,3 +989,241 @@ fn typing_in_the_palette_does_not_grade() {
     assert!(!on_key(&mut state, &letter_press("j"), &mut tx));
     assert_eq!(state.session.remaining(), 1, "nothing was graded");
 }
+
+#[test]
+fn the_row_toggles_reverse_for_one_card() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    let store = {
+        let mut db = Db::open(&path).expect("open");
+        let deck = match db
+            .apply(
+                &typr_core::store::Command::CreateDeck {
+                    parent: None,
+                    name: "Languages".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            typr_core::store::Outcome::Deck(id) => id,
+            other => panic!("creating a deck: {other:?}"),
+        };
+        for markdown in ["front\n---\nback", "front\n---\nback"] {
+            db.apply(
+                &typr_core::store::Command::CreateCard {
+                    deck,
+                    markdown: markdown.to_string(),
+                },
+                0,
+            )
+            .expect("card");
+        }
+        // Both cards are asked from both ends until one of them says otherwise.
+        db.apply(
+            &typr_core::store::Command::SetDeckReverse {
+                deck,
+                reverse: Some(true),
+            },
+            0,
+        )
+        .expect("reverse on for the deck");
+        Handle::spawn(db, Box::new(typr_core::clock::SystemClock), std::sync::Arc::new(|| {})).expect("spawn")
+    };
+
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    assert_eq!(reverse_queue(&path), vec![1, 2], "the deck turns both cards around");
+
+    // What the tile's menu button calls.
+    library::Host::set_card_reverse(&mut state, 1, Some(false));
+    settle_last(&mut state);
+    assert_eq!(
+        reverse_queue(&path),
+        vec![2],
+        "the card that said no stops queueing in reverse, its sibling does not"
+    );
+    assert_eq!(
+        state
+            .library
+            .snapshot()
+            .cards
+            .iter()
+            .find(|card| card.id == 1)
+            .expect("card 1")
+            .reverse,
+        Some(false),
+        "and the drawn card carries its own setting"
+    );
+}
+
+/// Wait until every in-flight command has been answered and drawn.
+///
+/// The answers leave `State::sent` only when a frame drains them, so the loop drives a frame rather
+/// than polling the store directly.
+fn settle_last(state: &mut State) {
+    for _ in 0..200 {
+        let mut wake = None;
+        crate::frame_step(state, 0, &mut wake);
+        if state.sent.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    refresh_library(state);
+}
+
+/// The cards whose reverse prompt the new queue would offer, read from a second connection.
+fn reverse_queue(path: &std::path::Path) -> Vec<Id> {
+    let db = Db::open(path).expect("reopen");
+    let mut cards: Vec<Id> = db
+        .new_prompts(0, 0, 1, None)
+        .expect("new")
+        .into_iter()
+        .filter(|prompt| prompt.key == "rev")
+        .map(|prompt| prompt.card)
+        .collect();
+    cards.sort_unstable();
+    cards
+}
+
+#[test]
+fn a_deck_can_be_set_back_to_inherit() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    let store = {
+        let mut db = Db::open(&path).expect("open");
+        let parent = match db
+            .apply(
+                &typr_core::store::Command::CreateDeck {
+                    parent: None,
+                    name: "Languages".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            typr_core::store::Outcome::Deck(id) => id,
+            other => panic!("creating a deck: {other:?}"),
+        };
+        let child = match db
+            .apply(
+                &typr_core::store::Command::CreateDeck {
+                    parent: Some(parent),
+                    name: "Japanese".to_string(),
+                },
+                0,
+            )
+            .expect("child deck")
+        {
+            typr_core::store::Outcome::Deck(id) => id,
+            other => panic!("creating a child deck: {other:?}"),
+        };
+        db.apply(
+            &typr_core::store::Command::CreateCard {
+                deck: child,
+                markdown: "front\n---\nback".to_string(),
+            },
+            0,
+        )
+        .expect("card");
+        db.apply(
+            &typr_core::store::Command::SetDeckReverse {
+                deck: parent,
+                reverse: Some(true),
+            },
+            0,
+        )
+        .expect("reverse on for the parent");
+        Handle::spawn(db, Box::new(typr_core::clock::SystemClock), std::sync::Arc::new(|| {}))
+            .expect("spawn")
+    };
+
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    assert_eq!(
+        reverse_queue(&path),
+        vec![1],
+        "the child deck inherits the parent's setting"
+    );
+
+    let child = state
+        .library
+        .snapshot()
+        .decks
+        .iter()
+        .find(|deck| deck.name == "Japanese")
+        .expect("child deck")
+        .id;
+    library::Host::set_deck_reverse(&mut state, child, Some(false));
+    settle_last(&mut state);
+    assert!(
+        reverse_queue(&path).is_empty(),
+        "the child's own setting wins over its parent's"
+    );
+
+    // The three-state control's middle position: hand the decision back up.
+    library::Host::set_deck_reverse(&mut state, child, None);
+    settle_last(&mut state);
+    assert_eq!(
+        reverse_queue(&path),
+        vec![1],
+        "inheriting again follows the parent"
+    );
+    assert_eq!(
+        state
+            .library
+            .snapshot()
+            .decks
+            .iter()
+            .find(|deck| deck.id == child)
+            .expect("child deck")
+            .reverse,
+        None,
+        "and the drawn deck says it inherits"
+    );
+}
+
+#[test]
+fn the_editor_says_a_card_inherits_its_reverse_setting() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+
+    library::Host::open_card(&mut state, 1);
+    assert_eq!(state.screen, Screen::Editor, "the card opens in the editor");
+    assert_eq!(
+        state.editor.reverse, None,
+        "a card that never had the setting inherits its deck's"
+    );
+
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.1);
+    let drawn: Vec<String> = runtime
+        .elements()
+        .into_iter()
+        .filter_map(|element| element.text)
+        .collect();
+    assert!(
+        drawn.iter().any(|line| line == "Reverse: Inherit"),
+        "the header names the state: {drawn:?}"
+    );
+}

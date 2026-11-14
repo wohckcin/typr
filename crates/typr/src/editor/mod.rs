@@ -68,6 +68,8 @@ pub struct Editor {
     pub refused: bool,
     /// Why the last attachment did not happen, until another one succeeds.
     pub attach_error: Option<String>,
+    /// The card's own reverse setting, or `None` when it inherits its deck's.
+    pub reverse: Option<bool>,
     /// Where this card's pictures live.
     pub attachments: Attachments,
     /// Whether the card's review history is showing beside the preview.
@@ -132,6 +134,7 @@ impl Editor {
             asking: false,
             refused: false,
             attach_error: None,
+            reverse: None,
             attachments: Attachments::default(),
             showing_history: false,
             history: crate::history::History::default(),
@@ -141,6 +144,20 @@ impl Editor {
     }
 
     /// Hold the tags the card carries now, so the field starts where the card is.
+    /// The card's reverse state as one word, so the header reads the same in every case.
+    pub fn reverse_label(&self) -> &'static str {
+        match self.reverse {
+            Some(true) => "Reverse: on",
+            Some(false) => "Reverse: off",
+            None => "Reverse: Inherit",
+        }
+    }
+
+    /// Record the card's own reverse setting, which the store keeps on the card.
+    pub fn set_reverse(&mut self, reverse: Option<bool>) {
+        self.reverse = reverse;
+    }
+
     pub fn load_tags(&mut self, tags: &[String]) {
         let line = tags.join(", ");
         self.tags.replace_text(line.clone());
@@ -523,6 +540,12 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                 }),
         )
         .child(tag_field::<S>(s))
+        .child(
+            text(s.editor().reverse_label())
+                .key("reverse-state")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
         .child(rune::el().grow(1.0))
         .child(back_button::<S>())
         .child(attach_button::<S>())

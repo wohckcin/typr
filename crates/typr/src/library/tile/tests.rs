@@ -12,6 +12,7 @@ fn card(sides: u32, markdown: &str) -> CardSummary {
         sides,
         tags: Vec::new(),
         archived: false,
+        reverse: None,
         trashed_at: None,
         updated_at: 0,
         preview: String::new(),

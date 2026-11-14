@@ -80,6 +80,8 @@ pub struct Deck {
     pub parent: Option<Id>,
     pub name: String,
     pub archived: bool,
+    /// `None` inherits the parent's value, which is what makes the nearest setting win.
+    pub reverse: Option<bool>,
 }
 
 /// A card as the library lists it.
@@ -92,6 +94,8 @@ pub struct CardSummary {
     /// The card's tags, in the casing each was first written across the whole library.
     pub tags: Vec<String>,
     pub archived: bool,
+    /// `None` inherits the nearest deck's value, or the library default.
+    pub reverse: Option<bool>,
     pub trashed_at: Option<i64>,
     pub updated_at: i64,
     /// The first side's first line, cut short: what a list row shows.

@@ -308,7 +308,8 @@ impl Db {
     pub fn snapshot(&self) -> Result<Snapshot, StoreError> {
         let decks = {
             let mut stmt = self.conn.prepare(
-                "SELECT id, parent_id, name, archived FROM deck ORDER BY name COLLATE NOCASE, id",
+                "SELECT id, parent_id, name, archived, reverse FROM deck
+                 ORDER BY name COLLATE NOCASE, id",
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(Deck {
@@ -316,6 +317,7 @@ impl Db {
                     parent: row.get(1)?,
                     name: row.get(2)?,
                     archived: row.get::<_, i64>(3)? != 0,
+                    reverse: flag(row.get(4)?),
                 })
             })?;
             rows.collect::<Result<Vec<_>, _>>()?
@@ -323,7 +325,8 @@ impl Db {
         let cards = {
             let mut stmt = self.conn.prepare(
                 "SELECT c.id, c.deck_id, c.sides, c.archived, c.trashed_at, c.updated_at, c.markdown,
-                        c.search_text, COUNT(sp.card_id), SUM(sp.card_id IS NOT NULL AND sp.due_at IS NULL), MIN(sp.due_at)
+                        c.search_text, COUNT(sp.card_id), SUM(sp.card_id IS NOT NULL AND sp.due_at IS NULL), MIN(sp.due_at),
+                        c.reverse
                  FROM card c
                  LEFT JOIN studyable_prompt sp ON sp.card_id = c.id
                  GROUP BY c.id
@@ -336,6 +339,7 @@ impl Db {
                     sides: count_of(row.get(2)?),
                     tags: Vec::new(),
                     archived: row.get::<_, i64>(3)? != 0,
+                    reverse: flag(row.get(11)?),
                     trashed_at: row.get(4)?,
                     updated_at: row.get(5)?,
                     preview: preview(&row.get::<_, String>(6)?),
@@ -995,6 +999,11 @@ fn preview(markdown: &str) -> String {
 
 /// A stored count as the `u32` the API reports. More than four billion records cannot be held in
 /// a `Snapshot` on any machine typr runs on, so the count saturates instead of wrapping.
+/// A nullable integer flag, where NULL means "inherit".
+fn flag(value: Option<i64>) -> Option<bool> {
+    value.map(|value| value != 0)
+}
+
 fn count_of(value: i64) -> u32 {
     u32::try_from(value.max(0)).unwrap_or(u32::MAX)
 }

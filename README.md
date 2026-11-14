@@ -74,6 +74,25 @@ While you type, the preview masks every answer and names the group it belongs to
 numbered span, `[ … ]` for the plain form — and the caption counts prompts rather than sides — so a card with two numbered groups reports two prompts, not two
 sides.
 
+## Reverse reviews
+
+A two-sided card can be asked from either end. Reverse is off until you turn it on, and it is
+decided in three places, nearest first:
+
+- the card's own setting, from the tile's `⋯` menu (`Ask both ways` / `Ask one way`);
+- the deck's setting, from the sidebar's `Reverse: …` row, which offers `On`, `Off` and `Inherit`;
+- `reverse_default` in the settings table, which is what a deck inherits when its own value is NULL.
+
+A card that inherits follows its parent deck's value, so turning reverse on for `Languages` turns
+it on for `Japanese` unless `Japanese` says otherwise. When a card is asked from both ends, its
+tile's footer reads `BOTH WAYS`.
+
+Each direction is its own prompt with its own schedule and history: graduating `front → back` does
+not move `back → front`, and the session heading names which way the card is being asked. Turning
+reverse off neither deletes nor resets the reverse prompt's records — it stops being queued, and
+turning it back on resumes where it left off. The new-card limit counts prompts, so a card asked
+both ways takes two of the day's slots.
+
 ## Keyboard
 
 Every binding lives in one table, `typr_core::keymap::TABLE`, and the app draws its hints from

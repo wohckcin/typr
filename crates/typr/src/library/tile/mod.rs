@@ -22,6 +22,11 @@ pub const TILE_HEIGHT: f32 = 94.0;
 pub const PADDING: f32 = 10.0;
 
 /// How many sides a card hides, which is every side but the one the tile shows.
+/// Whether this card is asked from both ends.
+pub fn asks_both_ways(card: &CardSummary) -> bool {
+    card.reverse == Some(true)
+}
+
 pub fn hidden_sides(card: &CardSummary) -> usize {
     (card.sides as usize).saturating_sub(1)
 }
@@ -99,6 +104,8 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
     let id = card.id;
     let sides = hidden_sides(card);
     let (word, kicker) = words(state(card, now_ms));
+    // A card asked from both ends shows it where the card's other states are named.
+    let kicker = if asks_both_ways(card) { "BOTH WAYS" } else { kicker };
 
     // No `grow` here: in an auto-height column a grown child contributes no height to its parent,
     // which left the tile box shorter than its own content and put the footer out of its hit area.
@@ -114,7 +121,7 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
         body = body.child(hidden_strip(sides));
     }
     if menu_open {
-        body = body.child(action_menu::<S>(id, mode));
+        body = body.child(action_menu::<S>(card, mode));
     }
     // The body is the card's one press target: it selects the tile and opens the card, which is
     // what assistive technology announces as a button.
@@ -181,8 +188,12 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
 }
 
 /// The actions a tile offers, shown inside its body while its menu is open.
-fn action_menu<S: Host>(id: Id, mode: CardMode) -> El {
+fn action_menu<S: Host>(card: &CardSummary, mode: CardMode) -> El {
     let t = tok::theme(true);
+    let id = card.id;
+    // The row's control is a toggle, not a three-state switch: a deck or the library decides what
+    // "inherit" means, and a card only says whether it disagrees.
+    let reverse = card.reverse == Some(true);
     let mut menu = col()
         .key("actions")
         .w_full()
@@ -199,6 +210,15 @@ fn action_menu<S: Host>(id: Id, mode: CardMode) -> El {
                 move |s: &mut S| {
                     s.library_mut().menu = None;
                     s.open_card(id);
+                },
+            ))
+            .child(action::<S>(
+                if reverse { "Ask one way" } else { "Ask both ways" },
+                format!("reverse-{id}"),
+                t.text,
+                move |s: &mut S| {
+                    s.library_mut().menu = None;
+                    s.set_card_reverse(id, Some(!reverse));
                 },
             ))
             .child(action::<S>(

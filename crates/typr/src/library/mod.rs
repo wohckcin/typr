@@ -144,6 +144,12 @@ pub trait Host: 'static {
     /// doing nothing.
     fn restore_card(&mut self, _card: Id) {}
 
+    /// Turn the card's own reverse setting on or off; `None` hands it back to its deck.
+    fn set_card_reverse(&mut self, _card: Id, _reverse: Option<bool>) {}
+
+    /// Turn a deck's reverse setting on or off; `None` hands it back to the deck above it.
+    fn set_deck_reverse(&mut self, _deck: Id, _reverse: Option<bool>) {}
+
     /// Destroy everything in the trash. A host with no store leaves it alone.
     fn empty_trash(&mut self) {}
 }
@@ -312,6 +318,7 @@ impl Library {
             parent: None,
             name: "Seeded".to_string(),
             archived: false,
+            reverse: None,
         };
         let mut library = Library {
             snapshot: Arc::new(Snapshot {
@@ -327,6 +334,7 @@ impl Library {
                 sides: 2,
                 tags: Vec::new(),
                 archived: false,
+                reverse: None,
                 trashed_at: None,
                 updated_at: 0,
                 preview: format!("Card {id}"),
@@ -402,18 +410,21 @@ impl Library {
                     parent: None,
                     name: "Biology".to_string(),
                     archived: false,
+                    reverse: None,
                 },
                 Deck {
                     id: 2,
                     parent: Some(1),
                     name: "Cell biology".to_string(),
                     archived: false,
+                    reverse: None,
                 },
                 Deck {
                     id: 3,
                     parent: Some(2),
                     name: "Mitosis".to_string(),
                     archived: false,
+                    reverse: None,
                 },
             ];
         }
@@ -653,9 +664,47 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
                     })
                     .build(&KIT)
                     .key("move-deck"),
-            );
+            )
+            .child(deck_reverse::<S>(s));
     }
     sidebar
+}
+
+/// The deck's three-state reverse setting: on, off, or whatever its parent says.
+fn deck_reverse<S: Host>(s: &S) -> El {
+    let library = s.library();
+    let deck = library
+        .selected_deck
+        .and_then(|id| library.snapshot().decks.iter().find(|deck| deck.id == id));
+    let Some(deck) = deck else {
+        return row().key("deck-reverse");
+    };
+    let id = deck.id;
+    let state = match deck.reverse {
+        Some(true) => "Both ways",
+        Some(false) => "One way",
+        None => "Inherit",
+    };
+    row()
+        .key("deck-reverse")
+        .w_full()
+        .gap(4.0)
+        .child(
+            text(format!("Reverse: {state}"))
+                .font(type_::LABEL)
+                .color(tok::theme(true).text_secondary),
+        )
+        .child(deck_reverse_button::<S>("On", "reverse-on", id, Some(true)))
+        .child(deck_reverse_button::<S>("Off", "reverse-off", id, Some(false)))
+        .child(deck_reverse_button::<S>("Inherit", "reverse-inherit", id, None))
+}
+
+fn deck_reverse_button<S: Host>(label: &str, key: &str, deck: Id, reverse: Option<bool>) -> El {
+    Button::new(label)
+        .variant(ButtonVariant::Ghost)
+        .on_press(move |s: &mut S| s.set_deck_reverse(deck, reverse))
+        .build(&KIT)
+        .key(key)
 }
 
 fn filter_bar<S: Host>(s: &S) -> El {
