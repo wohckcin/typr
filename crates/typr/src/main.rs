@@ -1545,6 +1545,24 @@ fn main() {
             ];
             state.editor.next_group = 3;
         }),
+        ("editor-template", |state: &mut State| {
+            state.screen = Screen::Editor;
+            state.editor = Editor::new(Some(1), String::new());
+            state.editor.load(
+                &CardSummary {
+                    id: 1,
+                    deck: 2,
+                    template: Some("<<Word>>\n---\n<<Meaning>>".to_string()),
+                    template_from: Some(2),
+                    fields: vec![
+                        ("Word".to_string(), "gato".to_string()),
+                        ("Meaning".to_string(), "cat".to_string()),
+                    ],
+                    ..CardSummary::default()
+                },
+                Some("Spanish"),
+            );
+        }),
         ("editor-leave", |state: &mut State| {
             state.screen = Screen::Editor;
             state.editor = Editor::new(

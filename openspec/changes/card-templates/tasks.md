@@ -27,7 +27,7 @@ Depends on `cloze-deletions` for the second sigil's meaning and on nothing else.
 
 ## 4. Close out
 
-- [ ] 4.1 README gains a table of the three syntactic forms (separator, hidden text, template) and a scene `editor-template` renders a card with a field table.
+- [x] 4.1 README gains a table of the three syntactic forms (separator, hidden text, template) and a scene `editor-template` renders a card with a field table.
   - **Verification**: `--list-scenes` lists it and its `--snap` is non-blank.
 - [ ] 4.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.

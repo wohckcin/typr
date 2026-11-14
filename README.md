@@ -70,6 +70,19 @@ A card is markdown. Two things give it structure:
   many lines of `---` it holds.
 - Spans inside fenced code blocks and inside `backticks` are literal text, not hidden text.
 
+### The three syntactic forms
+
+| Form | What it does |
+|---|---|
+| A line of `---` | Starts the next side. One separator splits every card in a deck, so the renderer splits the rendered text, not the template. |
+| `{{hidden text}}` | Hides text until you reveal it; `{{1::this}}` numbered groups are separate prompts. |
+| `<<Field>>` | A template field, filled per card from the field table. `{{#Field}}…{{/Field}}` shows the block only while the field has a value. |
+
+A card whose deck (or its own settings) carries a template is rendered from it: its text is the
+template with the fields filled in, stored as it renders, so a review never re-derives it. `Name`
+and `Deck` are computed — the card's first side and its deck's name — and cannot be typed over.
+Clearing a template leaves every card saying what it last rendered.
+
 While you type, the preview masks every answer and names the group it belongs to — `[1 … ]` for a
 numbered span, `[ … ]` for the plain form — and the caption counts prompts rather than sides — so a card with two numbered groups reports two prompts, not two
 sides.
