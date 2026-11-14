@@ -18,9 +18,9 @@
 
   **Verification**: a test sets `RUNE_DIRS_ROOT` and `TYPR_LOG=info`, installs the logger, logs, and finds the file under that root; a second test with `TYPR_LOG` unset asserts an informational record is not written.
 
-- [ ] 1.5 Flush at quit: send a flush request on the quit path and join the writer thread with a short timeout, so a record written immediately before exit is on disk.
+- [ ] 1.5 Flush after the run loop, not during teardown: `main` calls the shutdown routine once `rune::run` returns. The order is fixed by Rune, which has no quit hook: `Drop for Handle` runs while the state is torn down inside `rune::run`, so a flush placed there or anywhere earlier would run before task 2.4's join record is written. The writer answers a flush request on a reply channel and the caller waits with `recv_timeout`, because `std::thread::JoinHandle` has no timed join; a timeout is logged and the process continues.
 
-  **Verification**: a test logs, calls the shutdown routine, then reads the file and finds the record; a second test asserts shutdown twice is harmless.
+  **Verification**: a test logs, calls the shutdown routine, then reads the file and finds the record; a second test asserts shutdown twice is harmless; a third drops a panicked `Handle`, runs the shutdown routine, and finds the abnormal-end record in the file.
 
 - [ ] 1.6 Log a failure with its whole cause chain: `fn describe(error: &dyn Error) -> String` joining `Display` with each `source()`.
 
@@ -40,9 +40,9 @@
 
   **Verification**: a test asserts the events hold one entry with id 0 whose message contains the panic text; a second test panics with a non-string payload and asserts the type name appears.
 
-- [ ] 2.4 Record the worker's join result in `Handle::close` at error level instead of discarding it, and log it once per handle.
+- [ ] 2.4 Record the worker's join result in `Handle::close` at error level instead of discarding it, and log it once per handle. The record is only durable because the flush in 1.5 runs later, in `main` after `rune::run` returns: `close` runs from `Drop for Handle` inside that teardown, so it must never flush itself.
 
-  **Verification**: a test that panics the worker, drops the handle, and asserts the log holds one abnormal-end record.
+  **Verification**: a test that panics the worker, drops the handle, and asserts the log holds one abnormal-end record; the ordering test in 1.5 covers the record surviving to disk.
 
 - [ ] 2.5 Keep later sends answering `Closed` after the boundary fires, and prove the pending-grade path clears.
 
