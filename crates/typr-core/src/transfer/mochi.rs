@@ -18,7 +18,7 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use zip::ZipArchive;
 
-use crate::store::{Command, Db, Id, Outcome, StoreError};
+use crate::store::{Command, Db, Grade, Id, Outcome, StoreError};
 
 use super::ImportReport;
 
@@ -171,6 +171,46 @@ struct ArchiveCard {
     fields: Vec<ArchiveField>,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default)]
+    reviews: Vec<ArchiveReview>,
+}
+
+/// One graded review, named the way Mochi names the card's variants. A cloze deletion and a mask
+/// group carry the group they belong to; forward and reverse do not.
+#[derive(Deserialize)]
+struct ArchiveReview {
+    variant: ArchiveVariant,
+    grade: ArchiveGrade,
+    at: i64,
+    #[serde(default)]
+    duration_ms: Option<i64>,
+    #[serde(default)]
+    group: Option<u32>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ArchiveVariant {
+    Forward,
+    Reverse,
+    Cloze,
+    Mask,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ArchiveGrade {
+    Forgot,
+    Remembered,
+}
+
+impl ArchiveGrade {
+    const fn into_grade(self) -> Grade {
+        match self {
+            ArchiveGrade::Forgot => Grade::Forgot,
+            ArchiveGrade::Remembered => Grade::Remembered,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -294,6 +334,36 @@ pub(crate) fn import(
                 now_ms,
             )?;
         }
+        // Replaying oldest first is what makes each record's phase and interval the ones a live
+        // grade would have written: the scheduler reads the state the previous record left.
+        let mut reviews = card.reviews;
+        reviews.sort_by_key(|review| review.at);
+        for review in reviews {
+            let key = match review.variant {
+                ArchiveVariant::Forward => "fwd".to_string(),
+                ArchiveVariant::Reverse => "rev".to_string(),
+                ArchiveVariant::Cloze => format!(
+                    "cloze:{}",
+                    review.group.ok_or_else(|| {
+                        bad_review(archive, card.id, "a cloze review needs its group")
+                    })?
+                ),
+                ArchiveVariant::Mask => format!(
+                    "mask:{}",
+                    review.group.ok_or_else(|| {
+                        bad_review(archive, card.id, "a mask review needs its group")
+                    })?
+                ),
+            };
+            db.record_review(
+                id,
+                &key,
+                review.grade.into_grade(),
+                review.duration_ms,
+                review.at,
+            )?;
+            report.reviews += 1;
+        }
         report.cards += 1;
     }
 
@@ -313,4 +383,11 @@ pub(crate) fn import(
         });
     }
     Ok(report)
+}
+
+fn bad_review(archive: &Path, card: i64, reason: &str) -> StoreError {
+    StoreError::Archive {
+        path: archive.to_path_buf(),
+        reason: format!("card {card}: {reason}"),
+    }
 }

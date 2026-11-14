@@ -13,7 +13,7 @@ Depends on `card-templates` (fields), `diagram-cards` (masks) and `cloze-deletio
   - **Verification**: `a_newer_export_version_is_refused` and `a_truncated_archive_is_refused_before_any_write` (the second asserts the library's card count before and after).
 - [x] 2.2 Decks and cards: create decks with nesting, then each card through `Db::apply`, mapping text, templates (as a card template), fields and tags.
   - **Verification**: `three_nested_decks_and_forty_cards_import_whole` and `an_imported_card_renders_through_its_template`.
-- [ ] 2.3 Variants and history: map each Mochi variant to a prompt key, write its records with their times, and let `refresh_prompt` derive the due date.
+- [x] 2.3 Variants and history: map each Mochi variant to a prompt key, write its records with their times, and let `refresh_prompt` derive the due date.
   - **Verification**: `imported_history_keeps_its_grades_and_times` and `a_card_reviewed_both_ways_imports_both_prompts`; `an_imported_due_date_matches_its_last_record`.
 - [ ] 2.4 Images and masks: copy each referenced image into the attachments folder, rewrite its name, and import masks as fractional rectangles.
   - **Verification**: `an_imported_image_is_present_after_its_source_is_deleted` and `imported_masks_keep_their_group_and_position`.

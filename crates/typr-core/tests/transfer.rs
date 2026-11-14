@@ -449,3 +449,132 @@ fn duplicate_deck_names_are_refused_rather_than_merged() {
     );
     assert!(snapshot.cards.is_empty());
 }
+
+const MINUTE: i64 = 60 * 1000;
+const DAY: i64 = 24 * HOUR;
+
+fn import_one_card(
+    dir: &Path,
+    card: serde_json::Value,
+    reviews: usize,
+) -> (Db, std::path::PathBuf, Id) {
+    let decks = serde_json::json!([{"id": 1, "name": "Spanish", "parent": null}]);
+    let archive = write_mochi(
+        dir,
+        "history.mochi",
+        &decks,
+        &serde_json::json!([card]),
+        serde_json::json!({"decks": 1, "cards": 1, "reviews": reviews}),
+    );
+    let db = open(&dir.join("typr.sqlite3"));
+    db.apply(
+        &Command::ImportArchive {
+            archive: archive.clone(),
+            attachments: dir.join("media"),
+        },
+        NOW,
+    )
+    .expect("the import");
+    let id = db.snapshot().expect("the library").cards[0].id;
+    (db, archive, id)
+}
+
+#[test]
+fn imported_history_keeps_its_grades_and_times() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let start = NOW - 30 * DAY;
+    let (db, _archive, id) = import_one_card(
+        dir.path(),
+        serde_json::json!({
+            "id": 1,
+            "deck": 1,
+            "text": "big\n---\nlarge",
+            "reviews": [
+                {"variant": "forward", "grade": "remembered", "at": start, "duration_ms": 900},
+                {"variant": "forward", "grade": "remembered", "at": start + DAY, "duration_ms": 1100},
+                {"variant": "forward", "grade": "forgot", "at": start + 2 * DAY},
+            ],
+        }),
+        3,
+    );
+
+    let rows = db.history(id).expect("history");
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0].key, "fwd");
+    assert_eq!(rows[0].grade, Grade::Remembered);
+    assert_eq!(rows[0].at, start);
+    assert_eq!(rows[0].duration_ms, Some(900));
+    assert_eq!(rows[1].at, start + DAY);
+    assert_eq!(rows[2].grade, Grade::Forgot);
+    assert_eq!(rows[2].at, start + 2 * DAY);
+    assert_eq!(rows[2].duration_ms, None, "an absent duration stays absent");
+
+    assert_eq!(
+        db.prompt_keys(id).expect("prompts").len(),
+        2,
+        "two sides ask forward and reverse"
+    );
+    let card = &db.snapshot().expect("the library").cards[0];
+    assert_eq!(card.reviews, 3);
+    assert_eq!(
+        card.due_at,
+        Some(start + 2 * DAY + 10 * MINUTE),
+        "the due date is the last record's, not the import's"
+    );
+}
+
+#[test]
+fn a_card_reviewed_both_ways_imports_both_prompts() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let start = NOW - 7 * DAY;
+    let (db, _archive, id) = import_one_card(
+        dir.path(),
+        serde_json::json!({
+            "id": 1,
+            "deck": 1,
+            "text": "big\n---\nlarge",
+            "reviews": [
+                {"variant": "forward", "grade": "remembered", "at": start},
+                {"variant": "reverse", "grade": "forgot", "at": start + HOUR},
+            ],
+        }),
+        2,
+    );
+
+    assert_eq!(db.prompt_keys(id).expect("prompts"), ["fwd", "rev"]);
+    let rows = db.history(id).expect("history");
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter()
+            .any(|row| row.key == "fwd" && row.grade == Grade::Remembered)
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row.key == "rev" && row.grade == Grade::Forgot)
+    );
+}
+
+#[test]
+fn an_imported_due_date_matches_its_last_record() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let start = NOW - 3 * DAY;
+    let (db, _archive, id) = import_one_card(
+        dir.path(),
+        serde_json::json!({
+            "id": 1,
+            "deck": 1,
+            "text": "uno {{1::dos}} tres",
+            "reviews": [
+                {"variant": "cloze", "group": 1, "grade": "remembered", "at": start},
+            ],
+        }),
+        1,
+    );
+
+    let rows = db.history(id).expect("history");
+    let last = rows.last().expect("one record");
+    assert_eq!(last.key, "cloze:1");
+    let card = &db.snapshot().expect("the library").cards[0];
+    assert_eq!(card.due_at, last.due_at);
+    assert_eq!(card.due_at, Some(start + 10 * MINUTE));
+}
