@@ -3,7 +3,7 @@
 ## 1. Workspace skeleton
 
 - [x] 1.1 Add a virtual workspace manifest at the repository root: `[workspace] members = ["crates/typr-core", "crates/typr"]`, the four Rune `[patch.crates-io]` entries, and `rust-toolchain.toml` left where it is. Move the current package manifest and `Cargo.lock` to `crates/typr/` with `git mv` so file history follows the files. **Verify**: `cargo metadata --format-version 1 | jq '.packages | length'` reports two packages, the root manifest parses as a workspace, and `cargo check --workspace` passes with every module still in the desktop crate.
-- [ ] 1.2 Create `crates/typr-core/` with an empty `lib.rs` and exactly three dependencies: `rusqlite` (bundled), `thiserror`, `unicode-normalization`. **Verify**: `cargo tree -p typr-core --edges normal` lists no Rune, wgpu, winit, parley or accesskit crate, and `cargo check -p typr-core` passes.
+- [x] 1.2 Create `crates/typr-core/` with an empty `lib.rs` and exactly three dependencies: `rusqlite` (bundled), `thiserror`, `unicode-normalization`. **Verify**: `cargo tree -p typr-core --edges normal` lists no Rune, wgpu, winit, parley or accesskit crate, and `cargo check -p typr-core` passes.
 - [ ] 1.3 Regenerate and commit the single root `Cargo.lock`. **Verify**: `cargo build --workspace --locked` succeeds from a clean `target/` for both members, which proves the lock file covers the workspace rather than one package.
 
 ## 2. The pure domain moves

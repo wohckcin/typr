@@ -3534,6 +3534,11 @@ dependencies = [
 [[package]]
 name = "typr-core"
 version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "thiserror 2.0.21",
+ "unicode-normalization",
+]
 
 [[package]]
 name = "uds_windows"
