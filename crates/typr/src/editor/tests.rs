@@ -1,6 +1,6 @@
-use super::{Editor, caption, preview_body, preview_key, view};
+use super::{Editor, MaskChange, caption, preview_body, preview_key, view};
 use typr_core::hidden;
-use typr_core::store::Id;
+use typr_core::store::{CardKind, Id, MaskRect, MaskRow};
 
 #[test]
 fn editing_one_card_leaves_another_cards_parse_alone() {
@@ -436,4 +436,194 @@ fn the_preview_masks_every_group_and_names_the_one_it_hides() {
     assert!(body.contains("[2 … ]"), "the second group is named: {body}");
     assert!(!body.contains("oxygen"), "no answer is readable: {body}");
     assert!(!body.contains("air."), "no answer is readable: {body}");
+}
+
+fn editor_with_picture() -> (tempfile::TempDir, Editor) {
+    let dir = tempfile::TempDir::new().expect("temp dir");
+    let source = dir.path().join("plate.png");
+    std::fs::write(&source, b"not really a png").expect("a picture to copy");
+    let mut editor = Editor::new(None, String::new());
+    editor.attachments = crate::attachments::Attachments::detached(dir.path().join("attachments"));
+    (dir, editor)
+}
+
+#[test]
+fn choosing_an_image_copies_it_and_stamps_the_card() {
+    let (dir, mut editor) = editor_with_picture();
+    let source = dir.path().join("plate.png");
+
+    editor.choose_image(&source).expect("the picture is copied");
+
+    assert_eq!(
+        editor.kind,
+        CardKind::Diagram,
+        "choosing a picture makes a diagram"
+    );
+    assert!(editor.diagram());
+    let name = editor.image.clone().expect("the copied name");
+    let stored = editor
+        .attachments
+        .resolve(&name)
+        .expect("the copy is in the attachments folder");
+    assert!(
+        stored.exists(),
+        "the picture was copied: {}",
+        stored.display()
+    );
+    assert!(editor.dirty(), "the picture is not stored yet");
+    assert!(
+        editor.saveable(),
+        "a card with a picture is worth keeping without text"
+    );
+}
+
+#[test]
+fn an_image_that_cannot_be_copied_leaves_the_card_alone() {
+    let (_dir, mut editor) = editor_with_picture();
+
+    let refused = editor.choose_image(std::path::Path::new("/nonexistent/nothing.png"));
+
+    assert!(
+        refused.is_err(),
+        "a picture that is not there cannot be copied"
+    );
+    assert!(editor.image.is_none());
+    assert!(!editor.diagram(), "the card stays a text card");
+    assert!(!editor.dirty());
+}
+
+#[test]
+fn a_drag_stores_a_fractional_rectangle() {
+    let mut editor = Editor::new(None, String::new());
+    editor.set_kind(CardKind::Diagram);
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 700.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    let pane = runtime
+        .elements()
+        .into_iter()
+        .find(|element| element.key.as_deref() == Some("diagram-pane"))
+        .map(|element| element.rect)
+        .expect("the picture pane");
+
+    // A quarter of the pane wide and a third of it tall, measured from the pane the frame drew.
+    let (from_x, from_y) = (pane[0] + pane[2] * 0.2, pane[1] + pane[3] * 0.1);
+    let (to_x, to_y) = (pane[0] + pane[2] * 0.45, pane[1] + pane[3] * 0.43);
+    runtime.pointer_down(from_x, from_y);
+    runtime.frame(0.11);
+    runtime.pointer_move(to_x, to_y);
+    runtime.frame(0.12);
+    runtime.pointer_up(to_x, to_y);
+    runtime.frame(0.2);
+
+    let masks = &runtime.state.masks;
+    assert_eq!(masks.len(), 1, "the drag made one rectangle");
+    let width = masks[0].rect.w;
+    assert!(
+        (width - 0.25).abs() < 0.03,
+        "a quarter-width drag across a {}-point pane is about a quarter: {width}",
+        pane[2]
+    );
+    let height = masks[0].rect.h;
+    assert!(
+        (height - 0.33).abs() < 0.05,
+        "a third-height drag is about a third: {height}"
+    );
+    assert_eq!(masks[0].group, 1, "the first rectangle opens group one");
+}
+
+#[test]
+fn a_click_adds_nothing() {
+    let mut editor = Editor::new(None, String::new());
+    editor.set_kind(CardKind::Diagram);
+    let mut runtime = rune::Runtime::new(
+        editor,
+        |s: &Editor, _: &mut rune::Cx<Editor>| view::<Editor>(s),
+        (900.0, 700.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    let pane = runtime
+        .elements()
+        .into_iter()
+        .find(|element| element.key.as_deref() == Some("diagram-pane"))
+        .map(|element| element.rect)
+        .expect("the picture pane");
+    // The top of the pane, above the controls, so the click reaches the pane itself.
+    let (x, y) = (pane[0] + pane[2] / 2.0, pane[1] + 6.0);
+
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.2);
+
+    assert!(
+        runtime.state.masks.is_empty(),
+        "a press and release in place is a click, not a rectangle"
+    );
+}
+
+#[test]
+fn merging_selects_one_group_for_both() {
+    let mut editor = Editor::new(None, String::new());
+    editor.set_kind(CardKind::Diagram);
+    editor.masks = vec![
+        MaskRow {
+            group: 1,
+            rect: MaskRect::new(0.1, 0.1, 0.1, 0.1),
+        },
+        MaskRow {
+            group: 2,
+            rect: MaskRect::new(0.5, 0.1, 0.1, 0.1),
+        },
+    ];
+    editor.selected = 1;
+
+    let change = editor.merge_selected().expect("two rectangles to merge");
+
+    assert_eq!(
+        editor.masks[0].group, editor.masks[1].group,
+        "both answer together"
+    );
+    match change {
+        MaskChange::Regroup { rects, group } => {
+            assert_eq!(group, 1, "the second rectangle joins the first group");
+            assert_eq!(rects.len(), 2);
+        }
+        other => panic!("merging stores one group: {other:?}"),
+    }
+}
+
+#[test]
+fn a_rectangle_can_be_placed_and_resized_in_steps() {
+    let mut editor = Editor::new(None, String::new());
+    editor.set_kind(CardKind::Diagram);
+
+    // The middle of the picture, then wider and taller in steps: what the buttons and the Alt
+    // chords both call.
+    let added = editor.add_rect(MaskRect::new(0.35, 0.35, 0.3, 0.3));
+    assert!(matches!(added, MaskChange::Add { group: 1, .. }));
+    editor
+        .resize_selected(0.05, 0.0)
+        .expect("a rectangle to widen");
+    editor
+        .resize_selected(0.0, 0.05)
+        .expect("a rectangle to heighten");
+
+    let rect = editor.masks[0].rect;
+    assert!((rect.w - 0.35).abs() < 1e-6, "wider by a step: {}", rect.w);
+    assert!((rect.h - 0.35).abs() < 1e-6, "taller by a step: {}", rect.h);
+    assert_eq!(
+        editor.add_rect(MaskRect::new(0.1, 0.1, 0.1, 0.1)),
+        MaskChange::Add {
+            group: 2,
+            rect: MaskRect::new(0.1, 0.1, 0.1, 0.1)
+        },
+        "a second rectangle asks in its own group"
+    );
 }

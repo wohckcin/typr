@@ -331,3 +331,54 @@ fn text_typed_and_never_saved_is_there_after_a_restart() {
         s.editor.buffer.text == "half a thought"
     });
 }
+
+/// A diagram can be masked from the keyboard alone: Alt+N places a rectangle in the middle and the
+/// Alt arrow chords size it, so the pointer is a convenience rather than the only way in.
+#[test]
+fn a_mask_can_be_made_without_a_pointer() {
+    let mut editor = Editor::new(None, String::new());
+    editor.set_kind(typr_core::store::CardKind::Diagram);
+    editor.image = Some("plate.png".to_string());
+    let mut state = State {
+        screen: Screen::Editor,
+        editor,
+        ..State::default()
+    };
+    let mut tx = Tx::default();
+    let alt = |key: Key| KeyEvent {
+        key,
+        mods: Mods {
+            alt: true,
+            ..Mods::default()
+        },
+    };
+
+    assert!(
+        on_key(&mut state, &alt(Key::Text("n".to_string())), &mut tx),
+        "Alt+N is taken"
+    );
+    assert_eq!(state.editor.masks.len(), 1, "a rectangle is on the picture");
+    let placed = state.editor.masks[0].rect;
+    assert!((placed.w - 0.3).abs() < 1e-6, "it starts a third wide");
+
+    assert!(
+        on_key(&mut state, &alt(Key::Right), &mut tx),
+        "Alt+Right widens"
+    );
+    assert!(on_key(&mut state, &alt(Key::Right), &mut tx), "twice");
+    let wider = state.editor.masks[0].rect.w;
+    assert!(wider > placed.w, "the rectangle is wider: {wider}");
+
+    assert!(
+        on_key(&mut state, &alt(Key::Up), &mut tx),
+        "Alt+Up shortens"
+    );
+    let shorter = state.editor.masks[0].rect.h;
+    assert!(shorter < placed.h, "the rectangle is shorter: {shorter}");
+    on_key(&mut state, &alt(Key::Text("n".to_string())), &mut tx);
+    assert_eq!(state.editor.masks.len(), 2, "a second rectangle");
+    assert_eq!(
+        state.editor.masks[1].group, 2,
+        "and it asks in its own group"
+    );
+}

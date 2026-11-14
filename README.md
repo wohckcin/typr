@@ -107,6 +107,9 @@ points, and the action stays.
 | Library | `c` | New card |
 | Editor | `s` | Save the card |
 | Editor | `h` | Show the card's history |
+| Editor | `Alt+N` | Add a rectangle to a diagram |
+| Editor | `Alt+Left` / `Alt+Right` | Narrow or widen the selected rectangle |
+| Editor | `Alt+Up` / `Alt+Down` | Shorten or heighten the selected rectangle |
 | Editor | `Esc` | Back to the library, asking first when the card is unsaved |
 | Session | `Space` / `Enter` | Reveal the next side |
 | Session | `j` | Remembered |

@@ -21,13 +21,13 @@ turns into an enum.
 
 ## 3. Author a diagram
 
-- [ ] 3.1 The editor offers "Diagram" for a card and copies the chosen image into the attachments folder through the native file dialog, reporting a copy failure on screen.
+- [x] 3.1 The editor offers "Diagram" for a card and copies the chosen image into the attachments folder through the native file dialog, reporting a copy failure on screen.
   - **Verification**: `choosing_an_image_copies_it_and_stamps_the_card` and `an_image_that_cannot_be_copied_leaves_the_card_alone`.
-- [ ] 3.2 Dragging across the image adds a rectangle, stored as fractions of the measured pane, ignoring a drag smaller than one percent.
+- [x] 3.2 Dragging across the image adds a rectangle, stored as fractions of the measured pane, ignoring a drag smaller than one percent.
   - **Verification**: `a_drag_stores_a_fractional_rectangle` drives `rune::Runtime` pointer events across a 400-point pane and asserts the stored `w` is about 0.25; `a_click_adds_nothing` presses and releases in place.
-- [ ] 3.3 Rectangles are assigned to groups, merged, and removed, with the group of each drawn on the image.
+- [x] 3.3 Rectangles are assigned to groups, merged, and removed, with the group of each drawn on the image.
   - **Verification**: `merging_selects_one_group_for_both` and `removing_a_group_leaves_its_records` (the second reads history after removal).
-- [ ] 3.4 Keyboard fallback: a key adds a rectangle at the centre and the arrow keys resize it before the group is chosen.
+- [x] 3.4 Keyboard fallback: a key adds a rectangle at the centre and the arrow keys resize it before the group is chosen.
   - **Verification**: `a_mask_can_be_made_without_a_pointer`.
 
 ## 4. Close out

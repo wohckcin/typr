@@ -43,6 +43,11 @@ pub enum Command {
     Shuffle,
     ShowShortcuts,
     ShowPalette,
+    AddRectangle,
+    WiderRectangle,
+    NarrowerRectangle,
+    TallerRectangle,
+    ShorterRectangle,
 }
 
 impl Command {
@@ -62,6 +67,11 @@ impl Command {
             Command::Shuffle => "Shuffle the queue",
             Command::ShowShortcuts => "Keyboard shortcuts",
             Command::ShowPalette => "Command palette",
+            Command::AddRectangle => "Add a rectangle",
+            Command::WiderRectangle => "Widen the rectangle",
+            Command::NarrowerRectangle => "Narrow the rectangle",
+            Command::TallerRectangle => "Make the rectangle taller",
+            Command::ShorterRectangle => "Make the rectangle shorter",
         }
     }
 }
@@ -140,6 +150,16 @@ impl Chord {
         Chord::Modified {
             key,
             mods: Mods::COMMAND,
+        }
+    }
+
+    pub const fn alt(key: Key) -> Chord {
+        Chord::Modified {
+            key,
+            mods: Mods {
+                alt: true,
+                ..Mods::NONE
+            },
         }
     }
 
@@ -231,6 +251,31 @@ const TABLE: &[Binding] = &[
         Surface::Editor,
         Command::ShowShortcuts,
         Chord::key(Key::Char('?')),
+    ),
+    row(
+        Surface::Editor,
+        Command::AddRectangle,
+        Chord::alt(Key::Char('n')),
+    ),
+    row(
+        Surface::Editor,
+        Command::WiderRectangle,
+        Chord::alt(Key::Right),
+    ),
+    row(
+        Surface::Editor,
+        Command::NarrowerRectangle,
+        Chord::alt(Key::Left),
+    ),
+    row(
+        Surface::Editor,
+        Command::TallerRectangle,
+        Chord::alt(Key::Down),
+    ),
+    row(
+        Surface::Editor,
+        Command::ShorterRectangle,
+        Chord::alt(Key::Up),
     ),
     row(Surface::Session, Command::Reveal, Chord::key(Key::Space)),
     row(Surface::Session, Command::Reveal, Chord::key(Key::Enter)),

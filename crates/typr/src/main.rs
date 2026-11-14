@@ -20,7 +20,9 @@ use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Command, Surface};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
-use typr_core::store::{CardMode, Grade, Handle, Id, Outcome, Store, StoreError, WorkerStatus};
+use typr_core::store::{
+    CardMode, Grade, Handle, Id, MaskRect, Outcome, Store, StoreError, WorkerStatus,
+};
 use typr_core::{day, hidden};
 
 /// A named starting state for a headless `--scene` run.
@@ -106,6 +108,8 @@ struct State {
     seed: u64,
     /// A new card waiting for the deck that has to be created for it.
     pending_new_card: Option<String>,
+    /// A new diagram waiting for the card that has to be created for it.
+    pending_new_diagram: Option<(String, String)>,
     deck_request: Option<u64>,
     /// Every command that went out and has not been answered: what it was, and when it left.
     sent: HashMap<u64, (&'static str, Instant)>,
@@ -139,6 +143,7 @@ impl Default for State {
             picture_pane: (0.0, 0.0),
             seed: 1,
             pending_new_card: None,
+            pending_new_diagram: None,
             deck_request: None,
             sent: HashMap::new(),
             panel: keymap::panel::Panel::default(),
@@ -158,6 +163,27 @@ impl editor::Host for State {
 
     fn persist(&mut self) -> bool {
         State::persist(self)
+    }
+
+    fn send_masks(&mut self, card: Id, change: &crate::editor::MaskChange) -> bool {
+        let Some(store) = &self.store else {
+            self.say("The library is not open, so the rectangle was not stored.".to_string());
+            return false;
+        };
+        let sent = match change {
+            crate::editor::MaskChange::Add { group, rect } => store.add_mask(card, *group, *rect),
+            crate::editor::MaskChange::Regroup { rects, group } => {
+                store.merge_masks(card, rects, *group)
+            }
+            crate::editor::MaskChange::Remove { rect } => store.remove_mask(card, *rect),
+        };
+        match sent {
+            Ok(_) => true,
+            Err(error) => {
+                self.fail(&error);
+                false
+            }
+        }
     }
 
     fn close_editor(&mut self) {
@@ -337,6 +363,7 @@ impl library::Host for State {
             return;
         };
         self.editor = Editor::new(Some(card), summary.markdown.clone());
+        self.editor.load(&summary);
         self.editor.load_tags(&summary.tags);
         self.editor.set_reverse(summary.reverse);
         self.last_draft = summary.markdown.clone();
@@ -569,6 +596,85 @@ impl State {
         }
         let text = self.editor.buffer.text.clone();
         let tags = self.editor.tag_list();
+
+        // A diagram card is stored with its picture: the text it carries (if any) still goes along,
+        // but the kind, the image and the caption are what make it a diagram.
+        if self.editor.diagram() {
+            let Some(image) = self.editor.image.clone() else {
+                self.say("A diagram card needs a picture.".to_string());
+                return false;
+            };
+            let caption = self.editor.caption.text.trim().to_string();
+            let stored = match (self.editor.card, &self.store) {
+                (Some(card), Some(store)) => {
+                    let sent = store
+                        .save_card(card, &text)
+                        .and_then(|_| store.set_diagram(card, &image, &caption))
+                        .and_then(|_| store.set_tags(card, &tags));
+                    match sent {
+                        Ok(_) => true,
+                        Err(error) => {
+                            self.fail(&error);
+                            false
+                        }
+                    }
+                }
+                (None, Some(store)) => {
+                    if self.card_request.is_some() {
+                        self.say("The card is still being saved.".to_string());
+                        return false;
+                    }
+                    // The card id comes back asynchronously, so the picture is kept until it does.
+                    self.pending_new_diagram = Some((image.clone(), caption.clone()));
+                    self.pending_tags = tags;
+                    self.pending_new_card = Some(text.clone());
+                    match self.deck_for_new_card() {
+                        Some(deck) => {
+                            let sent = store.create_diagram(deck, &image, &caption);
+                            remember(
+                                &mut self.sent,
+                                "create_diagram",
+                                &mut self.card_request,
+                                &mut self.failure,
+                                sent,
+                            )
+                        }
+                        None => {
+                            let name = self.free_deck_name();
+                            let sent = store.create_deck(None, &name);
+                            if !remember(
+                                &mut self.sent,
+                                "create_deck",
+                                &mut self.deck_request,
+                                &mut self.failure,
+                                sent,
+                            ) {
+                                self.pending_new_card = None;
+                                self.pending_new_diagram = None;
+                                self.pending_tags.clear();
+                            }
+                            false
+                        }
+                    }
+                }
+                (_, None) => {
+                    self.say("The library is not open, so nothing was saved.".to_string());
+                    return false;
+                }
+            };
+            if !stored {
+                return false;
+            }
+            if let Some(store) = &self.store
+                && let Err(error) = store.set_draft(self.editor.draft_key(), None)
+            {
+                self.fail(&error);
+            }
+            self.last_draft.clear();
+            self.editor.save();
+            return true;
+        }
+
         let stored = match (self.editor.card, &self.store) {
             (Some(card), Some(store)) => {
                 // Two commands, so a refused tag write leaves the sides saved; the card stays
@@ -851,6 +957,10 @@ impl State {
                         self.editor.save();
                     }
                     self.pending_new_card = None;
+                    // A diagram whose card was created as one already holds its picture; the store
+                    // answers with the same card either way, so this only sets what a text card
+                    // needs to become a diagram.
+                    self.pending_new_diagram = None;
                     let tags = std::mem::take(&mut self.pending_tags);
                     if !tags.is_empty() {
                         let sent = match &self.store {
@@ -871,8 +981,12 @@ impl State {
                 }
                 Ok(Outcome::Deck(id)) if self.deck_request == Some(event.id) => {
                     self.deck_request = None;
+                    let diagram = self.pending_new_diagram.clone();
                     if let (Some(text), Some(store)) = (self.pending_new_card.take(), &self.store) {
-                        let sent = store.create_card(id, &text);
+                        let sent = match diagram {
+                            Some((image, caption)) => store.create_diagram(id, &image, &caption),
+                            None => store.create_card(id, &text),
+                        };
                         if !remember(
                             &mut self.sent,
                             "create_card",
@@ -1014,6 +1128,51 @@ impl State {
                 true
             }
             Command::Save => self.persist(),
+            Command::AddRectangle => {
+                // The keyboard fallback places a rectangle in the middle, which the arrow chords
+                // then size, so a diagram can be masked without a pointer.
+                if self.editor.diagram() {
+                    let change = self.editor.add_rect(MaskRect::new(0.35, 0.35, 0.3, 0.3));
+                    if let Some(card) = self.editor.card {
+                        editor::Host::send_masks(self, card, &change);
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            Command::WiderRectangle | Command::NarrowerRectangle => {
+                let step = if command == Command::WiderRectangle {
+                    0.02
+                } else {
+                    -0.02
+                };
+                match self.editor.resize_selected(step, 0.0) {
+                    Some(change) if self.editor.diagram() => {
+                        if let Some(card) = self.editor.card {
+                            editor::Host::send_masks(self, card, &change);
+                        }
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            Command::TallerRectangle | Command::ShorterRectangle => {
+                let step = if command == Command::TallerRectangle {
+                    0.02
+                } else {
+                    -0.02
+                };
+                match self.editor.resize_selected(0.0, step) {
+                    Some(change) if self.editor.diagram() => {
+                        if let Some(card) = self.editor.card {
+                            editor::Host::send_masks(self, card, &change);
+                        }
+                        true
+                    }
+                    _ => false,
+                }
+            }
             Command::ToggleHistory => {
                 self.editor.showing_history = !self.editor.showing_history;
                 if self.editor.showing_history

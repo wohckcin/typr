@@ -1007,3 +1007,83 @@ fn a_diagram_card_gets_one_prompt_per_group() {
         .expect("the retired row");
     assert_eq!(retired, 1, "a group with no rectangles is retired");
 }
+
+/// Removing every rectangle of a group retires its prompt but keeps what was answered on it: the
+/// review history is a record of what happened, not a cache of the card as it stands.
+#[test]
+fn removing_a_group_leaves_its_records() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let id = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: "The plate".to_string(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a diagram: {other:?}"),
+    };
+    let rect = MaskRect::new(0.1, 0.1, 0.2, 0.2);
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 1,
+            rect,
+        },
+        0,
+    )
+    .expect("the rectangle");
+    db.apply(
+        &Command::Grade {
+            card: id,
+            key: "mask:1".to_string(),
+            grade: Grade::Remembered,
+            duration_ms: Some(1200),
+        },
+        0,
+    )
+    .expect("answering the diagram");
+
+    db.apply(&Command::RemoveMask { card: id, rect }, 0)
+        .expect("remove the only rectangle");
+
+    let studyable: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT count(*) FROM studyable_prompt WHERE card_id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .expect("the studyable prompts");
+    assert_eq!(
+        studyable, 0,
+        "the group has no rectangles left, so it is not asked"
+    );
+    let reviews: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT count(*) FROM review_log WHERE card_id = ?1 AND key = 'mask:1'",
+            [id],
+            |row| row.get(0),
+        )
+        .expect("the reviews");
+    assert_eq!(
+        reviews, 1,
+        "what was answered on the group is still on disk"
+    );
+    let retired: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT retired FROM prompt WHERE card_id = ?1 AND key = 'mask:1'",
+            [id],
+            |row| row.get(0),
+        )
+        .expect("the retired prompt");
+    assert_eq!(retired, 1, "the prompt is retired rather than deleted");
+}

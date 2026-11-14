@@ -12,7 +12,7 @@ static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(
 
 use crate::attachments::{self, Attachments};
 use typr_core::hidden::{self, Shape};
-use typr_core::store::Id;
+use typr_core::store::{CardKind, CardSummary, Id, MaskRect, MaskRow};
 
 /// The app state an editor screen draws from.
 pub trait Host: 'static {
@@ -34,6 +34,11 @@ pub trait Host: 'static {
     /// Leave the editor, asking first when the buffer has unsaved work.
     fn leave_editor(&mut self) {
         self.close_editor();
+    }
+
+    /// Store a change to a diagram card's rectangles. A host with no store cannot.
+    fn send_masks(&mut self, _card: Id, _change: &MaskChange) -> bool {
+        false
     }
 }
 
@@ -81,6 +86,32 @@ pub struct Editor {
     /// The tag line for the input that shows it.
     /// The tag line as stored, so a change to it counts as unsaved.
     pub saved_tags: String,
+    /// Whether this card asks in text or over a picture.
+    pub kind: CardKind,
+    /// The picture a diagram card asks about, as a name under the attachments folder.
+    pub image: Option<String>,
+    /// The picture as stored, so swapping it counts as unsaved.
+    pub saved_image: Option<String>,
+    /// What the picture shows.
+    pub caption: TextEdit,
+    /// The caption as stored.
+    pub saved_caption: String,
+    /// Every rectangle on the picture, one row each.
+    pub masks: Vec<MaskRow>,
+    /// The group the next rectangle is put in.
+    pub next_group: u32,
+    /// Which rectangle the keyboard fallback resizes.
+    pub selected: usize,
+    /// The size the picture pane was laid out at, in points.
+    pub pane: (f32, f32),
+}
+
+/// A change to the rectangles on a diagram card, sent to the store.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MaskChange {
+    Add { group: u32, rect: MaskRect },
+    Regroup { rects: Vec<MaskRect>, group: u32 },
+    Remove { rect: MaskRect },
 }
 
 /// What the user asked for when leaving an unsaved card.
@@ -140,7 +171,125 @@ impl Editor {
             history: crate::history::History::default(),
             tags: TextEdit::default(),
             saved_tags: String::new(),
+            kind: CardKind::Text,
+            image: None,
+            saved_image: None,
+            caption: TextEdit::default(),
+            saved_caption: String::new(),
+            masks: Vec::new(),
+            next_group: 1,
+            selected: 0,
+            pane: (0.0, 0.0),
         }
+    }
+
+    /// Take everything a card summary holds that this screen shows.
+    pub fn load(&mut self, card: &CardSummary) {
+        self.kind = card.kind;
+        self.image = card.image.clone();
+        self.saved_image = card.image.clone();
+        let caption = card.caption.clone().unwrap_or_default();
+        self.caption.replace_text(caption.clone());
+        self.saved_caption = caption;
+        self.masks = card.masks.clone();
+        self.next_group = self.masks.iter().map(|mask| mask.group).max().unwrap_or(0) + 1;
+        self.selected = 0;
+    }
+
+    /// Whether this card asks over a picture.
+    pub fn diagram(&self) -> bool {
+        self.kind == CardKind::Diagram
+    }
+
+    /// Switch between the two kinds. The text is kept either way, so a switch is undoable.
+    pub fn set_kind(&mut self, kind: CardKind) {
+        self.kind = kind;
+    }
+
+    /// Copy a chosen picture into the library and make this card a diagram of it.
+    pub fn choose_image(&mut self, source: &std::path::Path) -> std::io::Result<()> {
+        let name = attachments::attach(self.attachments.root(), source)?;
+        self.image = Some(name);
+        self.kind = CardKind::Diagram;
+        self.attach_error = None;
+        Ok(())
+    }
+
+    /// A rectangle from a drag, as fractions of the pane, or `None` when the drag was too small to
+    /// be anything but a click.
+    pub fn fraction(pane: (f32, f32), from: (f32, f32), to: (f32, f32)) -> Option<MaskRect> {
+        let (w, h) = pane;
+        if w <= 0.0 || h <= 0.0 {
+            return None;
+        }
+        let left = from.0.min(to.0).clamp(0.0, w);
+        let top = from.1.min(to.1).clamp(0.0, h);
+        let right = from.0.max(to.0).clamp(0.0, w);
+        let bottom = from.1.max(to.1).clamp(0.0, h);
+        let rect = MaskRect::new(left / w, top / h, (right - left) / w, (bottom - top) / h);
+        // A drag under one percent of the pane is a click that moved a little.
+        if rect.w < 0.01 || rect.h < 0.01 {
+            return None;
+        }
+        Some(rect)
+    }
+
+    /// Put a rectangle in a new group. Answers the change that has to be stored.
+    pub fn add_rect(&mut self, rect: MaskRect) -> MaskChange {
+        let group = self.next_group;
+        self.next_group += 1;
+        self.masks.push(MaskRow { group, rect });
+        self.selected = self.masks.len() - 1;
+        MaskChange::Add { group, rect }
+    }
+
+    /// Resize the selected rectangle by a fraction of the pane, keeping it inside the picture.
+    pub fn resize_selected(&mut self, dw: f32, dh: f32) -> Option<MaskChange> {
+        let mask = self.masks.get_mut(self.selected)?;
+        let rect = MaskRect::new(
+            mask.rect.x,
+            mask.rect.y,
+            (mask.rect.w + dw).clamp(0.01, 1.0 - mask.rect.x),
+            (mask.rect.h + dh).clamp(0.01, 1.0 - mask.rect.y),
+        );
+        mask.rect = rect;
+        let group = mask.group;
+        Some(MaskChange::Add { group, rect })
+    }
+
+    /// Move the selection to the next rectangle, so the keyboard can reach every one.
+    pub fn select_next(&mut self) {
+        if self.masks.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = (self.selected + 1) % self.masks.len();
+        }
+    }
+
+    /// Merge the selected rectangle into the group of the one before it.
+    pub fn merge_selected(&mut self) -> Option<MaskChange> {
+        if self.selected == 0 || self.selected >= self.masks.len() {
+            return None;
+        }
+        let group = self.masks[self.selected - 1].group;
+        self.masks[self.selected].group = group;
+        let rects: Vec<MaskRect> = self
+            .masks
+            .iter()
+            .filter(|mask| mask.group == group)
+            .map(|mask| mask.rect)
+            .collect();
+        Some(MaskChange::Regroup { rects, group })
+    }
+
+    /// Take the selected rectangle off the picture.
+    pub fn drop_selected(&mut self) -> Option<MaskChange> {
+        if self.masks.is_empty() {
+            return None;
+        }
+        let mask = self.masks.remove(self.selected.min(self.masks.len() - 1));
+        self.selected = self.selected.min(self.masks.len().saturating_sub(1));
+        Some(MaskChange::Remove { rect: mask.rect })
     }
 
     /// The card's reverse state as one word, so the header reads the same in every case.
@@ -193,7 +342,10 @@ impl Editor {
 
     /// Whether the buffer or the tag line holds something the card does not.
     pub fn dirty(&self) -> bool {
-        self.buffer.text != self.saved || self.tags.text != self.saved_tags
+        self.buffer.text != self.saved
+            || self.tags.text != self.saved_tags
+            || self.image != self.saved_image
+            || (self.diagram() && self.caption.text.trim() != self.saved_caption)
     }
 
     /// The sides the buffer splits into right now, so the preview and the save agree.
@@ -218,6 +370,10 @@ impl Editor {
 
     /// Whether there is anything to store: a card of nothing but whitespace is refused.
     pub fn saveable(&self) -> bool {
+        // A diagram card is asked over its picture, so it needs no text to be worth keeping.
+        if self.diagram() {
+            return self.image.is_some();
+        }
         self.sides().iter().any(|side| !side.trim().is_empty())
     }
 
@@ -269,6 +425,8 @@ impl Editor {
         self.refused = false;
         self.saved = self.buffer.text.clone();
         self.saved_tags = self.tags.text.trim().to_string();
+        self.saved_image = self.image.clone();
+        self.saved_caption = self.caption.text.trim().to_string();
         self.settle();
         true
     }
@@ -443,6 +601,14 @@ fn back_button<S: Host>() -> El {
 }
 
 /// The tag line, which stores what it holds as soon as the user presses Enter.
+fn mode_button<S: Host>(label: &'static str, kind: CardKind, key: &'static str) -> El {
+    Button::new(label)
+        .variant(ButtonVariant::Ghost)
+        .on_press(move |s: &mut S| s.editor_mut().set_kind(kind))
+        .build(&KIT)
+        .key(key)
+}
+
 fn tag_field<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     text_input(s.editor().tags_text(), type_::LABEL)
@@ -514,6 +680,188 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
 
 /// The editor screen. The preview is rebuilt from the buffer on the same frame, so there is no
 /// mode to switch into.
+/// The picture a diagram card asks about, the rectangles drawn on it, and the controls that make
+/// and shape them without a pointer.
+fn diagram_pane<S: Host>(s: &S) -> El {
+    let t = tok::theme(true);
+    let editor = s.editor();
+    let (pane_w, pane_h) = editor.pane;
+    let mut pane = col()
+        .key("diagram-pane")
+        .w_full()
+        .max_w(400.0)
+        .gap(8.0)
+        .on_layout(|s: &mut S, rect| s.editor_mut().pane = (rect[2], rect[3]))
+        .on_drag(|s: &mut S, drag: &mut rune::Drag, _: &mut rune::Tx| {
+            // A rectangle is the drag's own corners read as fractions of the pane the gesture was
+            // drawn on, which the drag reports in its own element's points.
+            if drag.phase != rune::Phase::Up || drag.cancelled() {
+                return;
+            }
+            let pane = (drag.w, drag.h);
+            let Some(rect) = Editor::fraction(pane, (drag.start_x, drag.start_y), (drag.x, drag.y))
+            else {
+                return;
+            };
+            let change = s.editor_mut().add_rect(rect);
+            if let Some(card) = s.editor().card {
+                s.send_masks(card, &change);
+            }
+        });
+
+    match editor
+        .image
+        .as_ref()
+        .and_then(|name| editor.attachments.picture(name))
+    {
+        Some(picture) => {
+            let mut drawn = rune::el().role("image").w_full().padding(0.0);
+            if let Some([w, _]) = picture.size() {
+                drawn = drawn.max_w(w as f32);
+            }
+            pane = pane.child(drawn.pixels(picture.pixels()));
+        }
+        None => {
+            pane = pane.child(
+                text("Choose a picture for this card.")
+                    .key("no-picture")
+                    .font(type_::LABEL)
+                    .color(t.text_secondary),
+            );
+        }
+    }
+
+    // One outline per rectangle, placed against the pane as it was last laid out, labelled with the
+    // group it answers in.
+    for (index, mask) in editor.masks.iter().enumerate() {
+        pane = pane.child(
+            col()
+                .key(format!("shape-{index}"))
+                .absolute(mask.rect.x * pane_w, mask.rect.y * pane_h)
+                .size(mask.rect.w * pane_w, mask.rect.h * pane_h)
+                .radius(2.0)
+                .fill(tok::accent(1, true).alpha(0.12))
+                .border(1.0, tok::accent(1, true))
+                .child(
+                    text(format!("{}", mask.group))
+                        .font(type_::LABEL)
+                        .color(tok::accent(1, true)),
+                ),
+        );
+    }
+
+    let controls = row()
+        .key("diagram-controls")
+        .gap(6.0)
+        .child(
+            Button::new("Choose picture")
+                .variant(ButtonVariant::Ghost)
+                .on_press_tx(|_: &mut S, tx: &mut Tx| {
+                    tx.open_file(
+                        FileDialogOptions {
+                            title: "Choose a picture".to_string(),
+                            ..Default::default()
+                        }
+                        .filter(
+                            "Images",
+                            &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"],
+                        ),
+                        |s: &mut S, result, _| {
+                            if let Ok(Some(path)) = result
+                                && let Err(error) = s.editor_mut().choose_image(&path)
+                            {
+                                s.editor_mut().attach_error = Some(error.to_string());
+                            }
+                        },
+                    );
+                })
+                .build(&KIT)
+                .key("choose-image"),
+        )
+        .child(
+            Button::new("Add rectangle")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| {
+                    // The keyboard fallback places a rectangle in the middle of the picture.
+                    let change = s.editor_mut().add_rect(MaskRect::new(0.35, 0.35, 0.3, 0.3));
+                    if let Some(card) = s.editor().card {
+                        s.send_masks(card, &change);
+                    }
+                })
+                .build(&KIT)
+                .key("add-rect"),
+        )
+        .child(
+            Button::new("Next rectangle")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| s.editor_mut().select_next())
+                .build(&KIT)
+                .key("next-rect"),
+        )
+        .child(
+            Button::new("Wider")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| {
+                    if let Some(change) = s.editor_mut().resize_selected(0.05, 0.0)
+                        && let Some(card) = s.editor().card
+                    {
+                        s.send_masks(card, &change);
+                    }
+                })
+                .build(&KIT)
+                .key("wider-rect"),
+        )
+        .child(
+            Button::new("Taller")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| {
+                    if let Some(change) = s.editor_mut().resize_selected(0.0, 0.05)
+                        && let Some(card) = s.editor().card
+                    {
+                        s.send_masks(card, &change);
+                    }
+                })
+                .build(&KIT)
+                .key("taller-rect"),
+        )
+        .child(
+            Button::new("Merge")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| {
+                    if let Some(change) = s.editor_mut().merge_selected()
+                        && let Some(card) = s.editor().card
+                    {
+                        s.send_masks(card, &change);
+                    }
+                })
+                .build(&KIT)
+                .key("merge-rect"),
+        )
+        .child(
+            Button::new("Remove")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| {
+                    if let Some(change) = s.editor_mut().drop_selected()
+                        && let Some(card) = s.editor().card
+                    {
+                        s.send_masks(card, &change);
+                    }
+                })
+                .build(&KIT)
+                .key("remove-rect"),
+        );
+
+    pane.child(controls).child(
+        text_input(&editor.caption, type_::LABEL)
+            .key("caption-line")
+            .w_full()
+            .single_line()
+            .placeholder("What the picture shows", t.text_secondary)
+            .on_edit(|s: &mut S| &mut s.editor_mut().caption)
+            .on_input_change(|s: &mut S, _| s.note_typing()),
+    )
+}
+
 pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
     let t = tok::theme(true);
     let unsaved = s.editor().dirty();
@@ -546,6 +894,12 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                 .font(type_::LABEL)
                 .color(t.text_secondary),
         )
+        .child(mode_button::<S>("Text", CardKind::Text, "mode-text"))
+        .child(mode_button::<S>(
+            "Diagram",
+            CardKind::Diagram,
+            "mode-diagram",
+        ))
         .child(rune::el().grow(1.0))
         .child(back_button::<S>())
         .child(attach_button::<S>())
@@ -564,7 +918,11 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                         .key("source")
                         .grow(1.0)
                         .h_full()
-                        .child(source_pane::<S>(s)),
+                        .child(if s.editor().diagram() {
+                            diagram_pane::<S>(s)
+                        } else {
+                            source_pane::<S>(s)
+                        }),
                 )
                 .child(preview_pane::<S>(s))
                 .children(s.editor().showing_history.then(|| {
