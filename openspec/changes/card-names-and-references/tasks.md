@@ -37,7 +37,7 @@ that shows names.
 
 - [x] 5.1 A scene `editor-backlinks` shows a card with three referrers; README documents names, references and tag paths.
   - **Verification**: `--list-scenes` lists it and its `--snap` is non-blank.
-- [ ] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
+- [x] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping.
   - **Verification**: all three report success.
 
 ## Workflow follow-up
