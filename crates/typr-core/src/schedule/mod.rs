@@ -4,6 +4,8 @@
 //! ten-minute entry step, an adaptive interval after that — rather than its numbers. The trait is
 //! the seam FSRS slots into later: a different implementation, the same call.
 
+use crate::day::DAY_MS as ONE_DAY_MS;
+use crate::fsrs::{self, Memory};
 use crate::store::{Grade, Phase};
 
 pub use crate::day::DAY_MS;
@@ -21,10 +23,15 @@ const MULTIPLIER_DEN: i64 = 2;
 pub const MAX_INTERVAL_MS: i64 = 365 * DAY_MS;
 
 /// What the scheduler needs to know about a prompt.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// The two extra fields are what FSRS needs and the fixed scheduler ignores: when the prompt fell
+/// due (elapsed time is `at_ms - due_at`) and the memory state the last grade left behind.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PromptState {
     pub phase: Phase,
     pub interval_ms: i64,
+    pub due_at: Option<i64>,
+    pub memory: Option<Memory>,
 }
 
 impl PromptState {
@@ -32,15 +39,19 @@ impl PromptState {
     pub const NEW: Self = Self {
         phase: Phase::Learn,
         interval_ms: 0,
+        due_at: None,
+        memory: None,
     };
 }
 
 /// What a grade decided.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Outcome {
     pub phase: Phase,
     pub interval_ms: i64,
     pub due_at: Option<i64>,
+    /// The memory FSRS left behind, for the store to keep; the fixed scheduler has none.
+    pub memory: Option<Memory>,
 }
 
 /// How a prompt moves when it is graded.
@@ -52,50 +63,126 @@ pub trait Scheduler: Send + Sync {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FixedMultiplier;
 
+/// An outcome from a scheduler that keeps no memory: the only field the fixed path does not fill.
+fn fixed(phase: Phase, interval_ms: i64, due_at: Option<i64>) -> Outcome {
+    Outcome {
+        phase,
+        interval_ms,
+        due_at,
+        memory: None,
+    }
+}
+
 impl Scheduler for FixedMultiplier {
     fn grade(&self, state: &PromptState, grade: Grade, at_ms: i64) -> Outcome {
         match (state.phase, grade) {
             // A failure before the card has ever been scheduled changes nothing: it stays new.
-            (Phase::Learn, Grade::Forgot) => Outcome {
-                phase: Phase::Learn,
-                interval_ms: state.interval_ms,
-                due_at: None,
-            },
+            (Phase::Learn, Grade::Forgot) => fixed(Phase::Learn, state.interval_ms, None),
             // The first success takes the card out of the new queue and sets a ten-minute step.
-            (Phase::Learn, Grade::Remembered) => Outcome {
-                phase: Phase::Review,
-                interval_ms: 0,
-                due_at: Some(at_ms + LEARNING_STEP_MS),
-            },
+            (Phase::Learn, Grade::Remembered) => {
+                fixed(Phase::Review, 0, Some(at_ms + LEARNING_STEP_MS))
+            }
             // The step's success, and any success after a failure, starts from one day.
-            (Phase::Review, Grade::Remembered) if state.interval_ms == 0 => Outcome {
-                phase: Phase::Review,
-                interval_ms: DAY_MS,
-                due_at: Some(at_ms + DAY_MS),
-            },
-            (Phase::Relearn, Grade::Remembered) => Outcome {
-                phase: Phase::Review,
-                interval_ms: DAY_MS,
-                due_at: Some(at_ms + DAY_MS),
-            },
+            (Phase::Review, Grade::Remembered) if state.interval_ms == 0 => {
+                fixed(Phase::Review, ONE_DAY_MS, Some(at_ms + ONE_DAY_MS))
+            }
+            (Phase::Relearn, Grade::Remembered) => {
+                fixed(Phase::Review, ONE_DAY_MS, Some(at_ms + ONE_DAY_MS))
+            }
             (Phase::Review, Grade::Remembered) => {
                 let stretched = state.interval_ms * MULTIPLIER_NUM / MULTIPLIER_DEN;
-                let interval = stretched.clamp(DAY_MS, MAX_INTERVAL_MS);
-                Outcome {
-                    phase: Phase::Review,
-                    interval_ms: interval,
-                    due_at: Some(at_ms + interval),
-                }
+                let interval = stretched.clamp(ONE_DAY_MS, MAX_INTERVAL_MS);
+                fixed(Phase::Review, interval, Some(at_ms + interval))
             }
             // A failure in the review or relearning phase drops into a ten-minute step, keeping the
             // interval it had reached so the recovery starts short without forgetting how far it got.
-            (Phase::Review | Phase::Relearn, Grade::Forgot) => Outcome {
-                phase: Phase::Relearn,
-                interval_ms: state.interval_ms,
-                due_at: Some(at_ms + LEARNING_STEP_MS),
-            },
+            (Phase::Review | Phase::Relearn, Grade::Forgot) => fixed(
+                Phase::Relearn,
+                state.interval_ms,
+                Some(at_ms + LEARNING_STEP_MS),
+            ),
         }
     }
+}
+
+/// FSRS-5: stability and difficulty decide the interval, and a target retention decides how much of
+/// the stability is spent.
+///
+/// The fixed path's learning step is not reproduced: a new card graded remembered is scheduled for
+/// whatever its first stability asks (about three days at the defaults), and a failure is scheduled
+/// from the stability it fell to. That difference is the point of switching, so it is visible in the
+/// first review rather than hidden behind a ten-minute step.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fsrs {
+    pub weights: Vec<f64>,
+    /// The chance of recall each review aims at, from 0.05 to 0.99.
+    pub retention: f64,
+}
+
+impl Fsrs {
+    /// The scheduler the settings ask for before anyone changes them.
+    pub fn defaults() -> Self {
+        Self {
+            weights: fsrs::DEFAULT_WEIGHTS.to_vec(),
+            retention: fsrs::DEFAULT_RETENTION,
+        }
+    }
+
+    /// How long ago the prompt fell due, in days; a prompt that never fell due is reviewed as if it
+    /// were on time, which is what gives a first grade its `initial` memory rather than an update.
+    fn elapsed_days(state: &PromptState, at_ms: i64) -> f64 {
+        match state.due_at {
+            None => 0.0,
+            Some(due) => ((at_ms - due).max(0) as f64) / (ONE_DAY_MS as f64),
+        }
+    }
+}
+
+impl Scheduler for Fsrs {
+    fn grade(&self, state: &PromptState, grade: Grade, at_ms: i64) -> Outcome {
+        let memory = match (state.memory, state.due_at) {
+            // Nothing has graded this prompt before: its first memory comes from the grade alone.
+            (None, None) => fsrs::initial(grade, &self.weights),
+            // A prompt FSRS is meeting for the first time keeps the interval it already reached.
+            (None, Some(_)) => fsrs::update(
+                Memory::bootstrapped(state.interval_ms),
+                grade,
+                Self::elapsed_days(state, at_ms),
+                &self.weights,
+            ),
+            (Some(memory), _) => fsrs::update(
+                memory,
+                grade,
+                Self::elapsed_days(state, at_ms),
+                &self.weights,
+            ),
+        };
+        let days = fsrs::interval_days(memory.stability, self.retention);
+        let interval = ms_from_days(days).clamp(LEARNING_STEP_MS, MAX_INTERVAL_MS);
+        let (phase, due) = match grade {
+            Grade::Remembered => (Phase::Review, at_ms + interval),
+            Grade::Forgot => (Phase::Relearn, at_ms + interval),
+        };
+        Outcome {
+            phase,
+            interval_ms: interval,
+            due_at: Some(due),
+            memory: Some(memory),
+        }
+    }
+}
+
+/// How many milliseconds a span of days is.
+///
+/// A float-to-integer cast would be the obvious spelling, and this workspace refuses lossy casts;
+/// going through `Duration` rounds the same way without one. The clamp keeps the input inside the
+/// range a duration accepts, so the conversion cannot fail.
+fn ms_from_days(days: f64) -> i64 {
+    let ceiling = (MAX_INTERVAL_MS as f64) / (ONE_DAY_MS as f64);
+    let bounded = days.clamp(0.0, ceiling);
+    let millis =
+        std::time::Duration::from_secs_f64(bounded * (ONE_DAY_MS as f64) / 1_000.0).as_millis();
+    i64::try_from(millis).unwrap_or(MAX_INTERVAL_MS)
 }
 
 #[cfg(test)]

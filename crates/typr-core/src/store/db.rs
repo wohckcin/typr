@@ -1536,13 +1536,21 @@ impl Db {
     fn prompt_state(&self, card: Id, key: &str) -> Result<PromptState, StoreError> {
         self.conn
             .query_row(
-                "SELECT phase, interval_ms FROM prompt WHERE card_id = ?1 AND key = ?2",
+                "SELECT phase, interval_ms, due_at FROM prompt WHERE card_id = ?1 AND key = ?2",
                 params![card, key],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
+                    ))
+                },
             )
-            .map(|(phase, interval_ms)| PromptState {
+            .map(|(phase, interval_ms, due_at)| PromptState {
                 phase: Phase::parse(&phase).unwrap_or(Phase::Review),
                 interval_ms,
+                due_at,
+                memory: None,
             })
             .map_err(|error| match error {
                 rusqlite::Error::QueryReturnedNoRows => StoreError::NoPrompt {

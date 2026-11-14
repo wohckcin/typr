@@ -9,7 +9,7 @@
 
 ## 2. Wiring
 
-- [ ] 2.1 `Scheduler` gains `Fsrs { weights: Vec<f64>, retention: f64 }` implementing the same trait, mapping forgot to `Again` and remembered to `Good`, and bootstrapping stability from `interval_ms` when it is absent.
+- [x] 2.1 `Scheduler` gains `Fsrs { weights: Vec<f64>, retention: f64 }` implementing the same trait, mapping forgot to `Again` and remembered to `Good`, and bootstrapping stability from `interval_ms` when it is absent.
   - **Verification**: `an_fsrs_grade_bootstraps_a_prompt_it_has_never_seen` and `the_fixed_scheduler_still_produces_the_same_numbers`.
 - [ ] 2.2 Migration V11: `prompt.stability REAL`, `prompt.difficulty REAL`, and settings rows `scheduler = 'fixed'`, `retention = 90`, `fsrs_weights = <defaults>`.
   - **Verification**: `a_library_from_before_fsrs_keeps_its_schedules` rewinds a real file to `user_version = 10` and reopens; `the_scheduler_defaults_to_fixed`.
