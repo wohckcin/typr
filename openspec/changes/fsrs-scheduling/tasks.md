@@ -20,7 +20,7 @@
 
 - [x] 3.1 Commands `SetScheduler { kind }`, `SetRetention { percent }`, `SetWeights { list }`, each refusing an invalid value through `StoreError::Setting`.
   - **Verification**: `a_retention_of_one_hundred_and_fifty_percent_is_refused`, `an_unknown_scheduler_is_refused`.
-- [ ] 3.2 `Db::export_reviews() -> Result<String, StoreError>` producing the optimiser's CSV.
+- [x] 3.2 `Db::export_reviews() -> Result<String, StoreError>` producing the optimiser's CSV.
   - **Verification**: `the_export_holds_every_record_with_its_grade` counts rows against `review_log` and checks the header.
 
 ## 4. Close out

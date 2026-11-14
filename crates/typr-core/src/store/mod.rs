@@ -267,6 +267,12 @@ impl SchedulerKind {
     }
 }
 
+/// The narrowest and widest target FSRS accepts: below seventy the intervals outgrow anything a
+/// learner can keep up with, and above ninety-seven the model spends the whole stability on one
+/// review.
+pub const MIN_RETENTION: u32 = 70;
+pub const MAX_RETENTION: u32 = 97;
+
 impl Settings {
     pub const DEFAULT_NEW_PER_DAY: u32 = 20;
     /// The retention FSRS aims at before anyone sets one, as a percentage.

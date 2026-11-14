@@ -1373,3 +1373,31 @@ fn the_export_holds_every_record_with_its_grade() {
         lines[2]
     );
 }
+
+#[test]
+fn the_retention_range_is_inclusive_at_both_ends() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    for percent in [crate::store::MIN_RETENTION, crate::store::MAX_RETENTION] {
+        db.apply(&Command::SetRetention { percent }, NOON)
+            .expect("a target inside the range");
+        assert_eq!(db.settings().expect("settings").retention, percent);
+    }
+    for percent in [
+        crate::store::MIN_RETENTION - 1,
+        crate::store::MAX_RETENTION + 1,
+    ] {
+        assert!(
+            matches!(
+                db.apply(&Command::SetRetention { percent }, NOON),
+                Err(StoreError::Setting { .. })
+            ),
+            "{percent}% is outside seventy to ninety-seven"
+        );
+    }
+    assert_eq!(
+        db.settings().expect("settings").retention,
+        crate::store::MAX_RETENTION,
+        "the last accepted value is what stays"
+    );
+}

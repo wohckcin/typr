@@ -15,9 +15,9 @@ use crate::template;
 use crate::transfer::{self, mochi};
 
 use super::{
-    CardKind, CardMode, CardRef, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect,
-    MaskRow, NewPrompt, Outcome, Phase, ReviewRow, SavedView, SchedulerKind, Settings, Snapshot,
-    Sort, SortDir, Stats, StoreError, ViewSpec,
+    CardKind, CardMode, CardRef, CardSummary, Command, Deck, DuePrompt, Grade, Id, MAX_RETENTION,
+    MIN_RETENTION, MaskRect, MaskRow, NewPrompt, Outcome, Phase, ReviewRow, SavedView,
+    SchedulerKind, Settings, Snapshot, Sort, SortDir, Stats, StoreError, ViewSpec,
     schema::{self, SchemaFacts},
 };
 use unicode_normalization::UnicodeNormalization;
@@ -829,7 +829,7 @@ impl Db {
         let retention = match self.setting_text("retention")? {
             None => Settings::DEFAULT_RETENTION,
             Some(value) => match value.parse::<u32>() {
-                Ok(percent) if (1..=100).contains(&percent) => percent,
+                Ok(percent) if (MIN_RETENTION..=MAX_RETENTION).contains(&percent) => percent,
                 _ => {
                     return Err(StoreError::Setting {
                         key: "retention".to_string(),
@@ -1585,7 +1585,7 @@ impl Db {
             // every card without an override inherits.
             "reverse_default" => matches!(value, "0" | "1"),
             "scheduler" => SchedulerKind::parse(value).is_some(),
-            "retention" => matches!(value.parse::<u32>(), Ok(1..=100)),
+            "retention" => matches!(value.parse::<u32>(), Ok(MIN_RETENTION..=MAX_RETENTION)),
             // An optimiser's output is accepted whole or refused whole: a half-parsed list would
             // leave a schedule nobody can explain.
             "fsrs_weights" => crate::fsrs::weights(value).is_ok(),
