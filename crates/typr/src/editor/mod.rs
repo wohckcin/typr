@@ -202,12 +202,45 @@ impl Editor {
     }
 
     /// Switch between the two kinds. The text is kept either way, so a switch is undoable.
-    pub fn set_kind(&mut self, kind: CardKind) {
-        self.kind = kind;
+    /// Switch the card between text and a diagram, refusing the switch while the card holds what
+    /// the other kind would hide: converting a card is not a way to throw its content away.
+    pub fn set_kind(&mut self, kind: CardKind) -> bool {
+        if kind == self.kind {
+            return true;
+        }
+        let holds_text = self.sides().iter().any(|side| !side.trim().is_empty());
+        let holds_picture = self.image.is_some() || !self.masks.is_empty();
+        let refusal = match kind {
+            CardKind::Diagram if holds_text => Some(
+                "This card holds text, so it cannot become a diagram until the text is cleared.",
+            ),
+            CardKind::Text if holds_picture => Some(
+                "This card holds a picture, so it cannot become text until the picture is removed.",
+            ),
+            _ => None,
+        };
+        match refusal {
+            Some(message) => {
+                self.attach_error = Some(message.to_string());
+                false
+            }
+            None => {
+                self.attach_error = None;
+                self.kind = kind;
+                true
+            }
+        }
     }
 
     /// Copy a chosen picture into the library and make this card a diagram of it.
     pub fn choose_image(&mut self, source: &std::path::Path) -> std::io::Result<()> {
+        if self.sides().iter().any(|side| !side.trim().is_empty()) {
+            let error = std::io::Error::other(
+                "this card holds text, so a picture would not be asked about",
+            );
+            self.attach_error = Some(format!("The image was not attached: {error}"));
+            return Err(error);
+        }
         let name = attachments::attach(self.attachments.root(), source)?;
         self.image = Some(name);
         self.kind = CardKind::Diagram;
@@ -604,7 +637,9 @@ fn back_button<S: Host>() -> El {
 fn mode_button<S: Host>(label: &'static str, kind: CardKind, key: &'static str) -> El {
     Button::new(label)
         .variant(ButtonVariant::Ghost)
-        .on_press(move |s: &mut S| s.editor_mut().set_kind(kind))
+        .on_press(move |s: &mut S| {
+            s.editor_mut().set_kind(kind);
+        })
         .build(&KIT)
         .key(key)
 }
@@ -686,11 +721,12 @@ fn diagram_pane<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let editor = s.editor();
     let (pane_w, pane_h) = editor.pane;
-    let mut pane = col()
+    // Only the picture is measured: a rectangle is a fraction of the picture, and a drag over the
+    // controls below it is not a drag across the picture.
+    let mut picture_box = col()
         .key("diagram-pane")
         .w_full()
         .max_w(400.0)
-        .gap(8.0)
         .on_layout(|s: &mut S, rect| s.editor_mut().pane = (rect[2], rect[3]))
         .on_drag(|s: &mut S, drag: &mut rune::Drag, _: &mut rune::Tx| {
             // A rectangle is the drag's own corners read as fractions of the pane the gesture was
@@ -708,6 +744,7 @@ fn diagram_pane<S: Host>(s: &S) -> El {
                 s.send_masks(card, &change);
             }
         });
+    let mut pane = col().key("diagram-editor").w_full().gap(8.0);
 
     match editor
         .image
@@ -719,10 +756,10 @@ fn diagram_pane<S: Host>(s: &S) -> El {
             if let Some([w, _]) = picture.size() {
                 drawn = drawn.max_w(w as f32);
             }
-            pane = pane.child(drawn.pixels(picture.pixels()));
+            picture_box = picture_box.child(drawn.pixels(picture.pixels()));
         }
         None => {
-            pane = pane.child(
+            picture_box = picture_box.child(
                 text("Choose a picture for this card.")
                     .key("no-picture")
                     .font(type_::LABEL)
@@ -734,7 +771,7 @@ fn diagram_pane<S: Host>(s: &S) -> El {
     // One outline per rectangle, placed against the pane as it was last laid out, labelled with the
     // group it answers in.
     for (index, mask) in editor.masks.iter().enumerate() {
-        pane = pane.child(
+        picture_box = picture_box.child(
             col()
                 .key(format!("shape-{index}"))
                 .absolute(mask.rect.x * pane_w, mask.rect.y * pane_h)
@@ -749,6 +786,9 @@ fn diagram_pane<S: Host>(s: &S) -> El {
                 ),
         );
     }
+
+    // The picture first, then what edits it.
+    pane = pane.child(picture_box);
 
     let controls = row()
         .key("diagram-controls")

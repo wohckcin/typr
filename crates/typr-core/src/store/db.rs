@@ -200,6 +200,19 @@ impl Db {
                 image,
                 caption,
             } => {
+                // Text already on the card would be hidden rather than kept, so the switch waits
+                // until it is cleared.
+                let holds_text = self.conn.query_row(
+                    "SELECT markdown <> '' OR has_cloze = 1 FROM card WHERE id = ?1",
+                    params![card],
+                    |row| row.get::<_, bool>(0),
+                )?;
+                if holds_text {
+                    return Err(StoreError::NotEmpty {
+                        card: *card,
+                        holds: "text",
+                    });
+                }
                 let changed = self.conn.execute(
                     "UPDATE card SET kind = 'diagram', image = ?2, caption = ?3, updated_at = ?4
                      WHERE id = ?1",
@@ -211,6 +224,7 @@ impl Db {
                         id: *card,
                     });
                 }
+                self.sync_prompts(*card, &self.shape_of(*card)?)?;
                 Ok(Outcome::Changed(changed))
             }
             Command::AddMask { card, group, rect } => {
@@ -266,6 +280,14 @@ impl Db {
             Command::MaskGroups { card } => Ok(Outcome::MaskGroups(self.mask_groups(*card)?)),
             Command::Masks { card } => Ok(Outcome::Masks(self.masks(*card)?)),
             Command::SaveCard { id, markdown } => {
+                // A diagram's prompt comes from its rectangles, so text written over one would be
+                // stored and never asked.
+                if self.kind_of(*id)? == "diagram" {
+                    return Err(StoreError::NotEmpty {
+                        card: *id,
+                        holds: "a picture",
+                    });
+                }
                 let shape = hidden::shape(markdown);
                 let changed = self.conn.execute(
                     "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
@@ -594,12 +616,18 @@ impl Db {
     }
 
     /// Which card kind the row records: `text` for markdown, `diagram` for a picture.
+    /// The card's kind, or `text` for a card that is no longer there: a missing card is reported by
+    /// the command that asked, not by this read.
     fn kind_of(&self, card: Id) -> Result<String, StoreError> {
-        Ok(self.conn.query_row(
-            "SELECT kind FROM card WHERE id = ?1",
-            params![card],
-            |row| row.get(0),
-        )?)
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT kind FROM card WHERE id = ?1",
+                params![card],
+                |row| row.get(0),
+            )
+            .optional()?
+            .unwrap_or_else(|| "text".to_string()))
     }
 
     /// Whether the card is a diagram, and what it hides, in one read.

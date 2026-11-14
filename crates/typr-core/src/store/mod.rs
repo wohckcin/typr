@@ -85,8 +85,10 @@ pub struct Deck {
 }
 
 /// Which of the two things a card asks: text, or a picture with rectangles on it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CardKind {
+    /// Text is what a card is until it is made a diagram, which is also what a fixture starts as.
+    #[default]
     Text,
     Diagram,
 }
@@ -108,7 +110,10 @@ impl CardKind {
 }
 
 /// A card as the library lists it.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// `Default` is what a fixture fills in: a card that asks nothing, in deck 0. Tests name only the
+/// fields they care about, so a new field here does not rewrite every literal.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct CardSummary {
     pub id: Id,
     pub deck: Id,
@@ -588,6 +593,9 @@ pub enum StoreError {
     /// A file operation on the library failed. The cause is reachable through `source()`.
     #[error("a file operation on the library failed")]
     Io(#[from] std::io::Error),
+    /// A card that cannot change kind because it still holds what the other kind would hide.
+    #[error("card {card} still holds {holds}, so it cannot change kind until that is cleared")]
+    NotEmpty { card: Id, holds: &'static str },
     /// The worker thread is gone, so nothing was sent and no answer will come.
     #[error("a mask on card {card} does not sit inside its image")]
     MaskOutsideImage { card: Id },

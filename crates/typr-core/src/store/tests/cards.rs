@@ -1087,3 +1087,121 @@ fn removing_a_group_leaves_its_records() {
         .expect("the retired prompt");
     assert_eq!(retired, 1, "the prompt is retired rather than deleted");
 }
+
+#[test]
+fn a_card_that_holds_text_cannot_become_a_diagram() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let text = match db
+        .apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "front\n---\nback".to_string(),
+            },
+            0,
+        )
+        .expect("text card")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a card: {other:?}"),
+    };
+
+    let refused = db.apply(
+        &Command::SetDiagram {
+            card: text,
+            image: "plate.png".to_string(),
+            caption: String::new(),
+        },
+        0,
+    );
+    assert!(
+        matches!(refused, Err(StoreError::NotEmpty { card, holds: "text" }) if card == text),
+        "text on the card is kept, not hidden: {refused:?}"
+    );
+    let kind: String = db
+        .connection_for_test()
+        .query_row("SELECT kind FROM card WHERE id = ?1", [text], |row| {
+            row.get(0)
+        })
+        .expect("the kind");
+    assert_eq!(kind, "text", "a refused switch leaves the card as it was");
+
+    // An empty card switches and takes a prompt per group.
+    let empty = match db
+        .apply(
+            &Command::CreateCard {
+                deck,
+                markdown: String::new(),
+            },
+            0,
+        )
+        .expect("empty card")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a card: {other:?}"),
+    };
+    db.apply(
+        &Command::SetDiagram {
+            card: empty,
+            image: "plate.png".to_string(),
+            caption: "A plate".to_string(),
+        },
+        0,
+    )
+    .expect("an empty card becomes a diagram");
+    db.apply(
+        &Command::AddMask {
+            card: empty,
+            group: 1,
+            rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
+        },
+        0,
+    )
+    .expect("a rectangle");
+    assert_eq!(
+        db.prompt_keys(empty).expect("keys"),
+        vec!["mask:1".to_string()],
+        "the switch left the card asking its own group"
+    );
+}
+
+#[test]
+fn a_diagram_is_not_overwritten_by_text() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let id = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: String::new(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a diagram: {other:?}"),
+    };
+
+    let refused = db.apply(
+        &Command::SaveCard {
+            id,
+            markdown: "front\n---\nback".to_string(),
+        },
+        0,
+    );
+    assert!(
+        matches!(refused, Err(StoreError::NotEmpty { card, holds: "a picture" }) if card == id),
+        "text written over a diagram would never be asked: {refused:?}"
+    );
+    let markdown: String = db
+        .connection_for_test()
+        .query_row("SELECT markdown FROM card WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })
+        .expect("the markdown");
+    assert_eq!(markdown, "", "the diagram still holds no text");
+}

@@ -21,8 +21,8 @@ use typr_core::keymap::{Command, Surface};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{
-    CardKind, CardMode, Grade, Handle, Id, MaskRect, MaskRow, Outcome, Store, StoreError,
-    WorkerStatus,
+    CardKind, CardMode, CardSummary, Grade, Handle, Id, MaskRect, MaskRow, Outcome, Store,
+    StoreError, WorkerStatus,
 };
 use typr_core::{day, hidden};
 
@@ -111,6 +111,9 @@ struct State {
     pending_new_card: Option<String>,
     /// A new diagram waiting for the card that has to be created for it.
     pending_new_diagram: Option<(String, String)>,
+    /// The rectangles drawn before the card existed. They are sent once the card has an id,
+    /// because a rectangle has nothing to hang on until then.
+    pending_masks: Vec<(u32, MaskRect)>,
     deck_request: Option<u64>,
     /// Every command that went out and has not been answered: what it was, and when it left.
     sent: HashMap<u64, (&'static str, Instant)>,
@@ -145,6 +148,7 @@ impl Default for State {
             seed: 1,
             pending_new_card: None,
             pending_new_diagram: None,
+            pending_masks: Vec::new(),
             deck_request: None,
             sent: HashMap::new(),
             panel: keymap::panel::Panel::default(),
@@ -608,9 +612,10 @@ impl State {
             let caption = self.editor.caption.text.trim().to_string();
             let stored = match (self.editor.card, &self.store) {
                 (Some(card), Some(store)) => {
+                    // A diagram's prompt comes from its rectangles, so its text is not saved: the
+                    // kind, the picture and the caption are what the card is.
                     let sent = store
-                        .save_card(card, &text)
-                        .and_then(|_| store.set_diagram(card, &image, &caption))
+                        .set_diagram(card, &image, &caption)
                         .and_then(|_| store.set_tags(card, &tags));
                     match sent {
                         Ok(_) => true,
@@ -627,6 +632,12 @@ impl State {
                     }
                     // The card id comes back asynchronously, so the picture is kept until it does.
                     self.pending_new_diagram = Some((image.clone(), caption.clone()));
+                    self.pending_masks = self
+                        .editor
+                        .masks
+                        .iter()
+                        .map(|mask| (mask.group, mask.rect))
+                        .collect();
                     self.pending_tags = tags;
                     self.pending_new_card = Some(text.clone());
                     match self.deck_for_new_card() {
@@ -810,53 +821,7 @@ impl State {
                 let card = snapshot.cards.iter().find(|card| card.id == id)?;
                 let overdue = due_at.map_or(0, |due_at| overdue_days(now, due_at, offset));
 
-                // A diagram card is asked one group at a time: the key names the group, and the face
-                // carries only that group's rectangles, so the covers cannot spill onto an answer
-                // the next prompt will ask about.
-                if let Some(group) = key.strip_prefix("mask:") {
-                    let group: u32 = group.parse().ok()?;
-                    let masks: Vec<_> = card
-                        .masks
-                        .iter()
-                        .filter(|mask| mask.group == group)
-                        .map(|mask| mask.rect)
-                        .collect();
-                    if masks.is_empty() {
-                        return None;
-                    }
-                    let image = card.image.clone()?;
-                    return Some(Entry::mask_group(
-                        card.id,
-                        key.as_str(),
-                        image,
-                        card.caption.clone(),
-                        masks,
-                        overdue,
-                    ));
-                }
-
-                let shape = hidden::shape(&card.markdown);
-                // A prompt the card's shape does not claim cannot be asked: masking it would hide
-                // nothing, so the question would show the answer. A one-sided card is a note, which
-                // is the same rule with an empty key list. The claim set is the shape's, so this
-                // and the store's writing of prompts cannot drift apart.
-                if !shape.claimed_keys().contains(&key) {
-                    return None;
-                }
-                let reverse = key == "rev";
-                Some(match &shape {
-                    hidden::Shape::Sides(sides) if reverse => {
-                        Entry::reverse(card.id, sides.clone(), overdue)
-                    }
-                    hidden::Shape::Sides(sides) => Entry::sides(card.id, sides.clone(), overdue),
-                    hidden::Shape::Hidden { text, .. } => Entry::masked(
-                        card.id,
-                        key.as_str(),
-                        hidden::masked(text, &shape, &key),
-                        hidden::shown(text, &shape),
-                        overdue,
-                    ),
-                })
+                entry_for(card, &key, overdue)
             })
             .collect()
     }
@@ -962,6 +927,17 @@ impl State {
                     // answers with the same card either way, so this only sets what a text card
                     // needs to become a diagram.
                     self.pending_new_diagram = None;
+                    // Rectangles drawn before the card existed are stored now that it does.
+                    for (group, rect) in std::mem::take(&mut self.pending_masks) {
+                        let sent = match &self.store {
+                            Some(store) => store.add_mask(id, group, rect),
+                            None => Err(StoreError::Closed),
+                        };
+                        if let Err(error) = sent {
+                            self.fail(&error);
+                            break;
+                        }
+                    }
                     let tags = std::mem::take(&mut self.pending_tags);
                     if !tags.is_empty() {
                         let sent = match &self.store {
@@ -1288,6 +1264,70 @@ fn overlay_key(s: &mut State, event: &rune::KeyEvent) -> bool {
     }
 }
 
+/// A folder holding the picture the diagram scenes draw, so a snap shows a diagram rather than a
+/// missing image. The folder outlives the scene because the process exits with it.
+fn scene_attachments() -> typr::attachments::Attachments {
+    let root = std::env::temp_dir()
+        .join(format!("typr-scene-{}", std::process::id()))
+        .join("attachments");
+    std::fs::create_dir_all(&root).expect("a folder for the scene's picture");
+    let picture = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/plate.png"))
+        .expect("the fixture picture");
+    std::fs::write(root.join("plate.png"), picture).expect("the scene's picture");
+    // The scene has no window to wake, so its pictures decode on their own.
+    typr::attachments::Attachments::new(root, std::sync::Arc::new(|| {}))
+}
+
+/// One prompt as a session entry, or `None` when the card cannot ask it.
+fn entry_for(card: &CardSummary, key: &str, overdue: i64) -> Option<Entry> {
+    // A diagram card is asked one group at a time: the key names the group, and the face carries
+    // only that group's rectangles, so the covers cannot spill onto an answer the next prompt will
+    // ask about.
+    if let Some(group) = key.strip_prefix("mask:") {
+        let group: u32 = group.parse().ok()?;
+        let masks: Vec<_> = card
+            .masks
+            .iter()
+            .filter(|mask| mask.group == group)
+            .map(|mask| mask.rect)
+            .collect();
+        if masks.is_empty() {
+            return None;
+        }
+        let image = card.image.clone()?;
+        return Some(Entry::mask_group(
+            card.id,
+            key,
+            image,
+            card.caption.clone(),
+            masks,
+            overdue,
+        ));
+    }
+
+    let shape = hidden::shape(&card.markdown);
+    // A prompt the card's shape does not claim cannot be asked: masking it would hide nothing, so
+    // the question would show the answer. A one-sided card is a note, which is the same rule with
+    // an empty key list. The claim set is the shape's, so this and the store's writing of prompts
+    // cannot drift apart.
+    let claimed = shape.claimed_keys();
+    if !claimed.iter().any(|claimed| claimed == key) {
+        return None;
+    }
+    let reverse = key == "rev";
+    Some(match &shape {
+        hidden::Shape::Sides(sides) if reverse => Entry::reverse(card.id, sides.clone(), overdue),
+        hidden::Shape::Sides(sides) => Entry::sides(card.id, sides.clone(), overdue),
+        hidden::Shape::Hidden { text, .. } => Entry::masked(
+            card.id,
+            key,
+            hidden::masked(text, &shape, key),
+            hidden::shown(text, &shape),
+            overdue,
+        ),
+    })
+}
+
 fn main() {
     // The study day needs the machine's zone, and `time` only answers on the main thread, so read
     // it before any worker starts.
@@ -1432,6 +1472,7 @@ fn main() {
             );
         }),
         ("review-diagram", |state: &mut State| {
+            state.editor.attachments = scene_attachments();
             // Two groups on one picture: the first is masked, so the review covers both of its
             // rectangles and leaves the other group's in sight.
             state.screen = Screen::Session;
@@ -1453,6 +1494,7 @@ fn main() {
         ("editor-diagram", |state: &mut State| {
             state.screen = Screen::Editor;
             state.editor = Editor::new(None, String::new());
+            state.editor.attachments = scene_attachments();
             state.editor.set_kind(CardKind::Diagram);
             state.editor.image = Some("plate.png".to_string());
             state.editor.caption.replace_text("The plate".to_string());
