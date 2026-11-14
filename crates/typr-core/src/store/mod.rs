@@ -9,6 +9,7 @@ mod schema;
 mod task;
 mod view;
 
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::hidden;
@@ -266,7 +267,71 @@ pub enum CardMode {
     Trash,
 }
 
+/// One node of the tag tree: a path, the cards under it, and the paths below it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TagBranch {
+    /// The path as it was first written, `spanish/verbs`.
+    pub path: String,
+    /// Cards carrying this tag or any tag below it, because a filter on a parent includes them.
+    pub cards: u32,
+    /// The paths under this one, by name.
+    pub children: Vec<TagBranch>,
+}
+
 impl Snapshot {
+    /// Every tag in the library as a tree of paths, so a screen can list a tag's children under it.
+    ///
+    /// Counts are distinct cards, so a card tagged both `spanish` and `spanish/verbs` is one card
+    /// under `spanish`, not two.
+    pub fn tag_tree(&self) -> Vec<TagBranch> {
+        let mut cards_under: BTreeMap<String, BTreeSet<Id>> = BTreeMap::new();
+        let mut written: HashMap<String, String> = HashMap::new();
+        for card in &self.cards {
+            for tag in &card.tags {
+                let segments = tag
+                    .split('/')
+                    .filter(|segment| !segment.trim().is_empty())
+                    .collect::<Vec<_>>();
+                for end in 1..=segments.len() {
+                    let path = segments[..end].join("/");
+                    let key = folded(&path);
+                    written.entry(key.clone()).or_insert(path);
+                    cards_under.entry(key).or_default().insert(card.id);
+                }
+            }
+        }
+        let mut roots: Vec<TagBranch> = Vec::new();
+        for key in cards_under.keys() {
+            let path = written.get(key).expect("every counted path is written");
+            let mut node = &mut roots;
+            let mut walked = String::new();
+            for segment in path.split('/') {
+                if !walked.is_empty() {
+                    walked.push('/');
+                }
+                walked.push_str(segment);
+                let at = match node
+                    .iter()
+                    .position(|branch| folded(&branch.path) == folded(&walked))
+                {
+                    Some(at) => at,
+                    None => {
+                        node.push(TagBranch {
+                            path: walked.clone(),
+                            cards: 0,
+                            children: Vec::new(),
+                        });
+                        node.len() - 1
+                    }
+                };
+                node = &mut node[at].children;
+            }
+        }
+        count_branches(&mut roots, &cards_under);
+        sort_branches(&mut roots);
+        roots
+    }
+
     /// The deck and everything under it, or every deck when `deck` is `None`.
     pub fn subtree(&self, deck: Option<Id>) -> Vec<Id> {
         let Some(deck) = deck else {
@@ -313,6 +378,29 @@ impl Snapshot {
     /// The cards a library list shows for a filter: those `spec` keeps, in its order.
     pub fn cards_matching(&self, spec: &ViewSpec) -> Vec<&CardSummary> {
         spec.cards(self)
+    }
+}
+
+/// The branch at `path`, if the tree has one.
+fn count_branches(branches: &mut [TagBranch], counts: &BTreeMap<String, BTreeSet<Id>>) {
+    for branch in branches {
+        let key = folded(&branch.path);
+        branch.cards = counts
+            .get(&key)
+            .map_or(0, |ids| u32::try_from(ids.len()).unwrap_or(u32::MAX));
+        count_branches(&mut branch.children, counts);
+    }
+}
+
+/// Order a tree by path, the way the rest of the library orders names.
+fn sort_branches(branches: &mut Vec<TagBranch>) {
+    branches.sort_by(|left, right| {
+        folded(&left.path)
+            .cmp(&folded(&right.path))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    for branch in branches {
+        sort_branches(&mut branch.children);
     }
 }
 

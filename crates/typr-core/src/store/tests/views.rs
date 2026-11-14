@@ -461,3 +461,43 @@ fn a_cram_selection_ignores_due_dates_and_the_cap() {
         "the filter selects both cards, whatever the schedule says"
     );
 }
+
+#[test]
+fn filtering_a_parent_includes_its_children() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let verbs = card(&mut db, deck, "hablar\n---\nto speak");
+    let nouns = card(&mut db, deck, "gato\n---\ncat");
+    let french = card(&mut db, deck, "chat\n---\ncat");
+    for (id, tag) in [
+        (verbs, "spanish/verbs"),
+        (nouns, "spanish/nouns"),
+        (french, "french"),
+    ] {
+        db.apply(
+            &Command::SetTags {
+                card: id,
+                tags: vec![tag.to_string()],
+            },
+            0,
+        )
+        .expect("tags");
+    }
+
+    let snapshot = db.snapshot().expect("snapshot");
+    let mut listed: Vec<Id> = snapshot
+        .cards_matching(&ViewSpec {
+            tags: vec!["spanish".to_string()],
+            ..ViewSpec::default()
+        })
+        .into_iter()
+        .map(|card| card.id)
+        .collect();
+    listed.sort_unstable();
+    assert_eq!(
+        listed,
+        vec![verbs, nouns],
+        "a filter on a parent lists the cards under its children"
+    );
+}

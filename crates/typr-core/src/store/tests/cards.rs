@@ -1739,6 +1739,37 @@ fn a_name_template_names_the_card_over_its_text() {
 }
 
 #[test]
+fn a_tag_path_is_one_tag() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let id = card(&mut db, deck, "hablar\n---\nto speak");
+    db.apply(
+        &Command::SetTags {
+            card: id,
+            tags: vec!["spanish/verbs".to_string()],
+        },
+        0,
+    )
+    .expect("tags");
+
+    assert_eq!(
+        db.tag_names().expect("names"),
+        vec!["spanish/verbs".to_string()],
+        "a path is one tag row, not one row per segment"
+    );
+    assert_eq!(summary(&db, id).tags, vec!["spanish/verbs".to_string()]);
+
+    let tree = db.snapshot().expect("snapshot").tag_tree();
+    assert_eq!(tree.len(), 1, "one root, and its path is the first segment");
+    assert_eq!(tree[0].path, "spanish");
+    assert_eq!(tree[0].cards, 1, "the parent counts the cards below it");
+    assert_eq!(tree[0].children.len(), 1);
+    assert_eq!(tree[0].children[0].path, "spanish/verbs");
+    assert_eq!(tree[0].children[0].cards, 1);
+}
+
+#[test]
 fn a_saved_card_records_its_references() {
     let dir = TempDir::new().expect("temp dir");
     let mut db = open_temp(&dir);

@@ -21,7 +21,7 @@ that shows names.
 
 ## 3. Tags as paths
 
-- [ ] 3.1 Tag parsing keeps a whole path in one tag; `Snapshot` exposes a tag tree; a filter by a tag includes its descendants.
+- [x] 3.1 Tag parsing keeps a whole path in one tag; `Snapshot` exposes a tag tree; a filter by a tag includes its descendants.
   - **Verification**: `filtering_a_parent_includes_its_children` and `a_tag_path_is_one_tag` assert one tag row with two segments.
 
 ## 4. Screens

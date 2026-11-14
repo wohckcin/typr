@@ -204,10 +204,13 @@ impl ViewSpec {
             .filter(|card| scope.is_none() || subtree.contains(&card.deck))
             .filter(|card| !self.pinned_only || card.pinned)
             .filter(|card| {
+                // A tag is a path, so filtering `spanish` includes `spanish/verbs`: a parent is the
+                // heading its children sit under, not a fourth kind of tag to hunt for.
                 wanted.iter().all(|tag| {
-                    card.tags
-                        .iter()
-                        .any(|own| folded(own).as_str() == tag.as_str())
+                    card.tags.iter().any(|own| {
+                        let own = folded(own);
+                        own.as_str() == tag.as_str() || own.starts_with(&format!("{tag}/"))
+                    })
                 })
             })
             .filter(|card| {
