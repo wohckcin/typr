@@ -1492,3 +1492,70 @@ fn a_view_is_selected_then_renamed_and_deleted() {
         "deleting a view kept every card it matched"
     );
 }
+
+#[test]
+fn a_sort_change_while_a_view_is_selected_updates_the_view() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let db = typr_core::store::Db::open(&path).expect("open");
+    let view = match db
+        .apply(
+            &typr_core::store::Command::CreateView {
+                spec: typr_core::store::ViewSpec {
+                    sort: typr_core::store::Sort::LastEdited,
+                    ..typr_core::store::ViewSpec::default()
+                },
+                name: "Recent".to_string(),
+            },
+            0,
+        )
+        .expect("view")
+    {
+        typr_core::store::Outcome::View(id) => id,
+        other => panic!("creating a view: {other:?}"),
+    };
+
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(db, Box::new(typr_core::clock::SystemClock), waker).expect("spawn");
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    let snapshot = state.store.as_ref().expect("store").snapshot();
+    state.library.set_snapshot(snapshot);
+    state.library.select_view(view);
+
+    assert_eq!(
+        state.library.selected_view,
+        Some(view),
+        "the view is the one being shown"
+    );
+    LibraryHost::choose_sort(&mut state, typr_core::store::Sort::Reviews);
+    for _ in 0..200 {
+        state.drain();
+        if state
+            .library
+            .snapshot()
+            .views
+            .iter()
+            .any(|own| own.spec.sort == typr_core::store::Sort::Reviews)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let stored = state
+        .library
+        .snapshot()
+        .views
+        .iter()
+        .find(|own| own.id == view)
+        .cloned()
+        .expect("the view");
+    assert_eq!(
+        stored.spec.sort,
+        typr_core::store::Sort::Reviews,
+        "the view remembers the order it was left in"
+    );
+    assert_eq!(stored.name, "Recent", "and keeps its name");
+}

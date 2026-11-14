@@ -431,3 +431,71 @@ fn the_sidebar_lists_saved_views_and_selects_one() {
         "a selected view can be renamed and deleted"
     );
 }
+
+#[test]
+fn the_sort_control_offers_every_order_and_the_shuffle_changes_none() {
+    let library = Library::seeded(10);
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (1200.0, 700.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+
+    for key in [
+        "sort-edited",
+        "sort-created",
+        "sort-first-side",
+        "sort-due",
+        "sort-reviews",
+        "sort-shuffle",
+    ] {
+        assert!(runtime.find(key).is_some(), "{key} is missing");
+    }
+
+    let press = |runtime: &mut rune::Runtime<Library>, key: &str| {
+        let (x, y) = runtime.find(key).unwrap_or_else(|| panic!("{key}"));
+        runtime.pointer_down(x, y);
+        runtime.pointer_up(x, y);
+        runtime.frame(0.1);
+    };
+
+    press(&mut runtime, "sort-due");
+    assert_eq!(runtime.state.sort, typr_core::store::Sort::DueDate);
+    assert!(
+        !runtime.state.shuffled(),
+        "choosing an order ends a shuffle"
+    );
+
+    let order: Vec<i64> = runtime.state.cards().iter().map(|card| card.id).collect();
+    press(&mut runtime, "sort-shuffle");
+    assert!(runtime.state.shuffled(), "the shuffle is in force");
+    assert_eq!(
+        runtime.state.sort,
+        typr_core::store::Sort::DueDate,
+        "and it leaves the view's order alone"
+    );
+    assert_eq!(runtime.state.shuffle, Some(1), "the first hand");
+    assert_ne!(
+        runtime
+            .state
+            .cards()
+            .iter()
+            .map(|card| card.id)
+            .collect::<Vec<_>>(),
+        order,
+        "the shuffle dealt another order"
+    );
+
+    press(&mut runtime, "sort-shuffle");
+    assert_eq!(
+        runtime.state.shuffle,
+        Some(2),
+        "pressing it again deals again"
+    );
+    assert!(
+        runtime.state.snapshot().views.is_empty(),
+        "no shuffle was written anywhere"
+    );
+}

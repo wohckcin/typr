@@ -484,6 +484,14 @@ impl library::Host for State {
         self.track("delete_view", sent);
     }
 
+    fn update_view(&mut self, id: Id, spec: &typr_core::store::ViewSpec) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.update_view(id, spec),
+            None => Err(StoreError::Closed),
+        };
+        self.track("update_view", sent);
+    }
+
     fn set_pinned(&mut self, card: Id, pinned: bool) {
         let sent = match self.store.as_ref() {
             Some(store) => store.set_pinned(card, pinned),

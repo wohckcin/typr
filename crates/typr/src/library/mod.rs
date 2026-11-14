@@ -162,6 +162,40 @@ pub trait Host: 'static {
         }
     }
 
+    /// Order the list, and remember the order in the view being shown if there is one.
+    ///
+    /// The change chose this: a view remembers the order the user leaves it in, so selecting that
+    /// view again does not undo a deliberate change. Only the order is written back — a search
+    /// typed while a view is selected is a search, not an edit of the view.
+    fn choose_sort(&mut self, sort: Sort) {
+        self.library_mut().set_sort(sort);
+        self.remember_order();
+    }
+
+    fn flip_dir(&mut self) {
+        self.library_mut().flip_dir();
+        self.remember_order();
+    }
+
+    fn remember_order(&mut self) {
+        let Some(id) = self.library().selected_view else {
+            return;
+        };
+        let Some(mut spec) = self
+            .library()
+            .snapshot()
+            .views
+            .iter()
+            .find(|view| view.id == id)
+            .map(|view| view.spec.clone())
+        else {
+            return;
+        };
+        spec.sort = self.library().sort;
+        spec.dir = self.library().dir;
+        self.update_view(id, &spec);
+    }
+
     /// Close the view name field and save the current filter under it. False when no view was
     /// being named.
     fn finish_view_create(&mut self) -> bool {
@@ -219,6 +253,9 @@ pub trait Host: 'static {
 
     /// Whether a card is pinned.
     fn set_pinned(&mut self, _card: Id, _pinned: bool) {}
+
+    /// Replace a saved view's filter. A host with no store cannot.
+    fn update_view(&mut self, _id: Id, _spec: &ViewSpec) {}
 }
 
 impl Host for Library {
@@ -245,6 +282,8 @@ pub struct Library {
     pub dir: SortDir,
     /// The seed of a shuffle, or `None` for the saved order. A shuffle is never written to a view.
     pub shuffle: Option<u64>,
+    /// How many shuffles have been asked for, so pressing it again deals another hand.
+    pub shuffles: u64,
     /// Whether only pinned cards are listed.
     pub pinned_only: bool,
     /// The rows the filters keep, rebuilt whenever a filter changes.
@@ -297,6 +336,7 @@ impl Default for Library {
             sort: Sort::default(),
             dir: SortDir::default(),
             shuffle: None,
+            shuffles: 0,
             pinned_only: false,
             visible: Vec::new(),
             built_rows: AtomicUsize::new(0),
@@ -519,12 +559,46 @@ impl Library {
 
     /// Recompute the visible rows from the current filters.
     fn refresh(&mut self) {
-        self.visible = self
-            .snapshot
-            .cards_matching(&self.spec())
-            .into_iter()
-            .cloned()
-            .collect();
+        let mut cards = self.snapshot.cards_matching(&self.spec());
+        if let Some(seed) = self.shuffle {
+            cards = typr_core::store::shuffled(cards, seed);
+        }
+        self.visible = cards.into_iter().cloned().collect();
+    }
+
+    /// Order the list.
+    pub fn set_sort(&mut self, sort: Sort) {
+        self.sort = sort;
+        // A shuffle is a moment: choosing an order ends it.
+        self.shuffle = None;
+        self.refresh();
+    }
+
+    /// Run the order backwards.
+    pub fn flip_dir(&mut self) {
+        self.dir = self.dir.flipped();
+        self.refresh();
+    }
+
+    /// Deal the cards again, in an order no view keeps.
+    pub fn shuffle_now(&mut self) {
+        self.shuffles += 1;
+        self.shuffle = Some(self.shuffles);
+        self.refresh();
+    }
+
+    /// Whether the list is showing a shuffle rather than the view's order.
+    pub fn shuffled(&self) -> bool {
+        self.shuffle.is_some()
+    }
+
+    /// The order control's label: the current order, or the shuffle.
+    pub fn sort_label(&self) -> &'static str {
+        if self.shuffle.is_some() {
+            "Shuffled"
+        } else {
+            self.sort.label()
+        }
     }
 
     /// The filter the list is showing, built from what the controls and the selected view set.
@@ -1189,6 +1263,55 @@ fn deck_reverse_button<S: Host>(label: &str, key: &str, deck: Id, reverse: Optio
         .key(key)
 }
 
+/// The order control: one button per order, the one in force marked, and a shuffle beside them.
+///
+/// The shuffle is a separate button because it is not an order a view can keep: pressing an order
+/// ends the shuffle, and pressing the shuffle never writes anything.
+fn sort_controls<S: Host>(s: &S) -> El {
+    let library = s.library();
+    let t = tok::theme(true);
+    let mut row = row().key("sorting").gap(2.0).center_y();
+    for sort in Sort::ALL {
+        let chosen = !library.shuffled() && library.sort == sort;
+        row = row.child(
+            Button::new(sort.label())
+                .variant(if chosen {
+                    ButtonVariant::Submit
+                } else {
+                    ButtonVariant::Ghost
+                })
+                .on_press(move |s: &mut S| s.choose_sort(sort))
+                .build(&KIT)
+                .key(format!("sort-{}", sort.as_str())),
+        );
+    }
+    row.child(
+        Button::new(if library.shuffled() {
+            "Again"
+        } else {
+            "Shuffle"
+        })
+        .variant(if library.shuffled() {
+            ButtonVariant::Submit
+        } else {
+            ButtonVariant::Ghost
+        })
+        .on_press(|s: &mut S| s.library_mut().shuffle_now())
+        .build(&KIT)
+        .key("sort-shuffle"),
+    )
+    .child(
+        text(match library.dir {
+            SortDir::Ascending => "Ascending",
+            SortDir::Descending => "Descending",
+        })
+        .key("sort-dir")
+        .font(type_::MONO_CAPTION)
+        .color(t.text_secondary)
+        .on_press(|s: &mut S| s.flip_dir()),
+    )
+}
+
 fn filter_bar<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
@@ -1209,6 +1332,7 @@ fn filter_bar<S: Host>(s: &S) -> El {
         .child(mode_tab::<S>("Archived", CardMode::Archived, library.mode))
         .child(mode_tab::<S>("Trash", CardMode::Trash, library.mode))
         .child(search)
+        .child(sort_controls::<S>(s))
         .child(
             text(
                 match (library.visible.len(), library.snapshot.cards.len()) {
