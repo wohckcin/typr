@@ -564,6 +564,15 @@ impl Db {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    /// Which card kind the row records: `text` for markdown, `diagram` for a picture.
+    fn kind_of(&self, card: Id) -> Result<String, StoreError> {
+        Ok(self.conn.query_row(
+            "SELECT kind FROM card WHERE id = ?1",
+            params![card],
+            |row| row.get(0),
+        )?)
+    }
+
     /// Whether the card is a diagram, and what it hides, in one read.
     fn shape_of(&self, card: Id) -> Result<Shape, StoreError> {
         let markdown: String = self.conn.query_row(
@@ -605,7 +614,16 @@ impl Db {
         // to appear in the claim set below: a key the shape does not claim is retired by this very
         // call, which would leave the reverse row unanswerable from the moment it was written.
         // Nothing here reads a reverse setting, so toggling reverse never writes a prompt.
-        let keys = shape.claimed_keys();
+        // A diagram card is asked about its groups instead, so its keys come from the mask table and
+        // the text shape it carries (which is empty) adds nothing.
+        let mut keys = shape.claimed_keys();
+        if self.kind_of(card)? == "diagram" {
+            keys.extend(
+                self.mask_groups(card)?
+                    .into_iter()
+                    .map(|group| format!("mask:{group}")),
+            );
+        }
         for key in &keys {
             self.conn.execute(
                 "INSERT INTO prompt (card_id, key, phase, due_at, interval_ms, reps, lapses)

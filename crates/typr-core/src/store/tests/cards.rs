@@ -938,3 +938,72 @@ fn merging_two_rectangles_leaves_one_group() {
         "{outside:?}"
     );
 }
+
+#[test]
+fn a_diagram_card_gets_one_prompt_per_group() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let id = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: String::new(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a diagram: {other:?}"),
+    };
+    assert!(
+        db.prompt_keys(id).expect("keys").is_empty(),
+        "a diagram without rectangles asks nothing"
+    );
+
+    let left = MaskRect::new(0.1, 0.1, 0.2, 0.2);
+    let right = MaskRect::new(0.6, 0.1, 0.2, 0.2);
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 1,
+            rect: left,
+        },
+        0,
+    )
+    .expect("group one");
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 2,
+            rect: right,
+        },
+        0,
+    )
+    .expect("group two");
+    assert_eq!(
+        db.prompt_keys(id).expect("keys"),
+        vec!["mask:1".to_string(), "mask:2".to_string()],
+        "one prompt per group, and no text prompt because the card holds no text"
+    );
+
+    db.apply(
+        &Command::RemoveMask {
+            card: id,
+            rect: right,
+        },
+        0,
+    )
+    .expect("remove");
+    let retired: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT retired FROM prompt WHERE card_id = ?1 AND key = 'mask:2'",
+            [id],
+            |row| row.get(0),
+        )
+        .expect("the retired row");
+    assert_eq!(retired, 1, "a group with no rectangles is retired");
+}
