@@ -39,4 +39,5 @@
 
 ## Workflow follow-up
 
-- Archive this change, then take the next item from the gap roadmap (reverse reviews).
+- Archive this change.
+- Next roadmap row: `review-reverse`.
