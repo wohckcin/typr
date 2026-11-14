@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
-use super::{Library, ROW_HEIGHT_PX, view};
-use typr_core::store::CardMode;
+use super::{Library, ROW_HEIGHT_PX, deck_tree, view};
+use typr_core::store::{CardMode, Deck};
 
 #[test]
 fn a_long_library_builds_only_the_rows_on_screen() {
@@ -91,4 +91,57 @@ fn a_tag_filter_and_a_deck_filter_compose() {
     library.selected_deck = None;
     library.refresh();
     assert!(library.visible.is_empty(), "nothing is trashed");
+}
+
+fn named(id: i64, parent: Option<i64>, name: &str) -> Deck {
+    Deck {
+        id,
+        parent,
+        name: name.to_string(),
+        archived: false,
+    }
+}
+
+#[test]
+fn a_deck_is_drawn_under_the_deck_that_owns_it() {
+    // Deliberately out of order, the way a snapshot returns them after a move.
+    let decks = vec![
+        named(3, Some(1), "Cell biology"),
+        named(1, None, "Biology"),
+        named(4, Some(3), "Mitosis"),
+        named(2, None, "Chemistry"),
+    ];
+    let drawn: Vec<(&str, usize)> = deck_tree(&decks)
+        .into_iter()
+        .map(|(deck, depth)| (deck.name.as_str(), depth))
+        .collect();
+    assert_eq!(
+        drawn,
+        vec![
+            ("Biology", 0),
+            ("Cell biology", 1),
+            ("Mitosis", 2),
+            ("Chemistry", 0),
+        ]
+    );
+}
+
+#[test]
+fn a_deck_whose_parent_is_gone_is_drawn_on_its_own() {
+    let decks = vec![named(7, Some(404), "Orphan")];
+    let drawn: Vec<(&str, usize)> = deck_tree(&decks)
+        .into_iter()
+        .map(|(deck, depth)| (deck.name.as_str(), depth))
+        .collect();
+    assert_eq!(drawn, vec![("Orphan", 0)]);
+}
+
+#[test]
+fn a_loop_of_decks_is_still_drawn_once() {
+    let decks = vec![named(1, Some(2), "One"), named(2, Some(1), "Two")];
+    let drawn: Vec<(&str, usize)> = deck_tree(&decks)
+        .into_iter()
+        .map(|(deck, depth)| (deck.name.as_str(), depth))
+        .collect();
+    assert_eq!(drawn, vec![("One", 0), ("Two", 1)]);
 }

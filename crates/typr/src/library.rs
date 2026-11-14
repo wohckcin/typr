@@ -1,6 +1,7 @@
 //! The library screen: decks and tags on the left, a virtualised card list on the right.
 
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -261,6 +262,36 @@ impl Library {
         library
     }
 
+    /// A library whose decks are nested three deep, so a scene can show the indentation.
+    pub fn seeded_nested() -> Library {
+        let mut library = Library::seeded(2);
+        {
+            let snapshot = Arc::make_mut(&mut library.snapshot);
+            snapshot.decks = vec![
+                Deck {
+                    id: 1,
+                    parent: None,
+                    name: "Biology".to_string(),
+                    archived: false,
+                },
+                Deck {
+                    id: 2,
+                    parent: Some(1),
+                    name: "Cell biology".to_string(),
+                    archived: false,
+                },
+                Deck {
+                    id: 3,
+                    parent: Some(2),
+                    name: "Mitosis".to_string(),
+                    archived: false,
+                },
+            ];
+        }
+        library.refresh();
+        library
+    }
+
     /// A library holding active, archived and trashed cards, so the views have something to show.
     pub fn seeded_mixed() -> Library {
         let mut library = Library::seeded(6);
@@ -312,14 +343,58 @@ fn empty_trash_button<S: Host>() -> El {
         .key("empty-trash")
 }
 
-fn deck_row<S: Host>(deck: &Deck, selected: bool, renaming: bool, moving: bool) -> El {
+/// Decks in the order the sidebar draws them: every deck owns the rows below it, and each
+/// level is indented. A deck whose parent is missing counts as a root, and a cycle has no root
+/// at all, so the leftovers are appended rather than hidden.
+pub(crate) fn deck_tree(decks: &[Deck]) -> Vec<(&Deck, usize)> {
+    let known: HashSet<Id> = decks.iter().map(|deck| deck.id).collect();
+    let mut ordered = Vec::with_capacity(decks.len());
+    let mut drawn = HashSet::with_capacity(decks.len());
+    for deck in decks {
+        if deck.parent.is_none_or(|parent| !known.contains(&parent)) {
+            push_branch(deck, 0, decks, &mut drawn, &mut ordered);
+        }
+    }
+    for deck in decks {
+        if !drawn.contains(&deck.id) {
+            push_branch(deck, 0, decks, &mut drawn, &mut ordered);
+        }
+    }
+    ordered
+}
+
+/// Appends one deck and then its children, depth first.
+fn push_branch<'a>(
+    deck: &'a Deck,
+    depth: usize,
+    decks: &'a [Deck],
+    drawn: &mut HashSet<Id>,
+    ordered: &mut Vec<(&'a Deck, usize)>,
+) {
+    if !drawn.insert(deck.id) {
+        return;
+    }
+    ordered.push((deck, depth));
+    for child in decks.iter().filter(|child| child.parent == Some(deck.id)) {
+        push_branch(child, depth + 1, decks, drawn, ordered);
+    }
+}
+
+fn deck_row<S: Host>(
+    deck: &Deck,
+    depth: usize,
+    selected: bool,
+    renaming: bool,
+    moving: bool,
+) -> El {
     let t = tok::theme(true);
     let id = deck.id;
+    let inset = 10.0 + depth as f32 * 12.0;
     if renaming {
         return row()
             .key(format!("deck-{}", deck.id))
             .h(30.0)
-            .px(10.0)
+            .px(inset)
             .center_y()
             .fill(t.control_off)
             .child(
@@ -337,7 +412,7 @@ fn deck_row<S: Host>(deck: &Deck, selected: bool, renaming: bool, moving: bool) 
     row()
         .key(format!("deck-{}", deck.id))
         .h(30.0)
-        .px(10.0)
+        .px(inset)
         .radius(6.0)
         .center_y()
         .fill(if moving {
@@ -407,9 +482,10 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         });
     sidebar = sidebar.child(all);
     let renaming = library.renaming;
-    for deck in &library.snapshot.decks {
+    for (deck, depth) in deck_tree(&library.snapshot.decks) {
         sidebar = sidebar.child(deck_row::<S>(
             deck,
+            depth,
             library.selected_deck == Some(deck.id),
             renaming == Some(deck.id),
             library.moving.is_some() || library.moving_card.is_some(),
@@ -427,7 +503,12 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
             .child(
                 Button::new("Rename")
                     .variant(ButtonVariant::Ghost)
-                    .on_press(|s: &mut S| s.begin_rename())
+                    // The field only exists once `renaming` is set, and `Tx::focus` resolves the
+                    // key once the change that set it is on screen, so the rename can be typed
+                    // straight after the press without reaching for the mouse.
+                    .on_press_tx(|s: &mut S, tx: &mut rune::Tx| {
+                        s.begin_rename();
+                    })
                     .build(&KIT)
                     .key("rename-deck"),
             )

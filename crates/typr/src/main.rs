@@ -744,6 +744,10 @@ fn main() {
         ("library-empty", |state: &mut State| {
             state.screen = Screen::Library;
         }),
+        ("library-nested", |state: &mut State| {
+            state.library = Library::seeded_nested();
+            state.seeded = true;
+        }),
         ("library-archived", |state: &mut State| {
             state.library = Library::seeded_mixed();
             state.library.set_mode(CardMode::Archived);
