@@ -334,7 +334,8 @@ fn saving_a_new_card_stores_it_and_adopts_its_id() {
         ..State::default()
     };
     state.editor = Editor::new(None, "front\n---\nback".to_string());
-    assert!(state.persist(), "the card is stored");
+    // No deck yet: this call stores the deck, and the card follows its answer.
+    assert!(!state.persist(), "the card waits for its deck");
 
     // The store answers on its own thread; drain until the card's id arrives.
     for _ in 0..200 {
@@ -1499,6 +1500,46 @@ fn a_save_the_library_refuses_leaves_the_card_dirty() {
         "the card still holds work the library never took"
     );
     assert!(state.failure.is_some(), "and the reader is told why");
+}
+
+#[test]
+fn a_card_that_still_needs_a_deck_is_not_reported_saved() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(
+        typr_core::store::Db::open(&path).expect("open"),
+        Box::new(typr_core::clock::SystemClock),
+        waker,
+    )
+    .expect("spawn");
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    state.editor = Editor::new(None, "front\n---\nback".to_string());
+
+    // A library with no deck yet stores the deck first, so the card is not saved by this call.
+    assert!(
+        !state.persist(),
+        "the card cannot be stored before its deck"
+    );
+    assert!(
+        state.pending_new_card.is_some(),
+        "the text waits for the deck"
+    );
+
+    // Once the deck and the card land, the same buffer is saved.
+    for _ in 0..200 {
+        let mut wake = None;
+        frame_step(&mut state, 0, &mut wake);
+        if state.editor.card.is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(state.editor.card.is_some(), "the card was stored");
+    assert!(!state.editor.dirty(), "the stored buffer is saved");
 }
 
 #[test]

@@ -192,16 +192,18 @@ fn overdue_days(now_ms: i64, due_at_ms: i64, offset_ms: i64) -> i64 {
     (day::study_day(now_ms, offset_ms) - day::study_day(due_at_ms, offset_ms)).max(0)
 }
 
-/// Remember the id of a command that went out, answering whether it did.
-fn remember_sent(
+/// Remember the id of a command that went out, answering whether it did, and say why when it did
+/// not.
+fn remember(
     in_flight: &mut HashMap<u64, (&'static str, Instant)>,
+    name: &'static str,
     request: &mut Option<u64>,
     failure: &mut Option<String>,
     sent: Result<u64, StoreError>,
 ) -> bool {
     match sent {
         Ok(id) => {
-            in_flight.insert(id, ("create_card", Instant::now()));
+            in_flight.insert(id, (name, Instant::now()));
             *request = Some(id);
             true
         }
@@ -209,26 +211,6 @@ fn remember_sent(
             log::warn!(target: "typr", "{}", logging::describe(&error));
             *failure = Some(error.to_string());
             false
-        }
-    }
-}
-
-/// Remember the id of a command that went out, and say why when one could not.
-fn remember(
-    in_flight: &mut HashMap<u64, (&'static str, Instant)>,
-    name: &'static str,
-    request: &mut Option<u64>,
-    failure: &mut Option<String>,
-    sent: Result<u64, StoreError>,
-) {
-    match sent {
-        Ok(id) => {
-            in_flight.insert(id, (name, Instant::now()));
-            *request = Some(id);
-        }
-        Err(error) => {
-            log::warn!(target: "typr", "{}", logging::describe(&error));
-            *failure = Some(error.to_string());
         }
     }
 }
@@ -539,8 +521,8 @@ impl State {
         let tags = self.editor.tag_list();
         let stored = match (self.editor.card, &self.store) {
             (Some(card), Some(store)) => {
-                // A card that exists takes its sides and its tags in one go, so a refused write
-                // leaves neither half applied.
+                // Two commands, so a refused tag write leaves the sides saved; the card stays
+                // dirty, which is what tells the reader the tags did not land.
                 let sent = store
                     .save_card(card, &text)
                     .and_then(|_| store.set_tags(card, &tags));
@@ -563,8 +545,9 @@ impl State {
                 match self.deck_for_new_card() {
                     Some(deck) => {
                         let sent = store.create_card(deck, &text);
-                        remember_sent(
+                        remember(
                             &mut self.sent,
+                            "create_card",
                             &mut self.card_request,
                             &mut self.failure,
                             sent,
@@ -580,7 +563,9 @@ impl State {
                             self.pending_tags.clear();
                             false
                         } else {
-                            true
+                            // The card itself is still to come, so the buffer is not saved yet:
+                            // reporting it saved would lose the text if the app quit now.
+                            false
                         }
                     }
                 }
@@ -768,6 +753,11 @@ impl State {
                 Ok(Outcome::Card(id)) if self.card_request == Some(event.id) => {
                     self.card_request = None;
                     self.editor.card = Some(id);
+                    // The card exists now, so the buffer is saved if it still holds what was sent.
+                    if self.pending_new_card.as_deref() == Some(self.editor.buffer.text.as_str()) {
+                        self.editor.save();
+                    }
+                    self.pending_new_card = None;
                     let tags = std::mem::take(&mut self.pending_tags);
                     if !tags.is_empty() {
                         let sent = match &self.store {
@@ -787,8 +777,7 @@ impl State {
                     }
                 }
                 Ok(Outcome::Deck(id)) => {
-                    if let Some(text) = self.pending_new_card.take()
-                        && let Some(store) = &self.store
+                    if let (Some(text), Some(store)) = (self.pending_new_card.clone(), &self.store)
                     {
                         let sent = store.create_card(id, &text);
                         remember(
