@@ -118,6 +118,8 @@ pub struct Editor {
     pub fields: Vec<FieldRow>,
     /// The field values as stored, so a change to one counts as unsaved.
     pub saved_fields: Vec<(String, String)>,
+    /// The deck this card sits in, so the note can tell an inherited template from its own.
+    pub deck: Option<Id>,
     /// The name of the deck this card sits in, which `<<Deck>>` renders.
     pub deck_name: Option<String>,
     /// The card's text as the template renders it, kept up to date as fields are typed into.
@@ -208,9 +210,30 @@ impl Editor {
             template_from: None,
             fields: Vec::new(),
             saved_fields: Vec::new(),
+            deck: None,
             deck_name: None,
             rendered: String::new(),
         }
+    }
+
+    /// Start an unsaved card in a deck that carries a template.
+    ///
+    /// The field table is there before the card is, so what is typed can be held until the store
+    /// hands back an id.
+    pub fn start(&mut self, template: &str, deck: Id, deck_name: Option<&str>) {
+        self.template = Some(template.to_string());
+        self.template_from = Some(deck);
+        self.deck = Some(deck);
+        self.deck_name = deck_name.map(str::to_string);
+        self.fields = template::placeholders(template)
+            .into_iter()
+            .map(|name| FieldRow {
+                name,
+                value: TextEdit::default(),
+            })
+            .collect();
+        self.saved_fields = self.field_pairs();
+        self.refresh();
     }
 
     /// Take everything a card summary holds that this screen shows.
@@ -220,6 +243,7 @@ impl Editor {
     pub fn load(&mut self, card: &CardSummary, deck_name: Option<&str>) {
         self.template = card.template.clone();
         self.template_from = card.template_from;
+        self.deck = Some(card.deck);
         self.deck_name = deck_name.map(str::to_string);
         // The table is the template's field list first, in the order the template asks for them,
         // so a card that has never been filled still has somewhere to type. A stored field the
@@ -694,6 +718,15 @@ fn source_pane<S: Host>(s: &S) -> El {
 fn field_pane<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let editor = s.editor();
+    // A card can carry its own template or borrow one, and which one is in force is what the
+    // user needs to know before wondering why a field changed text they were looking at.
+    let note = match editor.template_from {
+        None => "This card's own template supplies its text. Fill the fields.",
+        Some(from) if Some(from) == editor.deck => {
+            "This card's text comes from its deck's template. Fill the fields."
+        }
+        Some(_) => "This card's text comes from a deck above this one. Fill the fields.",
+    };
     let mut rows = col().key("field-table").w_full().gap(6.0);
     for (index, field) in editor.fields.iter().enumerate() {
         rows = rows.child(
@@ -727,7 +760,7 @@ fn field_pane<S: Host>(s: &S) -> El {
         .gap(10.0)
         .padding(16.0)
         .child(
-            text("The template supplies this card's text. Fill the fields.")
+            text(note)
                 .key("template-note")
                 .font(type_::LABEL)
                 .color(t.text_secondary),

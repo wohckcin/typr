@@ -396,6 +396,34 @@ mod tests {
 }
 
 #[cfg(test)]
+mod card_tests {
+    use super::render_card;
+
+    /// `<<Name>>` is the card's first side, and the first side is read from the text rendered
+    /// without it — one extra pass, never a loop, so a template that uses `<<Name>>` still has
+    /// one answer.
+    #[test]
+    fn a_name_in_the_first_side_is_read_from_the_card_without_it() {
+        let fields = [("Word".to_string(), "gato".to_string())];
+        assert_eq!(
+            render_card("<<Word>> (<<Name>>)\n---\n<<Meaning>>", &fields, None),
+            "gato (gato ())\n---\n",
+            "the name is the first side of the card as it reads without it"
+        );
+    }
+
+    #[test]
+    fn a_name_below_the_first_side_is_that_side() {
+        let fields = [("Word".to_string(), "gato".to_string())];
+        assert_eq!(
+            render_card("<<Word>>\n---\n<<Name>>, and it means cat", &fields, None),
+            "gato\n---\ngato, and it means cat",
+            "a name that does not change the first side is simply filled"
+        );
+    }
+}
+
+#[cfg(test)]
 mod placeholder_tests {
     use super::placeholders;
 

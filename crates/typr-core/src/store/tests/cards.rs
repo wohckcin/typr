@@ -1535,3 +1535,132 @@ fn clearing_a_template_leaves_the_cards_readable() {
     assert_eq!(summary(&db, own).markdown, "perro!\n---\nA dog");
     assert_eq!(summary(&db, own).sides, 2);
 }
+
+#[test]
+fn renaming_a_deck_rerenders_its_cards() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    deck_template(
+        &mut db,
+        deck,
+        Some("<<Word>>\n---\n<<Meaning>> (from <<Deck>>)"),
+    );
+    let id = card(&mut db, deck, "hand typed");
+    fields(&mut db, id, &[("Word", "gato"), ("Meaning", "cat")]);
+
+    db.apply(
+        &Command::RenameDeck {
+            id: deck,
+            name: "Español".to_string(),
+        },
+        0,
+    )
+    .expect("rename");
+
+    assert_eq!(
+        summary(&db, id).markdown,
+        "gato\n---\ncat (from Español)",
+        "the deck name a card renders with is its own, so a rename rewrites its text"
+    );
+    assert!(
+        summary(&db, id).search_text.contains("espanol"),
+        "search follows the text that changed"
+    );
+}
+
+#[test]
+fn a_templated_card_cannot_take_a_raw_markdown_edit() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    deck_template(&mut db, deck, Some("<<Word>>\n---\n<<Meaning>>"));
+    let id = card(&mut db, deck, "hand typed");
+    fields(&mut db, id, &[("Word", "gato"), ("Meaning", "cat")]);
+    let rendered = summary(&db, id).markdown;
+
+    let refused = db.apply(
+        &Command::SaveCard {
+            id,
+            markdown: "something else\n---\nentirely".to_string(),
+        },
+        0,
+    );
+
+    assert!(
+        matches!(
+            refused,
+            Err(StoreError::NotEmpty {
+                card,
+                holds: "a template"
+            }) if card == id
+        ),
+        "a hand-written text would be overwritten by the next field edit: {refused:?}"
+    );
+    assert_eq!(summary(&db, id).markdown, rendered, "the text is untouched");
+}
+
+#[test]
+fn a_diagram_in_a_templated_deck_keeps_its_own_text() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let id = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: "The heart".to_string(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a diagram: {other:?}"),
+    };
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 1,
+            rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
+        },
+        0,
+    )
+    .expect("mask");
+
+    // The template reaches every card under the deck, and a diagram is asked from its picture.
+    deck_template(&mut db, deck, Some("<<Word>>\n---\n<<Meaning>>"));
+
+    assert_eq!(
+        db.prompt_keys(id).expect("keys"),
+        vec!["mask:1".to_string()],
+        "no text prompt is queued by a template the card never shows"
+    );
+    assert_eq!(
+        summary(&db, id).kind,
+        CardKind::Diagram,
+        "the card is still a diagram"
+    );
+}
+
+#[test]
+fn a_card_created_in_a_templated_deck_is_rendered() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    deck_template(&mut db, deck, Some("<<Word>>\n---\n<<Meaning>>"));
+
+    let id = card(&mut db, deck, "typed while the deck already had a template");
+
+    assert_eq!(
+        summary(&db, id).markdown,
+        "\n---\n",
+        "the fields are empty, so the template renders empty"
+    );
+    assert_eq!(
+        summary(&db, id).sides,
+        0,
+        "with no fields filled the card has nothing to say yet, so it is a note"
+    );
+}

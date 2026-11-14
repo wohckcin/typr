@@ -111,6 +111,8 @@ struct State {
     pending_new_card: Option<String>,
     /// A new diagram waiting for the card that has to be created for it.
     pending_new_diagram: Option<(String, String)>,
+    /// Fields typed before their card existed, stored once it does.
+    pending_fields: Vec<(String, String)>,
     /// The rectangles drawn before the card existed. They are sent once the card has an id,
     /// because a rectangle has nothing to hang on until then.
     pending_masks: Vec<(u32, MaskRect)>,
@@ -148,6 +150,7 @@ impl Default for State {
             seed: 1,
             pending_new_card: None,
             pending_new_diagram: None,
+            pending_fields: Vec::new(),
             pending_masks: Vec::new(),
             deck_request: None,
             sent: HashMap::new(),
@@ -393,6 +396,20 @@ impl library::Host for State {
 
     fn new_card(&mut self) {
         self.editor = Editor::new(None, String::new());
+        // A deck that carries a template types its new cards through fields, so the table is
+        // there before the card is and the text is rendered rather than hand-written.
+        if let Some(deck) = self.deck_for_new_card()
+            && let Some(found) = self
+                .library
+                .snapshot()
+                .decks
+                .iter()
+                .find(|own| own.id == deck)
+                .cloned()
+            && let Some(template) = found.template
+        {
+            self.editor.start(&template, deck, Some(&found.name));
+        }
         self.last_draft.clear();
         self.pending_tags.clear();
         self.screen = Screen::Editor;
@@ -703,23 +720,62 @@ impl State {
         }
 
         // A templated card's text is not typed: its fields are stored, and the store renders the
-        // text from them. Only a stored card can be templated, since a new one starts plain.
-        if self.editor.templated()
-            && let (Some(card), Some(store)) = (self.editor.card, &self.store)
-        {
+        // text from them. A card that does not exist yet keeps its fields until it does.
+        if self.editor.templated() {
             let fields = self.editor.field_pairs();
-            let sent = store
-                .set_fields(card, &fields)
-                .and_then(|_| store.set_tags(card, &tags));
-            if let Err(error) = &sent {
-                self.fail(error);
-                return false;
+            match (self.editor.card, &self.store) {
+                (Some(card), Some(store)) => {
+                    let sent = store
+                        .set_fields(card, &fields)
+                        .and_then(|_| store.set_tags(card, &tags));
+                    if let Err(error) = &sent {
+                        self.fail(error);
+                        return false;
+                    }
+                    if let Err(error) = store.set_draft(card, None) {
+                        self.fail(&error);
+                    }
+                    self.last_draft.clear();
+                    return self.editor.save();
+                }
+                (None, Some(store)) => {
+                    if self.card_request.is_some() {
+                        self.say("The card is still being saved.".to_string());
+                        return false;
+                    }
+                    self.pending_fields = fields;
+                    self.pending_tags = tags;
+                    self.pending_new_card = Some(self.editor.text().to_string());
+                    match self.deck_for_new_card() {
+                        Some(deck) => {
+                            let sent = store.create_card(deck, self.editor.text());
+                            if !remember(
+                                &mut self.sent,
+                                "create_card",
+                                &mut self.card_request,
+                                &mut self.failure,
+                                sent,
+                            ) {
+                                self.pending_fields.clear();
+                                self.pending_tags.clear();
+                                self.pending_new_card = None;
+                                return false;
+                            }
+                        }
+                        None => {
+                            self.say("A card needs a deck to live in.".to_string());
+                            self.pending_fields.clear();
+                            return false;
+                        }
+                    }
+                    // The card is still to come, so the fields are not stored yet.
+                    return false;
+                }
+                (_, None) => {
+                    self.say("The library is not open, so nothing was saved.".to_string());
+                    return false;
+                }
             }
-            if let Err(error) = store.set_draft(card, None) {
-                self.fail(&error);
-            }
-            self.last_draft.clear();
-            return self.editor.save();
         }
 
         let stored = match (self.editor.card, &self.store) {
@@ -962,6 +1018,21 @@ impl State {
                     // answers with the same card either way, so this only sets what a text card
                     // needs to become a diagram.
                     self.pending_new_diagram = None;
+                    // Fields typed before the card existed are stored now that it does, which
+                    // renders its text from them.
+                    let fields = std::mem::take(&mut self.pending_fields);
+                    if !fields.is_empty() {
+                        let sent = match &self.store {
+                            Some(store) => store.set_fields(id, &fields),
+                            None => Err(StoreError::Closed),
+                        };
+                        match sent {
+                            Ok(_) => {
+                                self.editor.save();
+                            }
+                            Err(error) => self.fail(&error),
+                        }
+                    }
                     // Rectangles drawn before the card existed are stored now that it does.
                     for (group, rect) in std::mem::take(&mut self.pending_masks) {
                         let sent = match &self.store {

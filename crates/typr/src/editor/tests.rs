@@ -704,3 +704,40 @@ fn a_card_under_a_template_does_not_offer_a_raw_markdown_pane() {
         "and a note says why"
     );
 }
+
+#[test]
+fn the_note_says_which_deck_the_template_came_from() {
+    let inherited = render(templated_editor());
+    let elements = inherited.elements();
+    let note = elements
+        .iter()
+        .find(|element| element.key.as_deref() == Some("template-note"))
+        .map(|element| element.text.clone().unwrap_or_default())
+        .expect("the note");
+    assert!(
+        note.contains("its deck's template"),
+        "a card borrowing its deck's template says so: {note}"
+    );
+    drop(elements);
+
+    let mut own = Editor::new(Some(7), String::new());
+    let summary = typr_core::store::CardSummary {
+        id: 7,
+        deck: 2,
+        template: Some("<<Word>>\n---\n<<Meaning>>".to_string()),
+        template_from: None,
+        ..typr_core::store::CardSummary::default()
+    };
+    own.load(&summary, Some("Spanish"));
+    let mine = render(own);
+    let elements = mine.elements();
+    let note = elements
+        .iter()
+        .find(|element| element.key.as_deref() == Some("template-note"))
+        .map(|element| element.text.clone().unwrap_or_default())
+        .expect("the note");
+    assert!(
+        note.contains("own template"),
+        "a card carrying its own template says so: {note}"
+    );
+}

@@ -151,6 +151,11 @@ impl Db {
                     params![id, name],
                     name,
                 )?;
+                // `<<Deck>>` is the card's own deck name, so every card under this one says
+                // something different now.
+                for card in self.subtree_cards(*id)? {
+                    self.rerender(card, now_ms)?;
+                }
                 Ok(Outcome::Changed(changed))
             }
             Command::ArchiveDeck { id, archived } => {
@@ -170,6 +175,9 @@ impl Db {
                 )?;
                 let id = self.conn.last_insert_rowid();
                 self.sync_prompts(id, &shape)?;
+                // A card created straight into a templated deck says what its template says, not
+                // what the caller typed; without fields it renders empty, which is the truth.
+                self.rerender(id, now_ms)?;
                 self.conn.execute(
                     "DELETE FROM editor_draft WHERE card_id IN (0, ?1)",
                     params![id],
@@ -287,6 +295,14 @@ impl Db {
                     return Err(StoreError::NotEmpty {
                         card: *id,
                         holds: "a picture",
+                    });
+                }
+                // A templated card's text is rendered from its fields, so a hand-written one would
+                // survive only until the next field edit overwrote it.
+                if self.template_of(*id)?.is_some() {
+                    return Err(StoreError::NotEmpty {
+                        card: *id,
+                        holds: "a template",
                     });
                 }
                 let shape = hidden::shape(markdown);
@@ -750,6 +766,11 @@ impl Db {
     /// string. A card with no template in force is left alone — the text it holds is its own, which
     /// is what makes clearing a template leave the cards readable.
     fn rerender(&self, card: Id, now_ms: i64) -> Result<(), StoreError> {
+        // A diagram is asked from its rectangles, and its text is not what a template is for;
+        // writing rendered text over it would queue text prompts it never shows.
+        if self.kind_of(card)? == "diagram" {
+            return Ok(());
+        }
         let Some((template, _from)) = self.template_of(card)? else {
             return Ok(());
         };

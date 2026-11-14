@@ -541,3 +541,100 @@ fn a_field_typed_into_a_templated_card_is_stored_and_rendered() {
         0
     );
 }
+
+#[test]
+fn a_new_card_in_a_templated_deck_is_typed_through_fields() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let db = typr_core::store::Db::open(&path).expect("open");
+    let deck = match db
+        .apply(
+            &typr_core::store::Command::CreateDeck {
+                parent: None,
+                name: "Spanish".to_string(),
+            },
+            0,
+        )
+        .expect("deck")
+    {
+        typr_core::store::Outcome::Deck(id) => id,
+        other => panic!("creating a deck: {other:?}"),
+    };
+    db.apply(
+        &typr_core::store::Command::SetDeckTemplate {
+            deck,
+            template: Some("<<Word>>\n---\n<<Meaning>>".to_string()),
+        },
+        0,
+    )
+    .expect("template");
+
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(db, Box::new(typr_core::clock::SystemClock), waker).expect("spawn");
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    let snapshot = state.store.as_ref().expect("store").snapshot();
+    state.library.set_snapshot(snapshot);
+    state.library.selected_deck = Some(deck);
+
+    // The deck already carries a template, so the new card is templated from the first keystroke.
+    state.new_card();
+    assert!(
+        state.editor.templated(),
+        "a new card under a templated deck types through fields"
+    );
+    assert_eq!(
+        state
+            .editor
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Word", "Meaning"],
+        "the table lists the fields the template asks for"
+    );
+
+    state.editor.fields[0]
+        .value
+        .replace_text("gato".to_string());
+    state.editor.fields[1].value.replace_text("cat".to_string());
+    state.editor.refresh();
+    // The card does not exist yet, so the answer is "not stored yet", as for a typed card.
+    assert!(!state.persist(), "the card is still being created");
+    // Two writes follow the create — the fields and then the tags — so the wait is on the text
+    // the store ends up holding, not on the editor's flag.
+    let mut rendered = String::new();
+    for _ in 0..200 {
+        state.drain();
+        let snapshot = state.library.snapshot();
+        rendered = snapshot
+            .cards
+            .iter()
+            .find(|card| card.deck == deck)
+            .map(|card| card.markdown.clone())
+            .unwrap_or_default();
+        if rendered == "gato\n---\ncat" {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(rendered, "gato\n---\ncat", "the store rendered the fields");
+    assert!(!state.editor.dirty(), "the card is saved");
+
+    let snapshot = state.library.snapshot();
+    let stored = snapshot
+        .cards
+        .iter()
+        .find(|card| card.deck == deck)
+        .cloned()
+        .expect("the card was created");
+    assert_eq!(stored.markdown, "gato\n---\ncat", "the store rendered it");
+    assert_eq!(
+        state.editor.card,
+        Some(stored.id),
+        "the editor adopted the id the store handed back"
+    );
+    assert!(!state.editor.dirty(), "the card is saved");
+}
