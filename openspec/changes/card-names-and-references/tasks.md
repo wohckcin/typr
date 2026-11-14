@@ -5,7 +5,7 @@ that shows names.
 
 ## 1. Names
 
-- [ ] 1.1 New `crates/typr-core/src/name.rs`: `pub fn for_card(first_side: &str, template: Option<&str>, fields: &Fields<'_>) -> String` truncating at 120 characters on a word boundary, plus `pub fn unique(name: &str, taken: &[&str]) -> String` adding " (2)".
+- [x] 1.1 New `crates/typr-core/src/name.rs`: `pub fn for_card(first_side: &str, template: Option<&str>, fields: &Fields<'_>) -> String` truncating at 120 characters on a word boundary, plus `pub fn unique(name: &str, taken: &[&str]) -> String` adding " (2)".
   - **Verification**: `cargo test -p typr-core --lib name` covers first-side naming, template naming, a template that renders empty (falling back to the first side), truncation, and the suffix.
 - [ ] 1.2 Migration V9: `card.name TEXT NOT NULL DEFAULT ''` with `CREATE INDEX card_name ON card(name COLLATE NOCASE)`, backfilled for existing cards from their first side, and `card.name_template TEXT`.
   - **Verification**: `every_card_that_existed_gains_a_name` rewinds a real file, reopens, and finds no empty names; `a_stored_name_follows_an_edit` saves a changed first side and sees the name change.

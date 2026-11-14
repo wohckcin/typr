@@ -4,6 +4,7 @@ pub mod clock;
 pub mod day;
 pub mod hidden;
 pub mod keymap;
+pub mod name;
 pub mod schedule;
 pub mod screen;
 pub mod session;
