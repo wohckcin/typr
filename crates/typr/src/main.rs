@@ -21,8 +21,8 @@ use typr_core::keymap::{Command, Surface};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{
-    CardKind, CardMode, CardSummary, Grade, Handle, Id, MaskRect, MaskRow, Outcome, Store,
-    StoreError, WorkerStatus,
+    CardKind, CardMode, CardSummary, Grade, Handle, Id, MaskRect, MaskRow, Outcome, SavedView,
+    Sort, SortDir, Store, StoreError, ViewSpec, WorkerStatus,
 };
 use typr_core::{day, hidden};
 
@@ -1524,6 +1524,42 @@ fn main() {
         }),
         ("library-nested", |state: &mut State| {
             state.library = Library::seeded_nested();
+            state.seeded = true;
+        }),
+        ("library-views", |state: &mut State| {
+            state.library = Library::seeded_nested();
+            state.library.seed_views(vec![
+                SavedView {
+                    id: 1,
+                    name: "Exam week".to_string(),
+                    spec: ViewSpec {
+                        pinned_only: true,
+                        sort: Sort::FirstSide,
+                        dir: SortDir::Ascending,
+                        ..ViewSpec::default()
+                    },
+                },
+                SavedView {
+                    id: 2,
+                    name: "Verbs".to_string(),
+                    spec: ViewSpec {
+                        query: "verb".to_string(),
+                        sort: Sort::Reviews,
+                        ..ViewSpec::default()
+                    },
+                },
+                SavedView {
+                    id: 3,
+                    name: "Archived".to_string(),
+                    spec: ViewSpec {
+                        mode: CardMode::Archived,
+                        sort: Sort::Created,
+                        ..ViewSpec::default()
+                    },
+                },
+            ]);
+            state.library.pin(2);
+            state.library.select_view(1);
             state.seeded = true;
         }),
         ("library-archived", |state: &mut State| {

@@ -121,6 +121,32 @@ reverse off neither deletes nor resets the reverse prompt's records — it stops
 turning it back on resumes where it left off. The new-card limit counts prompts, so a card asked
 both ways takes two of the day's slots.
 
+## Views
+
+A view is a list you keep: a deck's subtree, a search, a tag, a card mode and an order, saved under
+a name in the sidebar's `Views` section.
+
+Press `New view`, type a name, and the list you are looking at becomes the view. Selecting a view
+applies every part of it at once — it clears any deck you had selected and takes over the search
+field, the tag filter, the `Active`/`Archived`/`Trash` tabs and the order. `Rename` and `Delete` sit
+on the row; deleting the view you are looking at returns to the whole library.
+
+Five orders are offered above the grid: `Last edited` (newest first), `Created`, `First side`
+(alphabetical), `Due date` (earliest first, unscheduled cards last) and `Reviews` (most reviewed
+first). The arrow beside them flips the direction. Changing the order while a view is selected
+rewrites that view's order and nothing else — a search you typed is not saved with it. `Shuffle`
+deals the list in a random order for this run only; leaving the view or picking an order restores it.
+
+A card's star in the tile's footer pins it, and `☆ Pinned only` under the views lists pinned cards
+alone. Pinning is a property of the card, not of the view, so it survives the trash and every view
+you open; the pinned-only filter is part of a view and is remembered in it.
+
+A filter typed while a view is selected is not an edit of the view: only the order and the
+pinned-only flag are written back.
+
+A view remembers its deck by id. If that deck is deleted, the view says so on its row and shows the
+whole library rather than nothing.
+
 ## Keyboard
 
 Every binding lives in one table, `typr_core::keymap::TABLE`, and the app draws its hints from
