@@ -1265,3 +1265,75 @@ fn interval_of(db: &Db, card: Id, key: &str) -> i64 {
         )
         .expect("the prompt")
 }
+
+#[test]
+fn a_retention_of_one_hundred_and_fifty_percent_is_refused() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    match db.apply(&Command::SetRetention { percent: 150 }, NOON) {
+        Err(StoreError::Setting { key, value }) => {
+            assert_eq!(key, "retention");
+            assert_eq!(value, "150");
+        }
+        other => panic!("a target of 150% should be refused, got {other:?}"),
+    }
+    assert_eq!(
+        db.settings().expect("settings").retention,
+        crate::store::Settings::DEFAULT_RETENTION,
+        "and the refusal must leave the old target alone"
+    );
+}
+
+#[test]
+fn an_unknown_scheduler_is_refused() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    match db.apply(
+        &Command::SetSetting {
+            key: "scheduler".to_string(),
+            value: "annealing".to_string(),
+        },
+        NOON,
+    ) {
+        Err(StoreError::Setting { key, value }) => {
+            assert_eq!(key, "scheduler");
+            assert_eq!(value, "annealing");
+        }
+        other => panic!("an unknown scheduler should be refused, got {other:?}"),
+    }
+    assert!(
+        db.settings().is_ok(),
+        "the library must still open, so nothing was written"
+    );
+}
+
+#[test]
+fn the_scheduler_is_chosen_by_name_and_the_weights_in_one_go() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    db.apply(
+        &Command::SetScheduler {
+            kind: crate::store::SchedulerKind::Fsrs,
+        },
+        NOON,
+    )
+    .expect("choosing FSRS");
+    db.apply(&Command::SetRetention { percent: 85 }, NOON)
+        .expect("a target of 85%");
+    let tuned: Vec<f64> = crate::fsrs::DEFAULT_WEIGHTS
+        .iter()
+        .map(|weight| weight * 2.0)
+        .collect();
+    db.apply(
+        &Command::SetWeights {
+            weights: tuned.clone(),
+        },
+        NOON,
+    )
+    .expect("an optimiser's list");
+
+    let settings = db.settings().expect("settings");
+    assert_eq!(settings.scheduler, crate::store::SchedulerKind::Fsrs);
+    assert_eq!(settings.retention, 85);
+    assert_eq!(settings.weights, tuned, "the list round-trips as text");
+}

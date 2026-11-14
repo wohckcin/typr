@@ -654,6 +654,19 @@ pub enum Command {
         key: String,
         value: String,
     },
+    /// Which scheduler answers a grade. The string form of the setting exists too, because a
+    /// library file can arrive with any text in it; this is what the UI calls.
+    SetScheduler {
+        kind: SchedulerKind,
+    },
+    /// The percentage of recall FSRS aims at.
+    SetRetention {
+        percent: u32,
+    },
+    /// The whole weight list, as an optimiser would write it.
+    SetWeights {
+        weights: Vec<f64>,
+    },
     /// `None` takes the card back to inheriting its deck.
     SetCardReverse {
         card: Id,
@@ -968,6 +981,9 @@ pub trait Store: Send + Sync {
     /// cards only, and neither a due date nor the new-card allowance in the way.
     fn cards_for_view(&self, spec: &ViewSpec) -> Result<u64, StoreError>;
     fn set_setting(&self, key: &str, value: &str) -> Result<u64, StoreError>;
+    fn set_scheduler(&self, kind: SchedulerKind) -> Result<u64, StoreError>;
+    fn set_retention(&self, percent: u32) -> Result<u64, StoreError>;
+    fn set_weights(&self, weights: &[f64]) -> Result<u64, StoreError>;
     fn set_card_reverse(&self, card: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
     fn set_deck_reverse(&self, deck: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
     fn create_diagram(&self, deck: Id, image: &str, caption: &str) -> Result<u64, StoreError>;

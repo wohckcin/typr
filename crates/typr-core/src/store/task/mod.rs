@@ -15,7 +15,8 @@ use std::thread::JoinHandle;
 use crate::clock::Clock;
 
 use super::{
-    Command, Db, Event, Grade, Id, MaskRect, Outcome, Snapshot, Store, StoreError, ViewSpec,
+    Command, Db, Event, Grade, Id, MaskRect, Outcome, SchedulerKind, Snapshot, Store, StoreError,
+    ViewSpec,
 };
 
 /// What the worker calls once its answer is published and readable.
@@ -281,6 +282,20 @@ impl Store for Handle {
         self.submit(Command::SetSetting {
             key: key.to_string(),
             value: value.to_string(),
+        })
+    }
+
+    fn set_scheduler(&self, kind: SchedulerKind) -> Result<u64, StoreError> {
+        self.submit(Command::SetScheduler { kind })
+    }
+
+    fn set_retention(&self, percent: u32) -> Result<u64, StoreError> {
+        self.submit(Command::SetRetention { percent })
+    }
+
+    fn set_weights(&self, weights: &[f64]) -> Result<u64, StoreError> {
+        self.submit(Command::SetWeights {
+            weights: weights.to_vec(),
         })
     }
 

@@ -398,29 +398,13 @@ impl Db {
                 }
             },
             Command::Draft { card } => Ok(Outcome::Draft(self.draft(*card)?)),
-            Command::SetSetting { key, value } => {
-                let known = match key.as_str() {
-                    "new_per_day" => value.parse::<u32>().is_ok(),
-                    // The two levels that override it are columns, not settings; this one is the
-                    // value every card without an override inherits.
-                    "reverse_default" => matches!(value.as_str(), "0" | "1"),
-                    // An optimiser's output is accepted whole or refused whole: a half-parsed list
-                    // would leave a schedule nobody can explain.
-                    "fsrs_weights" => crate::fsrs::weights(value).is_ok(),
-                    _ => true,
-                };
-                if !known {
-                    return Err(StoreError::Setting {
-                        key: key.clone(),
-                        value: value.clone(),
-                    });
-                }
-                self.conn.execute(
-                    "INSERT INTO settings (key, value) VALUES (?1, ?2)
-                     ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-                    params![key, value],
-                )?;
-                Ok(Outcome::Ok)
+            Command::SetSetting { key, value } => self.write_setting(key, value),
+            Command::SetScheduler { kind } => self.write_setting("scheduler", kind.as_str()),
+            Command::SetRetention { percent } => {
+                self.write_setting("retention", &percent.to_string())
+            }
+            Command::SetWeights { weights } => {
+                self.write_setting("fsrs_weights", &crate::fsrs::weight_text(weights))
             }
             Command::SetCardReverse { card, reverse } => {
                 // NULL is "inherit", so the nearest deck's value applies again.
@@ -1588,6 +1572,37 @@ impl Db {
             |row| row.get(0),
         )?;
         Ok(count_of(count))
+    }
+
+    /// Write one setting, refusing a value the reader would later refuse.
+    ///
+    /// The refusal happens before the write, so a library never holds a value that would make the
+    /// next snapshot fail: both the typed commands and the string form come through here.
+    fn write_setting(&self, key: &str, value: &str) -> Result<Outcome, StoreError> {
+        let known = match key {
+            "new_per_day" => value.parse::<u32>().is_ok(),
+            // The two levels that override it are columns, not settings; this one is the value
+            // every card without an override inherits.
+            "reverse_default" => matches!(value, "0" | "1"),
+            "scheduler" => SchedulerKind::parse(value).is_some(),
+            "retention" => matches!(value.parse::<u32>(), Ok(1..=100)),
+            // An optimiser's output is accepted whole or refused whole: a half-parsed list would
+            // leave a schedule nobody can explain.
+            "fsrs_weights" => crate::fsrs::weights(value).is_ok(),
+            _ => true,
+        };
+        if !known {
+            return Err(StoreError::Setting {
+                key: key.to_string(),
+                value: value.to_string(),
+            });
+        }
+        self.conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(Outcome::Ok)
     }
 
     /// The scheduler the library asked for, rebuilt from its settings on every grade so a settings
