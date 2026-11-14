@@ -11,3 +11,4 @@ pub mod shuffle;
 pub mod sides;
 pub mod store;
 pub mod template;
+pub mod transfer;

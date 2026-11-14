@@ -670,6 +670,24 @@ pub enum StoreError {
     /// The worker thread is gone, so nothing was sent and no answer will come.
     #[error("a mask on card {card} does not sit inside its image")]
     MaskOutsideImage { card: Id },
+    /// An export target that is already a file: refusing rather than overwriting is what keeps an
+    /// old export from disappearing because a dialog defaulted to the same name.
+    #[error("the file {path} already exists, so it was not overwritten")]
+    Exists { path: std::path::PathBuf },
+    /// A file the transfer had to write, named so the reader can act on it.
+    #[error("the file {path} could not be written: {source}")]
+    Write {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    /// `VACUUM INTO` failed: the reason is SQLite's, the path is the target's.
+    #[error("the export to {path} failed: {source}")]
+    Export {
+        path: std::path::PathBuf,
+        #[source]
+        source: rusqlite::Error,
+    },
     #[error("the library is closed")]
     Closed,
     /// The background library work panicked. The connection is suspect, so nothing restarts it.

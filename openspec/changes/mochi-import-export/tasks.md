@@ -4,7 +4,7 @@ Depends on `card-templates` (fields), `diagram-cards` (masks) and `cloze-deletio
 
 ## 1. Library export
 
-- [ ] 1.1 `transfer::export_library(db_path, target) -> Result<(), StoreError>` using `VACUUM INTO`, refusing an existing target and reporting a write failure with its path.
+- [x] 1.1 `transfer::export_library(db_path, target) -> Result<(), StoreError>` using `VACUUM INTO`, refusing an existing target and reporting a write failure with its path.
   - **Verification**: `the_export_reopens_with_every_record` exports a fixture library, opens the export with `Db::open`, and compares decks, cards, prompts and record counts; `exporting_leaves_the_library_untouched` compares modification time and `schema_facts()`.
 
 ## 2. Mochi import
