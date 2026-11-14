@@ -428,6 +428,14 @@ impl library::Host for State {
         self.track("rename_deck", sent);
     }
 
+    fn set_deck_template(&mut self, deck: Id, template: Option<&str>) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.set_deck_template(deck, template),
+            None => Err(StoreError::Closed),
+        };
+        self.track("set_deck_template", sent);
+    }
+
     fn move_deck(&mut self, deck: Id, parent: Option<Id>) {
         let sent = match self.store.as_ref() {
             Some(store) => store.move_deck(deck, parent),

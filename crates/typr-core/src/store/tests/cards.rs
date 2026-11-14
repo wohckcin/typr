@@ -1496,3 +1496,42 @@ fn search_reaches_a_field_the_template_does_not_use() {
         .collect();
     assert_eq!(found, vec![id], "a value search reaches the value alone");
 }
+
+#[test]
+fn clearing_a_template_leaves_the_cards_readable() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let inherited = card(&mut db, deck, "");
+    let own = card(&mut db, deck, "");
+    fields(&mut db, inherited, &[("Word", "gato")]);
+    fields(&mut db, own, &[("Word", "perro")]);
+    card_template(&mut db, own, Some("<<Word>>!\n---\nA dog"));
+
+    deck_template(&mut db, deck, Some("<<Word>>\n---\nAn animal"));
+    assert_eq!(summary(&db, inherited).markdown, "gato\n---\nAn animal");
+    assert_eq!(summary(&db, own).markdown, "perro!\n---\nA dog");
+
+    // The deck's template goes: both cards keep the text they already say, and their prompts with
+    // it, because there is nothing left to rewrite them with.
+    deck_template(&mut db, deck, None);
+    assert_eq!(summary(&db, inherited).template, None);
+    assert_eq!(
+        summary(&db, own).template.as_deref(),
+        Some("<<Word>>!\n---\nA dog"),
+        "the card's own template is not the deck's to clear"
+    );
+    for id in [inherited, own] {
+        let listed = summary(&db, id);
+        assert_eq!(listed.sides, 2, "card {id} still has its two sides");
+        assert_eq!(listed.prompts, 1, "card {id} still queues");
+        assert_eq!(listed.fields.len(), 1, "card {id} keeps its values");
+    }
+    assert_eq!(summary(&db, inherited).markdown, "gato\n---\nAn animal");
+    assert_eq!(summary(&db, own).markdown, "perro!\n---\nA dog");
+
+    // The card's own template goes the same way.
+    card_template(&mut db, own, None);
+    assert_eq!(summary(&db, own).markdown, "perro!\n---\nA dog");
+    assert_eq!(summary(&db, own).sides, 2);
+}

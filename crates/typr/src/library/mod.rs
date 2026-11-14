@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rune::tok::{self, type_};
 use rune::{El, GrowthSpec, ScrollSpec, TextEdit, col, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, Dialog, Kit, root};
+use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root};
 
 use typr_core::keymap::{Command, Surface};
 
@@ -119,6 +119,33 @@ pub trait Host: 'static {
     /// Rename a deck. A host with no store cannot, and says so by doing nothing.
     fn rename_deck(&mut self, _deck: Id, _name: &str) {}
 
+    /// Set or clear a deck's template. A host with no store cannot.
+    fn set_deck_template(&mut self, _deck: Id, _template: Option<&str>) {}
+
+    /// Close the template field and send it. False when no deck's template was being edited.
+    fn finish_template(&mut self) -> bool {
+        match self.library_mut().take_template() {
+            Some((deck, template)) => {
+                self.set_deck_template(deck, template.as_deref());
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Clear a deck's template, sending nothing typed in the field.
+    fn clear_deck_template(&mut self, deck: Id) {
+        self.library_mut().close_template();
+        self.set_deck_template(deck, None);
+    }
+
+    /// Open the template field on the selected deck.
+    fn begin_template(&mut self) {
+        if let Some(deck) = self.library().selected_deck {
+            self.library_mut().start_template(deck);
+        }
+    }
+
     /// Move a deck under another, or to the top of the list when `parent` is `None`.
     fn move_deck(&mut self, _deck: Id, _parent: Option<Id>) {}
 
@@ -185,6 +212,10 @@ pub struct Library {
     pub renaming: Option<Id>,
     /// The name being typed, kept apart from the deck so a cancel costs nothing.
     pub rename_buffer: TextEdit,
+    /// The deck whose template is being edited, if any.
+    pub templating: Option<Id>,
+    /// The template being typed, kept apart from the deck so a cancel costs nothing.
+    pub template_buffer: TextEdit,
     /// The deck waiting for a destination, while the sidebar offers itself as one.
     pub moving: Option<Id>,
     /// The deck waiting for an answer to "archive this?", when it holds cards.
@@ -211,6 +242,8 @@ impl Default for Library {
             confirming_empty: false,
             renaming: None,
             rename_buffer: TextEdit::default(),
+            templating: None,
+            template_buffer: TextEdit::default(),
             moving: None,
             confirming_archive: None,
             moving_card: None,
@@ -279,6 +312,39 @@ impl Library {
     pub fn take_rename(&mut self) -> Option<(Id, String)> {
         let deck = self.renaming?;
         Some((deck, self.rename_buffer.text.clone()))
+    }
+
+    /// Open the template field on a deck, filled with what that deck sets.
+    pub fn start_template(&mut self, deck: Id) {
+        if let Some(found) = self.snapshot.decks.iter().find(|own| own.id == deck) {
+            self.template_buffer
+                .replace_text(found.template.clone().unwrap_or_default());
+            self.templating = Some(deck);
+        }
+    }
+
+    /// The template being typed, for the input that shows it.
+    pub fn template_text(&self) -> &TextEdit {
+        &self.template_buffer
+    }
+
+    /// The template field, for the input that edits it.
+    pub fn template_field(&mut self) -> &mut TextEdit {
+        &mut self.template_buffer
+    }
+
+    /// Finish the edit, handing back the deck and what was typed: an emptied field is `None`, so a
+    /// cleared template is a template cleared rather than a template of nothing.
+    pub fn take_template(&mut self) -> Option<(Id, Option<String>)> {
+        let deck = self.templating?;
+        self.templating = None;
+        let text = self.template_buffer.text.trim().to_string();
+        Some((deck, (!text.is_empty()).then_some(text)))
+    }
+
+    /// Close the template field without sending anything.
+    pub fn close_template(&mut self) {
+        self.templating = None;
     }
 
     /// Show another slice of the library: active cards, the archive, or the trash.
@@ -678,9 +744,116 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
                     .build(&KIT)
                     .key("move-deck"),
             )
-            .child(deck_reverse::<S>(s));
+            .child(deck_reverse::<S>(s))
+            .child(
+                Button::new("Template")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press_tx(|s: &mut S, tx: &mut rune::Tx| {
+                        s.begin_template();
+                        tx.focus("template-field", true);
+                    })
+                    .build(&KIT)
+                    .key("edit-template"),
+            );
+        if let Some(deck) = library.templating {
+            sidebar = sidebar.child(template_panel::<S>(s, deck));
+        }
     }
     sidebar
+}
+
+/// A deck's template, with a preview of one of the cards it would render.
+fn template_panel<S: Host>(s: &S, deck: Id) -> El {
+    let library = s.library();
+    let t = tok::theme(true);
+    let Some(found) = library.snapshot().decks.iter().find(|own| own.id == deck) else {
+        return col().key("template-panel");
+    };
+    // One card of the deck, rendered as the template in the field would render it, so the author
+    // sees the effect before saving.
+    let preview = library
+        .snapshot()
+        .cards
+        .iter()
+        .find(|card| card.deck == deck)
+        .map(|card| {
+            typr_core::template::render_card(
+                &library.template_text().text,
+                &card.fields,
+                Some(&found.name),
+            )
+        });
+    col()
+        .key("template-panel")
+        .w_full()
+        .gap(6.0)
+        .padding(6.0)
+        .radius(6.0)
+        .fill(t.control_off)
+        .child(
+            text("Deck template")
+                .key("template-title")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
+        .child(
+            text_input(library.template_text(), type_::MONO_CAPTION.lh(18.0))
+                .key("template-field")
+                .w_full()
+                .h(96.0)
+                .placeholder(
+                    "<<Front>>\n---\n<<Back>>, one separator for the deck",
+                    t.text_secondary,
+                )
+                .on_edit(|s: &mut S| s.library_mut().template_field())
+                .on_submit(|s: &mut S, _| {
+                    s.finish_template();
+                }),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(6.0)
+                .child(
+                    Button::new("Save")
+                        .variant(ButtonVariant::Submit)
+                        .on_press(|s: &mut S| {
+                            s.finish_template();
+                        })
+                        .build(&KIT)
+                        .key("template-save"),
+                )
+                .child(
+                    Button::new("Clear")
+                        .variant(ButtonVariant::Ghost)
+                        .on_press(move |s: &mut S| s.clear_deck_template(deck))
+                        .build(&KIT)
+                        .key("template-clear"),
+                )
+                .child(
+                    Button::new("Close")
+                        .variant(ButtonVariant::Ghost)
+                        .on_press(|s: &mut S| s.library_mut().close_template())
+                        .build(&KIT)
+                        .key("template-close"),
+                ),
+        )
+        .child(match preview {
+            Some(shown) => col()
+                .key("template-preview")
+                .w_full()
+                .padding(6.0)
+                .radius(4.0)
+                .fill(t.card)
+                .child(
+                    Markdown::new(crate::editor::preview_body(&shown))
+                        .render(&MarkdownStyle::neutral(true)),
+                ),
+            None => text("No cards in this deck yet.")
+                .key("template-preview-empty")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        })
 }
 
 /// The deck's three-state reverse setting: on, off, or whatever its parent says.

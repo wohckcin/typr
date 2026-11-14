@@ -20,7 +20,7 @@ Depends on `cloze-deletions` for the second sigil's meaning and on nothing else.
 
 - [x] 3.1 A card whose deck (or own setting) has a template shows a field table beside the rendered preview, and the markdown pane becomes read-only with a note saying the template supplies it.
   - **Verification**: `the_field_table_renders_the_card_live` types into a field and finds the value in the preview; `a_card_under_a_template_does_not_offer_a_raw_markdown_pane`.
-- [ ] 3.2 A deck's template is edited from the sidebar, with a preview of one of its cards.
+- [x] 3.2 A deck's template is edited from the sidebar, with a preview of one of its cards.
   - **Verification**: `a_deck_template_is_edited_and_its_cards_follow` saves a template and finds the cards' rendered text changed after a refresh.
 - [ ] 3.3 Clearing a deck template or a card's own template leaves every card readable.
   - **Verification**: `clearing_a_template_leaves_the_cards_readable`.

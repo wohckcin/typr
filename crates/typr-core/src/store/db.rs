@@ -10,8 +10,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::hidden::{self, Shape};
 use crate::schedule::{FixedMultiplier, PromptState, Scheduler};
-use crate::sides;
-use crate::template::{self, Context, Fields};
+use crate::template;
 
 use super::{
     CardKind, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow, NewPrompt,
@@ -755,32 +754,8 @@ impl Db {
             return Ok(());
         };
         let pairs = self.fields_of(card)?;
-        let deck = self.deck_name_of(card)?.unwrap_or_default();
-        let fields = Fields::new(&pairs);
-        // `<<Name>>` is the card's first side, and a first side can be computed, so the name comes
-        // from a render with nothing computed in it. One extra pass, and no chase after a fixed
-        // point: a template whose first side reads `<<Name>>` renders it empty, as any other
-        // unfilled field.
-        let without_name = template::render(
-            &template,
-            &fields,
-            &Context {
-                name: None,
-                deck: Some(&deck),
-            },
-        );
-        let name = sides::split(&without_name)
-            .first()
-            .map(|side| side.trim())
-            .unwrap_or_default();
-        let text = template::render(
-            &template,
-            &fields,
-            &Context {
-                name: Some(name),
-                deck: Some(&deck),
-            },
-        );
+        let deck = self.deck_name_of(card)?;
+        let text = template::render_card(&template, &pairs, deck.as_deref());
         let shape = hidden::shape(&text);
         // A value the template does not use is still part of what the card says, so search has to
         // reach it.

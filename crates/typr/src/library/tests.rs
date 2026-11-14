@@ -341,3 +341,56 @@ fn an_empty_deck_offers_a_tile_to_fill() {
         "the placeholder is as tall as a tile, got {rect:?}"
     );
 }
+
+#[test]
+fn the_sidebar_edits_a_deck_template_with_a_preview() {
+    let mut library = Library::seeded_nested();
+    library.select_deck(Some(1));
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (960.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+
+    let (x, y) = runtime.find("edit-template").expect("the template button");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+
+    assert_eq!(runtime.state.templating, Some(1), "the field is open");
+    assert!(runtime.find("template-field").is_some());
+    assert!(runtime.find("template-save").is_some());
+    assert!(runtime.find("template-clear").is_some());
+
+    for letter in ["<", "<", "W", "o", "r", "d", ">", ">"] {
+        runtime.key(rune::KeyEvent {
+            key: rune::Key::Text(letter.to_string()),
+            mods: rune::Mods::default(),
+        });
+        runtime.frame(0.1);
+    }
+    assert_eq!(runtime.state.template_text().text, "<<Word>>");
+    assert!(
+        runtime.find("template-preview").is_some(),
+        "one of the deck's cards is rendered beside the field"
+    );
+}
+
+#[test]
+fn an_emptied_template_field_clears_the_deck() {
+    let mut library = Library::seeded_nested();
+    let mut deck = library.snapshot().decks[0].clone();
+    deck.template = Some("<<Word>>".to_string());
+    std::sync::Arc::make_mut(&mut library.snapshot).decks[0] = deck;
+
+    library.start_template(1);
+    library.template_field().replace_text("   ".to_string());
+    assert_eq!(
+        library.take_template(),
+        Some((1, None)),
+        "whitespace is a cleared template, not a template of nothing"
+    );
+    assert_eq!(library.templating, None, "taking it closes the field");
+}

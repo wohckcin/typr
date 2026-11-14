@@ -1240,3 +1240,104 @@ fn the_editor_says_a_card_inherits_its_reverse_setting() {
         "the header names the state: {drawn:?}"
     );
 }
+
+#[test]
+fn a_deck_template_is_edited_and_its_cards_follow() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let db = typr_core::store::Db::open(&path).expect("open");
+    let deck = match db
+        .apply(
+            &typr_core::store::Command::CreateDeck {
+                parent: None,
+                name: "Spanish".to_string(),
+            },
+            0,
+        )
+        .expect("deck")
+    {
+        typr_core::store::Outcome::Deck(id) => id,
+        other => panic!("creating a deck: {other:?}"),
+    };
+    let card = match db
+        .apply(
+            &typr_core::store::Command::CreateCard {
+                deck,
+                markdown: "typed by hand".to_string(),
+            },
+            0,
+        )
+        .expect("card")
+    {
+        typr_core::store::Outcome::Card(id) => id,
+        other => panic!("creating a card: {other:?}"),
+    };
+    db.apply(
+        &typr_core::store::Command::SetFields {
+            card,
+            fields: vec![("Word".to_string(), "gato".to_string())],
+        },
+        0,
+    )
+    .expect("fields");
+
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(db, Box::new(typr_core::clock::SystemClock), waker).expect("spawn");
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    let snapshot = state.store.as_ref().expect("store").snapshot();
+    state.library.set_snapshot(snapshot);
+    state.library.select_deck(Some(deck));
+
+    LibraryHost::begin_template(&mut state);
+    assert_eq!(state.library.templating, Some(deck));
+    state
+        .library
+        .template_field()
+        .replace_text("<<Word>>\n---\n<<Meaning>>".to_string());
+    assert!(
+        LibraryHost::finish_template(&mut state),
+        "the template was sent"
+    );
+
+    for _ in 0..200 {
+        state.drain();
+        let texts: Vec<String> = state
+            .library
+            .snapshot()
+            .cards
+            .iter()
+            .map(|card| card.markdown.clone())
+            .collect();
+        if texts.iter().any(|text| text == "gato\n---\n") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let listed = state
+        .library
+        .snapshot()
+        .cards
+        .iter()
+        .find(|own| own.id == card)
+        .cloned()
+        .expect("the card");
+    assert_eq!(
+        listed.markdown, "gato\n---\n",
+        "the card follows the deck's template"
+    );
+    let stored_deck = state
+        .library
+        .snapshot()
+        .decks
+        .iter()
+        .find(|own| own.id == deck)
+        .cloned()
+        .expect("the deck");
+    assert_eq!(
+        stored_deck.template.as_deref(),
+        Some("<<Word>>\n---\n<<Meaning>>")
+    );
+}

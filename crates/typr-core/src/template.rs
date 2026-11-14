@@ -62,6 +62,28 @@ pub fn render(template: &str, fields: &Fields<'_>, context: &Context<'_>) -> Str
     out
 }
 
+/// Render a card from a template, its fields and its deck's name.
+///
+/// `<<Name>>` is the card's first side, and a first side can itself hold a field, so the name is
+/// read from a render with nothing computed in it. One extra pass, and no fixed-point chase: a
+/// template whose first side reads `<<Name>>` renders it empty, like any other unfilled field.
+pub fn render_card(template: &str, fields: &[(String, String)], deck: Option<&str>) -> String {
+    let fields = Fields::new(fields);
+    let without_name = render(template, &fields, &Context { name: None, deck });
+    let name = crate::sides::split(&without_name)
+        .first()
+        .map(|side| side.trim())
+        .unwrap_or_default();
+    render(
+        template,
+        &fields,
+        &Context {
+            name: Some(name),
+            deck,
+        },
+    )
+}
+
 /// The field names a template asks the user to fill, in the order they first appear.
 ///
 /// A computed name is left out: `Name` and `Deck` are rendered from the card, so a table that let
