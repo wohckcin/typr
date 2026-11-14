@@ -48,6 +48,8 @@ card's effective value is `COALESCE(c.reverse, deck_value, 0)`. The view gained 
 for "inherit", 0 for off and 1 for on, so the nearest explicit setting wins and inheritance needs no
 extra table.
 
+**Migration V5 recreates the studyable view from the one V4 leaves, not from the V3 text quoted above.** Three changes in this roadmap each recreate `studyable_prompt`, so each copies the body the previous migration applied and widens one predicate; restating it from an older baseline would silently drop `c.has_cloze`.
+
 **A reverse entry reverses `faces`, not the card.** `Session` builds `faces` from `sides` and, when
 `prompt` starts with `rev`, reverses the vector. Everything downstream (`revealed`, `read_only`, the
 grade gate, `reshuffle`) keeps working because it only counts faces.

@@ -26,10 +26,10 @@ hidden text. Each variant SHALL keep its own schedule and history.
 - **WHEN** a two-sided card is created
 - **THEN** exactly one prompt exists for it, and grading that card updates that prompt's state
 
-#### Scenario: A single-sided card has no prompt
+#### Scenario: A single-sided text card has no prompt
 
-- **WHEN** a card with one side is saved and holds no hidden text
-- **THEN** no prompt is created and the card never appears in a study queue
+- **WHEN** a text card with one side is saved and holds no hidden text
+- **THEN** no prompt is created and no queue of it selects the card
 
 #### Scenario: Two groups, two schedules
 

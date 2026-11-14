@@ -9,8 +9,8 @@
 
 ## 2. Store the shape
 
-- [ ] 2.1 Migration V4 in `crates/typr-core/src/store/schema.rs`: add `card.has_cloze INTEGER NOT NULL DEFAULT 0`, backfill it from `markdown` containing `{{`, and recreate `studyable_prompt` with `AND (c.sides >= 2 OR c.has_cloze = 1)`.
-  - **Verification**: `a_library_from_before_hidden_text_gains_the_column` opens a file rewound to `user_version = 3`, checks the column exists and the view reports the same rows; `opening_reports_what_the_schema_did` still counts the new step.
+- [ ] 2.1 Migration V4 in `crates/typr-core/src/store/schema.rs`: add `card.has_cloze INTEGER NOT NULL DEFAULT 0`, backfill it from `markdown` containing `{{`, and recreate `studyable_prompt` by copying the body migration V3 left, verbatim, and widening only its last predicate to `AND (c.sides >= 2 OR c.has_cloze = 1)`.
+  - **Verification**: `a_library_from_before_hidden_text_gains_the_column` opens a file rewound to `user_version = 3`, checks the column exists and the view reports the same rows; `opening_reports_what_the_schema_did` still counts the new step; `the_widened_view_still_hides_archived_and_trashed_cards` proves the archived, trashed and archived-ancestor clauses survive the recreation.
 - [ ] 2.2 Replace `sync_prompt(card, sides)` with `sync_prompts(card, shape)`: insert `fwd` for two or more sides, `cloze:<n>` per numbered group and `cloze:0` for unnumbered spans, never delete, and set `has_cloze`. Call it from `CreateCard` and `SaveCard`.
   - **Verification**: `a_hidden_text_card_gets_one_prompt_per_group` creates a card with two groups and sees `cloze:1`, `cloze:2`; `a_card_that_stops_hiding_text_keeps_its_history` edits the spans away and finds the prompts still present with their records, while the card leaves the queue.
 - [ ] 2.3 Keep the new prompt count honest in the queues: `new_prompts` and `due_prompts` already select from the view, so a one-face hidden-text card appears, and the cap still counts cards rather than prompts.

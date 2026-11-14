@@ -2,8 +2,8 @@
 
 ## 1. Schema and prompts
 
-- [ ] 1.1 Migration V5: add `deck.reverse INTEGER` and `card.reverse INTEGER` (NULL inherits), insert `reverse_default` into `settings` with value `0`, and recreate `studyable_prompt` with the `deck_reverse` recursive CTE and the `p.key <> 'rev'` filter.
-  - **Verification**: `a_library_from_before_reverse_gains_the_columns` rewinds a real file to `user_version = 4` and reopens it; `opening_reports_what_the_schema_did` counts the new step; `a_reverse_prompt_queues_only_where_reverse_is_on` covers card-on, deck-on, library-on and all-off.
+- [ ] 1.1 Migration V5: add `deck.reverse INTEGER` and `card.reverse INTEGER` (NULL inherits), insert `reverse_default` into `settings` with value `0`, and recreate `studyable_prompt` from the body migration V4 left, verbatim, adding the `deck_reverse` recursive CTE and the `p.key <> 'rev'` filter and keeping its `c.has_cloze` clause.
+  - **Verification**: `a_library_from_before_reverse_gains_the_columns` rewinds a real file to `user_version = 4` and reopens it; `opening_reports_what_the_schema_did` counts the new step; `a_reverse_prompt_queues_only_where_reverse_is_on` covers card-on, deck-on, library-on and all-off. `a_hidden_text_card_still_queues_after_the_reverse_migration` proves the clause this migration must not drop.
 - [ ] 1.2 `sync_prompt(card, sides)` inserts `rev` beside `fwd` for a card with two or more sides, still `ON CONFLICT DO NOTHING`.
   - **Verification**: `a_two_sided_card_holds_both_directions` sees keys `fwd` and `rev`; `a_note_holds_no_reverse_prompt` sees neither.
 - [ ] 1.3 Commands `SetCardReverse { card, reverse: Option<bool> }`, `SetDeckReverse { deck, reverse: Option<bool> }` and `SetSetting { key: "reverse_default", … }` write the three levels.
