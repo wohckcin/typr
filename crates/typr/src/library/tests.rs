@@ -145,3 +145,33 @@ fn a_loop_of_decks_is_still_drawn_once() {
         .collect();
     assert_eq!(drawn, vec![("One", 0), ("Two", 1)]);
 }
+
+#[test]
+fn the_rename_field_takes_what_is_typed_straight_after_the_press() {
+    let mut library = Library::seeded(1);
+    library.select_deck(Some(1));
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (960.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+
+    let (x, y) = runtime.find("rename-deck").expect("the rename button");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+    assert_eq!(
+        runtime.state.renaming,
+        Some(1),
+        "the press did not open the field"
+    );
+
+    runtime.paste("Zoology");
+    runtime.frame(0.1);
+    assert_eq!(
+        runtime.state.rename_buffer.text, "Zoology",
+        "typing after the press should replace the old name"
+    );
+}

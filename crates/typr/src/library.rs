@@ -182,7 +182,10 @@ impl Library {
     /// Open the name field on a deck, holding what the deck is called now.
     pub fn start_rename(&mut self, deck: Id) {
         if let Some(found) = self.snapshot.decks.iter().find(|own| own.id == deck) {
-            self.rename_buffer.replace_text(found.name.clone());
+            let name = found.name.clone();
+            self.rename_buffer.replace_text(name.clone());
+            // Selected, so typing replaces the name instead of appending to it.
+            self.rename_buffer.set_selection(0, name.len());
             self.renaming = Some(deck);
         }
     }
@@ -508,6 +511,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
                     // straight after the press without reaching for the mouse.
                     .on_press_tx(|s: &mut S, tx: &mut rune::Tx| {
                         s.begin_rename();
+                        tx.focus("deck-name", true);
                     })
                     .build(&KIT)
                     .key("rename-deck"),
