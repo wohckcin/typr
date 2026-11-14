@@ -46,7 +46,7 @@
 - [x] 4.9 Add the archived and trash views: a control that switches `Library::mode` between active, archived and trash, a restore action in each, and an empty-trash action behind a confirmation dialog, with a headless scene per view
 
   **Verification**: a scripted run archives a card, switches to the archived view, restores it, and finds it active again; a second run trashes a card, switches to trash, empties it behind the dialog, and asserts the card and its `review_log` rows are gone; a scene per mode snaps non-blank
-- [ ] 4.10 Add deck actions to the sidebar: create, rename, archive and reparent, using the store commands that already exist, with the deck name editable in place and the archive action behind a confirmation when the deck holds cards
+- [x] 4.10 Add deck actions to the sidebar: create, rename, archive and reparent, using the store commands that already exist, with the deck name editable in place and the archive action behind a confirmation when the deck holds cards
 
   **Verification**: a scripted run renames a deck, moves it under another, and archives it, then asserts the sidebar shows the new name, the new parent, and the deck's cards absent from both queues; a duplicate name under one parent is refused and shown as a failure
 - [ ] 4.11 Add tag editing to the editor: a control that sets a card's tags through `Command::SetTags`, showing the tags the card holds and refusing duplicates that differ only by case

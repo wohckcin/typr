@@ -810,3 +810,85 @@ fn decks_are_created_renamed_and_moved_from_the_sidebar() {
         state.failure
     );
 }
+
+#[test]
+fn archiving_a_deck_that_holds_cards_asks_first() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    let deck = state.library.cards()[0].deck;
+    assert_eq!(state.library.cards().len(), 1, "the deck holds one card");
+
+    // A deck with cards asks before it archives them.
+    library::Host::request_archive_deck(&mut state, deck);
+    assert_eq!(
+        state.library.confirming_archive,
+        Some(deck),
+        "the question waits for an answer"
+    );
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "and nothing has been archived yet"
+    );
+
+    let mut preview = State {
+        library: Library::seeded_mixed(),
+        ..State::default()
+    };
+    preview.library.confirming_archive = Some(1);
+    let mut runtime = rune::Runtime::new(preview, view, (900.0, 600.0), rune::Env::new(true, 1.0));
+    runtime.frame(0.0);
+    assert!(
+        runtime.find("confirm-archive-deck").is_some(),
+        "the question offers to go ahead"
+    );
+    assert!(
+        runtime.find("cancel-archive-deck").is_some(),
+        "and a way to refuse it"
+    );
+    drop(runtime);
+
+    library::Host::archive_deck(&mut state, deck);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        state.library.cards().is_empty(),
+        "archiving takes the cards with it"
+    );
+
+    // A deck that holds nothing archives without a question.
+    library::Host::new_deck(&mut state);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.snapshot().decks.len() == 2 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let empty = state
+        .library
+        .snapshot()
+        .decks
+        .iter()
+        .map(|deck| deck.id)
+        .find(|id| *id != deck)
+        .expect("the new deck");
+    state.library.selected_deck = Some(empty);
+    state.library.confirming_archive = None;
+    library::Host::request_archive_deck(&mut state, empty);
+    assert_eq!(
+        state.library.confirming_archive, None,
+        "an empty deck archives without asking"
+    );
+}

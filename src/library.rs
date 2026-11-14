@@ -35,6 +35,15 @@ pub trait Host: 'static {
     /// Take a whole deck, and everything under it, out of the library.
     fn archive_deck(&mut self, _deck: Id) {}
 
+    /// Archive a deck, asking first when it would take cards with it.
+    fn request_archive_deck(&mut self, deck: Id) {
+        if self.library().holds_cards(deck) {
+            self.library_mut().confirming_archive = Some(deck);
+        } else {
+            self.archive_deck(deck);
+        }
+    }
+
     /// Move a card to the trash, where it waits until the user empties it.
     fn trash_card(&mut self, _card: Id) {}
 
@@ -106,6 +115,8 @@ pub struct Library {
     pub rename_buffer: TextEdit,
     /// The deck waiting for a destination, while the sidebar offers itself as one.
     pub moving: Option<Id>,
+    /// The deck waiting for an answer to "archive this?", when it holds cards.
+    pub confirming_archive: Option<Id>,
 }
 
 impl Default for Library {
@@ -123,6 +134,7 @@ impl Default for Library {
             renaming: None,
             rename_buffer: TextEdit::default(),
             moving: None,
+            confirming_archive: None,
         }
     }
 }
@@ -137,6 +149,15 @@ impl Library {
     /// The cards on screen, in the order they are drawn.
     pub fn cards(&self) -> &[CardSummary] {
         &self.visible
+    }
+
+    /// Whether archiving this deck would hide any card, which is what makes it worth asking about.
+    pub fn holds_cards(&self, deck: Id) -> bool {
+        let decks = self.snapshot.subtree(Some(deck));
+        self.snapshot
+            .cards
+            .iter()
+            .any(|card| !card.archived && card.trashed_at.is_none() && decks.contains(&card.deck))
     }
 
     /// Open the name field on a deck, holding what the deck is called now.
@@ -437,7 +458,7 @@ fn filter_bar<S: Host>(s: &S) -> El {
         bar = bar.child(
             Button::new("Archive deck")
                 .variant(ButtonVariant::Ghost)
-                .on_press(move |s: &mut S| s.archive_deck(deck))
+                .on_press(move |s: &mut S| s.request_archive_deck(deck))
                 .build(&KIT)
                 .key("archive-deck"),
         );
@@ -551,7 +572,44 @@ pub fn view<S: Host>(s: &S) -> El {
         );
     let mut layer = Vec::new();
     confirmation::<S>(s, &mut layer);
+    deck_confirmation::<S>(s, &mut layer);
     root(body, layer)
+}
+
+/// The question shown before a deck that holds cards would disappear with them.
+fn deck_confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
+    let deck = s.library().confirming_archive;
+    let buttons = row()
+        .key("archive-buttons")
+        .w_full()
+        .padding(16.0)
+        .gap(8.0)
+        .justify_end()
+        .child(
+            Button::new("Cancel")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| s.library_mut().confirming_archive = None)
+                .build(&KIT)
+                .key("cancel-archive-deck"),
+        )
+        .child(
+            Button::new("Archive deck")
+                .variant(ButtonVariant::Submit)
+                .on_press(|s: &mut S| {
+                    if let Some(deck) = s.library_mut().confirming_archive.take() {
+                        s.archive_deck(deck);
+                    }
+                })
+                .build(&KIT)
+                .key("confirm-archive-deck"),
+        );
+    Dialog::new("archive-deck", "Archive this deck?")
+        .description("Its cards leave the library, and their schedules stop coming up.")
+        .fit()
+        .open(deck.is_some())
+        .on_close(|s: &mut S| s.library_mut().confirming_archive = None)
+        .child(buttons)
+        .build(&KIT, layer);
 }
 
 /// The question shown before the trash is destroyed, because its history goes with it.
