@@ -1341,3 +1341,154 @@ fn a_deck_template_is_edited_and_its_cards_follow() {
         Some("<<Word>>\n---\n<<Meaning>>")
     );
 }
+
+#[test]
+fn a_view_is_selected_then_renamed_and_deleted() {
+    use typr_core::store::{CardMode, Sort, SortDir, ViewSpec};
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let db = typr_core::store::Db::open(&path).expect("open");
+    let deck = match db
+        .apply(
+            &typr_core::store::Command::CreateDeck {
+                parent: None,
+                name: "Spanish".to_string(),
+            },
+            0,
+        )
+        .expect("deck")
+    {
+        typr_core::store::Outcome::Deck(id) => id,
+        other => panic!("creating a deck: {other:?}"),
+    };
+    let mut cards = Vec::new();
+    for text in ["perro\n---\ndog", "gato\n---\ncat"] {
+        let id = match db
+            .apply(
+                &typr_core::store::Command::CreateCard {
+                    deck,
+                    markdown: text.to_string(),
+                },
+                0,
+            )
+            .expect("card")
+        {
+            typr_core::store::Outcome::Card(id) => id,
+            other => panic!("creating a card: {other:?}"),
+        };
+        cards.push(id);
+    }
+    // The pinned card is the one on the right: the view asks for pins alone, so only it is listed.
+    db.apply(
+        &typr_core::store::Command::SetPinned {
+            card: cards[1],
+            pinned: true,
+        },
+        0,
+    )
+    .expect("pin");
+    let view = match db
+        .apply(
+            &typr_core::store::Command::CreateView {
+                spec: ViewSpec {
+                    deck: Some(deck),
+                    query: String::new(),
+                    tags: Vec::new(),
+                    mode: CardMode::Active,
+                    pinned_only: true,
+                    sort: Sort::FirstSide,
+                    dir: SortDir::Ascending,
+                },
+                name: "Exam week".to_string(),
+            },
+            0,
+        )
+        .expect("view")
+    {
+        typr_core::store::Outcome::View(id) => id,
+        other => panic!("creating a view: {other:?}"),
+    };
+
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(db, Box::new(typr_core::clock::SystemClock), waker).expect("spawn");
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    let snapshot = state.store.as_ref().expect("store").snapshot();
+    state.library.set_snapshot(snapshot);
+    state.library.select_deck(Some(deck));
+
+    state.library.select_view(view);
+    assert_eq!(
+        state.library.selected_deck, None,
+        "the tree selection clears"
+    );
+    assert_eq!(
+        state.library.spec().deck,
+        Some(deck),
+        "the scope still filters"
+    );
+    assert!(
+        state.library.pinned_only,
+        "the pin filter is part of the view"
+    );
+    assert_eq!(state.library.sort, Sort::FirstSide, "and so is the order");
+    assert_eq!(
+        state
+            .library
+            .cards()
+            .iter()
+            .map(|card| card.id)
+            .collect::<Vec<_>>(),
+        vec![cards[1]],
+        "one pinned card, and the view's sort is what orders it"
+    );
+
+    state.library.begin_view_rename(view);
+    state
+        .library
+        .view_field()
+        .replace_text("Verb drills".to_string());
+    assert!(
+        LibraryHost::finish_view_rename(&mut state),
+        "the new name was sent"
+    );
+    for _ in 0..200 {
+        state.drain();
+        if state
+            .library
+            .views()
+            .iter()
+            .any(|own| own.name == "Verb drills")
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(
+        state.library.views()[0].name,
+        "Verb drills",
+        "the renamed view is the one the sidebar lists"
+    );
+
+    LibraryHost::delete_view(&mut state, view);
+    for _ in 0..200 {
+        state.drain();
+        if state.library.views().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(state.library.views().is_empty(), "the view is gone");
+    assert_eq!(
+        state.library.selected_view, None,
+        "and the list stops calling itself a view"
+    );
+    assert_eq!(
+        state.library.snapshot().cards.len(),
+        2,
+        "deleting a view kept every card it matched"
+    );
+}

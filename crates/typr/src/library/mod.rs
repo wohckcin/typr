@@ -11,7 +11,9 @@ use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root
 
 use typr_core::keymap::{Command, Surface};
 
-use typr_core::store::{CardMode, CardSummary, Deck, Id, Snapshot, Sort, SortDir, ViewSpec};
+use typr_core::store::{
+    CardMode, CardSummary, Deck, Id, SavedView, Snapshot, Sort, SortDir, ViewSpec,
+};
 
 /// Kept for the lifetime of the app: a Kit rebuilds its palette and type ramp.
 static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));
@@ -160,6 +162,34 @@ pub trait Host: 'static {
         }
     }
 
+    /// Close the view name field and save the current filter under it. False when no view was
+    /// being named.
+    fn finish_view_create(&mut self) -> bool {
+        match self.library_mut().take_view_create() {
+            Some(name) => {
+                self.create_view(&name);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Close the view name field and rename the view it was opened on.
+    fn finish_view_rename(&mut self) -> bool {
+        match self.library_mut().take_view_rename() {
+            Some((id, name)) => {
+                if name.trim().is_empty() {
+                    // A view with no name could not be told from another, so an emptied field
+                    // keeps the old name rather than sending a write the store would refuse.
+                    return false;
+                }
+                self.rename_view(id, &name);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Open the name field on the selected deck.
     fn begin_rename(&mut self) {
         if let Some(deck) = self.library().selected_deck {
@@ -179,6 +209,16 @@ pub trait Host: 'static {
 
     /// Destroy everything in the trash. A host with no store leaves it alone.
     fn empty_trash(&mut self) {}
+
+    /// Save the filter the list is showing under a name.
+    fn create_view(&mut self, _name: &str) {}
+
+    fn rename_view(&mut self, _id: Id, _name: &str) {}
+
+    fn delete_view(&mut self, _id: Id) {}
+
+    /// Whether a card is pinned.
+    fn set_pinned(&mut self, _card: Id, _pinned: bool) {}
 }
 
 impl Host for Library {
@@ -233,6 +273,16 @@ pub struct Library {
     pub menu: Option<Id>,
     /// The width the grid was last laid out at, so the column count follows the window.
     pub grid_width: f32,
+    /// The saved view the list is showing, if it is showing one.
+    pub selected_view: Option<Id>,
+    /// The deck scope in force: the tree's selection, or the one a view carries.
+    pub view_scope: Option<Id>,
+    /// The view whose name is being edited, if any.
+    pub naming_view: Option<Id>,
+    /// Whether a name is being typed for a view about to be saved.
+    pub new_view: bool,
+    /// The view name being typed, kept apart from the store so a cancel costs nothing.
+    pub view_buffer: TextEdit,
 }
 
 impl Default for Library {
@@ -260,6 +310,11 @@ impl Default for Library {
             moving_card: None,
             menu: None,
             grid_width: 0.0,
+            selected_view: None,
+            view_scope: None,
+            naming_view: None,
+            new_view: false,
+            view_buffer: TextEdit::default(),
         }
     }
 }
@@ -288,6 +343,9 @@ impl Library {
     /// Choose which deck the list shows, redrawing it for that deck.
     pub fn select_deck(&mut self, deck: Option<Id>) {
         self.selected_deck = deck;
+        self.view_scope = deck;
+        // A view is a filter, and choosing a deck is choosing another one.
+        self.selected_view = None;
         // A name field belongs to the deck it was opened on, so moving to another deck abandons
         // it: otherwise the only way out of the field is to rename the deck.
         if self.renaming != deck {
@@ -358,6 +416,92 @@ impl Library {
         self.templating = None;
     }
 
+    /// The views the user saved, by name.
+    pub fn views(&self) -> &[SavedView] {
+        &self.snapshot.views
+    }
+
+    /// Apply a saved view whole: its deck scope, search, tags, mode, pin filter and order.
+    ///
+    /// The deck tree's selection is cleared rather than set to the view's scope, because a view is
+    /// a filter over the library and not a place in it; the scope still filters the list.
+    pub fn select_view(&mut self, id: Id) {
+        let Some(view) = self
+            .snapshot
+            .views
+            .iter()
+            .find(|view| view.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        self.selected_view = Some(id);
+        self.selected_deck = None;
+        self.view_scope = view.spec.deck;
+        self.query.replace_text(view.spec.query.clone());
+        self.tag = view.spec.tags.first().cloned();
+        self.mode = view.spec.mode;
+        self.pinned_only = view.spec.pinned_only;
+        self.sort = view.spec.sort;
+        self.dir = view.spec.dir;
+        // A shuffle is a moment, not part of a view.
+        self.shuffle = None;
+        self.refresh();
+    }
+
+    /// Open the name field on a view, holding what it is called now.
+    pub fn begin_view_rename(&mut self, id: Id) {
+        if let Some(found) = self.snapshot.views.iter().find(|own| own.id == id) {
+            let name = found.name.clone();
+            self.view_buffer.replace_text(name.clone());
+            self.view_buffer.set_selection(0, name.len());
+            self.naming_view = Some(id);
+            self.new_view = false;
+        }
+    }
+
+    /// Open an empty name field for a view about to be saved from the current filter.
+    pub fn begin_view_create(&mut self) {
+        self.view_buffer.replace_text(String::new());
+        self.new_view = true;
+        self.naming_view = None;
+    }
+
+    /// The view name being typed, for the input that shows it.
+    pub fn view_text(&self) -> &TextEdit {
+        &self.view_buffer
+    }
+
+    /// The name field, for the input that edits it.
+    pub fn view_field(&mut self) -> &mut TextEdit {
+        &mut self.view_buffer
+    }
+
+    /// Finish a rename, handing back the view and what was typed. Taking it closes the field, so a
+    /// rename the store refuses does not leave it open behind the failure.
+    pub fn take_view_rename(&mut self) -> Option<(Id, String)> {
+        let id = self.naming_view?;
+        self.naming_view = None;
+        Some((id, self.view_buffer.text.clone()))
+    }
+
+    /// Finish a save, handing back the name; an empty one cancels, because a view with no name
+    /// could not be told from another.
+    pub fn take_view_create(&mut self) -> Option<String> {
+        if !self.new_view {
+            return None;
+        }
+        self.new_view = false;
+        let name = self.view_buffer.text.trim().to_string();
+        (!name.is_empty()).then_some(name)
+    }
+
+    /// Close either name field without sending anything.
+    pub fn close_view_name(&mut self) {
+        self.new_view = false;
+        self.naming_view = None;
+    }
+
     /// Show another slice of the library: active cards, the archive, or the trash.
     pub fn set_mode(&mut self, mode: CardMode) {
         if self.mode != mode {
@@ -386,7 +530,8 @@ impl Library {
     /// The filter the list is showing, built from what the controls and the selected view set.
     pub fn spec(&self) -> ViewSpec {
         ViewSpec {
-            deck: self.selected_deck,
+            // The tree's selection when there is one, else the scope a saved view carries.
+            deck: self.selected_deck.or(self.view_scope),
             query: self.query.text.clone(),
             tags: self.tag.iter().cloned().collect(),
             mode: self.mode,
@@ -741,6 +886,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
             .build(&KIT)
             .key("new-deck"),
     );
+    sidebar = sidebar.child(views_section::<S>(s));
     if library.selected_deck.is_some() {
         sidebar = sidebar
             .child(
@@ -782,6 +928,124 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         }
     }
     sidebar
+}
+
+/// The saved views, under the decks: one row each, and the field that names one.
+fn views_section<S: Host>(s: &S) -> El {
+    let library = s.library();
+    let t = tok::theme(true);
+    let mut section = col().key("views").w_full().gap(2.0);
+    section = section.child(
+        text("Views")
+            .key("views-title")
+            .font(type_::LABEL)
+            .color(t.text_secondary),
+    );
+    for view in library.views() {
+        section = section.child(view_row::<S>(s, view));
+    }
+    if library.new_view || library.naming_view.is_some() {
+        let saving = library.new_view;
+        section = section.child(
+            row()
+                .key("view-name-row")
+                .w_full()
+                .h(30.0)
+                .px(10.0)
+                .center_y()
+                .fill(t.control_off)
+                .child(
+                    text_input(library.view_text(), type_::LABEL)
+                        .key("view-name")
+                        .single_line()
+                        .grow(1.0)
+                        .placeholder("Name this view", t.text_secondary)
+                        .on_edit(|s: &mut S| s.library_mut().view_field())
+                        .on_submit(move |s: &mut S, _| {
+                            if saving {
+                                s.finish_view_create();
+                            } else {
+                                s.finish_view_rename();
+                            }
+                        }),
+                ),
+        );
+    }
+    section = section.child(
+        Button::new("New view")
+            .variant(ButtonVariant::Ghost)
+            .on_press_tx(|s: &mut S, tx: &mut rune::Tx| {
+                s.library_mut().begin_view_create();
+                tx.focus("view-name", true);
+            })
+            .build(&KIT)
+            .key("new-view"),
+    );
+    if library.selected_view.is_some() {
+        section = section
+            .child(
+                Button::new("Rename view")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press_tx(|s: &mut S, tx: &mut rune::Tx| {
+                        if let Some(id) = s.library().selected_view {
+                            s.library_mut().begin_view_rename(id);
+                            tx.focus("view-name", true);
+                        }
+                    })
+                    .build(&KIT)
+                    .key("rename-view"),
+            )
+            .child(
+                Button::new("Delete view")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press(|s: &mut S| {
+                        if let Some(id) = s.library().selected_view {
+                            s.delete_view(id);
+                        }
+                    })
+                    .build(&KIT)
+                    .key("delete-view"),
+            );
+    }
+    section
+}
+
+/// One saved view's row, and a note when the deck it was saved on is gone.
+fn view_row<S: Host>(s: &S, view: &SavedView) -> El {
+    let t = tok::theme(true);
+    let library = s.library();
+    let id = view.id;
+    let selected = library.selected_view == Some(id);
+    let mut label = row().w_full().gap(4.0).child(
+        text(view.name.clone())
+            .font(type_::BODY)
+            .color(if selected { rune::Color::WHITE } else { t.text }),
+    );
+    if view.scope_missing(library.snapshot()) {
+        label = label.child(
+            text("its deck is gone")
+                .key("view-scope-missing")
+                .font(type_::MONO_CAPTION)
+                .color(if selected {
+                    rune::Color::WHITE
+                } else {
+                    t.text_secondary
+                }),
+        );
+    }
+    row()
+        .key(format!("view-{}", view.id))
+        .h(30.0)
+        .px(10.0)
+        .radius(6.0)
+        .center_y()
+        .fill(if selected {
+            tok::accent(0, true).alpha(0.85)
+        } else {
+            t.control_off.alpha(0.0)
+        })
+        .child(label)
+        .on_press(move |s: &mut S| s.library_mut().select_view(id))
 }
 
 /// A deck's template, with a preview of one of the cards it would render.

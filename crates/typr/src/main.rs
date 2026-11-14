@@ -453,6 +453,45 @@ impl library::Host for State {
         self.track("set_deck_template", sent);
     }
 
+    fn create_view(&mut self, name: &str) {
+        let spec = self.library.spec();
+        let sent = match self.store.as_ref() {
+            Some(store) => store.create_view(&spec, name),
+            None => Err(StoreError::Closed),
+        };
+        self.track("create_view", sent);
+    }
+
+    fn rename_view(&mut self, id: Id, name: &str) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.rename_view(id, name),
+            None => Err(StoreError::Closed),
+        };
+        self.track("rename_view", sent);
+    }
+
+    fn delete_view(&mut self, id: Id) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.delete_view(id),
+            None => Err(StoreError::Closed),
+        };
+        // The list forgets the view at once: a row that goes on filtering after its delete was
+        // pressed would read as a lost click.
+        self.library.close_view_name();
+        if self.library.selected_view == Some(id) {
+            self.library.select_deck(None);
+        }
+        self.track("delete_view", sent);
+    }
+
+    fn set_pinned(&mut self, card: Id, pinned: bool) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.set_pinned(card, pinned),
+            None => Err(StoreError::Closed),
+        };
+        self.track("set_pinned", sent);
+    }
+
     fn move_deck(&mut self, deck: Id, parent: Option<Id>) {
         let sent = match self.store.as_ref() {
             Some(store) => store.move_deck(deck, parent),

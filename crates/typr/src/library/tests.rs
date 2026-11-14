@@ -394,3 +394,40 @@ fn an_emptied_template_field_clears_the_deck() {
     );
     assert_eq!(library.templating, None, "taking it closes the field");
 }
+
+#[test]
+fn the_sidebar_lists_saved_views_and_selects_one() {
+    let mut library = Library::seeded_nested();
+    let spec = typr_core::store::ViewSpec {
+        deck: Some(2),
+        query: "verb".to_string(),
+        ..typr_core::store::ViewSpec::default()
+    };
+    std::sync::Arc::make_mut(&mut library.snapshot)
+        .views
+        .push(typr_core::store::SavedView {
+            id: 9,
+            name: "Verb drills".to_string(),
+            spec,
+        });
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (960.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+
+    let row = runtime.find("view-9").expect("the view's row");
+    runtime.pointer_down(row.0, row.1);
+    runtime.pointer_up(row.0, row.1);
+    runtime.frame(0.1);
+
+    assert_eq!(runtime.state.selected_view, Some(9), "the view is selected");
+    assert_eq!(runtime.state.selected_deck, None, "and no deck is");
+    assert_eq!(runtime.state.query.text, "verb", "its search is applied");
+    assert!(
+        runtime.find("rename-view").is_some() && runtime.find("delete-view").is_some(),
+        "a selected view can be renamed and deleted"
+    );
+}
