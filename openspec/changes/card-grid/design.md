@@ -10,12 +10,14 @@ holds no scheduling state. A tile's badge needs three facts that are not there, 
 in one place, and `sidebar`'s deck counts read the same fields instead of inventing a second query.
 
 Measured on the Mochi web app, dark theme, 2026-11-14, at a 997-point window with a 200-point sidebar: the
-grid starts at x=215, a tile is 245x124, the gap is 16, and three tiles sit on the line. A tile is a body of
-96 above a footer of 26, radius 8, background `rgb(46,47,49)`, the shared card shadow, 10 padding. The
+grid starts at x=215, the gap is 16, and three tiles sit on the line. At that width a tile is 245x124; at a
+700-point viewport it is 227 wide and one card grows to 145 because its text wraps to more lines, so width and
+height are both functions of the window and the content, never constants. A tile is a body above a footer of
+26, radius 8, background `rgb(46,47,49)`, the shared card shadow, 10 padding. The
 hidden-side label is a full-width strip 22 tall at the bottom of the body — 9px/600, uppercase, 30% white,
 background `rgba(0,0,0,0.1)` — and the footer is `rgba(0,0,0,0.09)` with `0 0 8px 8px` radius, holding a
 13px sentence-case word on the left and a 10px/500 uppercase kicker at 40% white on the right. The empty
-tile is 245x124 with radius 4, `1px dashed rgba(255,255,255,0.1)`, 10 padding, the label `New Card` and a
+tile is the same size as a card tile with radius 4, `1px dashed rgba(255,255,255,0.1)`, 10 padding, the label `New Card` and a
 9px/500 uppercase keycap `N` on 30% black with radius 4. A card carrying hidden text draws it masked
 (`rgb(36,36,38)`, radius 3) exactly as a review face does, and a card with one side draws no strip.
 
@@ -43,22 +45,33 @@ each row builds `columns` tiles, and the row height is `TILE_HEIGHT + GAP`. Pass
 ### The column count comes from the window width, floored at one
 
 `fn columns_for(width: f32) -> usize` returns `((width + GAP) / (MIN_TILE_WIDTH + GAP)).floor().max(1.0)` with
-`MIN_TILE_WIDTH = 233.0` and `GAP = 16.0`. Tiles then take `(width - GAP * (columns - 1)) / columns`, so they
-fill the line instead of leaving a ragged edge. Mochi's rule is `repeat(auto-fill, minmax(233px, 1fr))` with a
-16-point gap, which this reproduces at every width measured: content 767 gives three tiles of 245, content 590
-gives two of 287, content 1255 gives five of 238. An earlier draft of this design quoted "233 at 845 and 287
+The grid has no fixed width. `GAP = 16.0` and `WRAP_BELOW = 233.0`; `WRAP_BELOW` is the width at which a second
+column stops being worth having, not a width any tile takes. `fn columns_for(width)` is
+`((width + GAP) / (WRAP_BELOW + GAP)).floor().max(1.0)` and each tile takes
+`(width - GAP * (columns - 1)) / columns`, so the line is filled to its edge with no ragged remainder and a
+tile is exactly as wide as its share. Measured in the live app, which sets its columns inline from the window
+width and computes `display: grid` with `227px 227px` at a 700-point viewport and `245px 245px 245px` at 997:
+content 470 gives two of 227, content 767 gives three of 245, content 590 gives two of 287, content 1255 gives
+five of 238. An earlier draft of this design quoted "233 at 845 and 287
 at 1485", which was two different windows' arithmetic labelled as one; the widths fall out
 of this rule with the same constants, which is why the numbers are these and not round ones.
 
-### Every tile in a line is the same height, and the tag strip's height is reserved
+### A line's tiles stretch to that row's tallest measured height
 
-`virtual_rows` needs one height per row, and Mochi's tiles are not all the same height: a deck whose cards
-carry tags measured 157 against 124 for a deck whose cards do not. Two ways out — reserve the tag strip's
-height on every tile, or abandon `virtual_rows` for a masonry flow — and this change reserves it, because a
-lagging scroll on a 5000-card list costs more than 33 points of empty space on a card without tags. The
-reserved strip is drawn only when the card has tags; the space is held either way. That is a deliberate
-departure from Mochi, which lets a row's tiles grow to the tallest, and it is the reason the design keeps
-`virtual_rows` (`crates/rune/src/el/virtual_rows.rs:80`) with `col().growth(GrowthSpec::default())`.
+Mochi's tiles are not all one height: `grid-auto-rows: auto` makes a line as tall as its tallest tile, and a
+145-point-tall card sits beside a 124-point one when its text wraps to more lines (measured 124 against 145 in
+one deck at a 700-point viewport). Rune does not force a uniform height either: `virtual_rows` takes an
+*estimated* height and replaces it with the measured one per key —
+`crates/rune/src/el/virtual_rows.rs:15` "Unvisited rows use an estimated height; measurement preserves the
+visible anchor" and `:50` "rows keep their measured heights by key while the key stays" — and the framework's
+own test runs rows of alternating 36 and 77 points under a 40-point estimate
+(`crates/rune/src/runtime/row_reorder_tests.rs:161-172`).
+
+So a row is one element per line with the line's height, and the tiles in it carry the tallest tile's height,
+which keeps the grid reading as rows while letting a long card push its line down. The estimate handed to
+`virtual_rows` is the nominal tile height plus the gap; the measured heights correct it after the first
+frames, and the framework preserves the reader's anchor when they change. Nothing is reserved for the tag
+strip: a card without tags draws a shorter line, which is what the live app does.
 
 ### The badge vocabulary is three states, not a date
 

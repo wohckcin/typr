@@ -7,13 +7,14 @@
       label a full-width 22-point strip at the bottom of the body (9px/600, uppercase, 30% white,
       `rgba(0,0,0,0.1)`), the footer `rgba(0,0,0,0.09)` with `0 0 8px 8px` radius holding a 13px sentence-case
       word and a 10px/500 uppercase kicker.
-      *Verification*: a scene tile measures 245x124 at a 997-point window, the strip 22 and the footer 26; a
+      *Verification*: at a 997-point window a tile is 245 wide and at 700 it is 227, each exactly its share, the
+      strip measures 22 and the footer 26; a
       rendered tile's strings read `New`, `0 days`, `1 hidden side`, with case as drawn.
 
-- [ ] 1.1b Reserve the tag strip's height on every tile and draw it only when the card has tags, so a line's
-      tiles stay one height.
-      *Verification*: two cards, one tagged and one not, draw at the same height, and the untagged one draws
-      no chip.
+- [ ] 1.1b Draw tagged and untagged cards at their own heights and let a line take the tallest, rather than
+      reserving space for a tag strip that is not there.
+      *Verification*: a line holding one tagged and one untagged card reports a row height equal to the
+      tallest tile, and the untagged tile stays shorter and draws no chip.
 
 - [ ] 1.1c Draw hidden text masked on a tile exactly as a review face draws it, and fail if the answer text
       reaches the tile.

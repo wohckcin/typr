@@ -3,19 +3,30 @@
 ### Requirement: A deck is drawn as a wrapped grid of card tiles
 
 The system SHALL draw the cards of the selected deck as tiles that wrap into as many columns as the window
-allows, each tile at least 233 points wide and at least 124 points tall, so that a deck of many cards is
-read as a wall rather than a list. A tile SHALL be a body above a footer, the body no shorter than 96
-points and the footer 26 points.
-
-#### Scenario: A wide window shows more columns
-
-- **WHEN** the same deck is drawn at 845 and at 1485 points wide
-- **THEN** the wider window shows more tiles per line and the same number of tiles overall
+allows, so that a deck of many cards is read as a wall rather than a list. A tile SHALL be a body above a
+footer strip, and the body SHALL take whatever height the tile is given after the footer.
 
 #### Scenario: A narrow window still draws whole tiles
 
 - **WHEN** the window is narrower than two tiles and the gaps between them
 - **THEN** one tile per line is drawn at full width and no tile is clipped horizontally
+
+### Requirement: A tile has no fixed width
+
+No tile SHALL have a fixed width. The tiles on a line SHALL share the width available to them equally, one
+gap apart, and the number of columns SHALL follow from that width rather than from a constant, so a line is
+filled to its right edge with no ragged remainder.
+
+#### Scenario: A wide window shows more columns
+
+- **WHEN** the same deck is drawn at 700 and at 1485 points wide
+- **THEN** the wider window shows more tiles per line, the same number of tiles overall, and every line filled
+  to its right edge
+
+#### Scenario: Each tile is exactly its share
+
+- **WHEN** three tiles and two 16-point gaps fill 767 points
+- **THEN** each tile is 245 points wide, and no tile carries a width of its own
 
 ### Requirement: A tile shows the first side of its card
 
