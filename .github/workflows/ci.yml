@@ -31,20 +31,31 @@ jobs:
         run: cargo fmt --check
 
       - name: Lint
-        run: cargo clippy --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation
+
+      # The backend is the half that must not drag a graphics stack behind it.
+      - name: Check the backend stays toolkit free
+        run: |
+          set -euo pipefail
+          graph=$(cargo tree -p typr-core --edges normal)
+          if echo "$graph" | grep -Eq '(^|[^a-z-])(rune|rune-kit|rune-extras|wgpu|wgpu-hal|winit|parley|parley_engine|accesskit)( |$)'; then
+            echo "typr-core depends on a desktop toolkit:" >&2
+            echo "$graph" | grep -E 'rune|wgpu|winit|parley|accesskit' >&2
+            exit 1
+          fi
 
       - name: Build
-        run: cargo build --locked
+        run: cargo build --workspace --locked
 
       - name: Test
-        run: cargo test --locked
+        run: cargo test --workspace --locked
 
       - name: Snapshot every scene
         run: |
           set -euo pipefail
           export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"
           mkdir -p "$RUNNER_TEMP/snaps"
-          for scene in $(./target/debug/typr --list-scenes); do
-            ./target/debug/typr --scene "$scene" --snap "$RUNNER_TEMP/snaps/$scene.png"
+          for scene in $(cargo run -q -p typr -- --list-scenes); do
+            cargo run -q -p typr -- --scene "$scene" --snap "$RUNNER_TEMP/snaps/$scene.png"
             test -s "$RUNNER_TEMP/snaps/$scene.png"
           done

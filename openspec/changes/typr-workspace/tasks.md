@@ -28,8 +28,8 @@
 
 ## 5. Enforce the boundary
 
-- [ ] 5.1 Update `.github/workflows/ci.yml`: `cargo test --workspace --locked`, a step that fails when `cargo tree -p typr-core --edges normal` matches `rune|wgpu|winit|parley`, and a scene loop that runs `cargo run -p typr` (or the `-p typr` binary). **Verify**: the YAML parses, and every step is replayed locally with the new flags.
-- [ ] 5.2 Add the compatibility check the `project-structure` spec asks for: keep a library file written before the split (schema version 3) under `crates/typr-core/tests/data/`, open it after the move, and grade a card. **Verify**: the test passes and the file's `user_version` is unchanged afterwards.
+- [x] 5.1 Update `.github/workflows/ci.yml`: `cargo test --workspace --locked`, a step that fails when `cargo tree -p typr-core --edges normal` matches `rune|wgpu|winit|parley`, and a scene loop that runs `cargo run -p typr` (or the `-p typr` binary). **Verify**: the YAML parses, and every step is replayed locally with the new flags.
+- [x] 5.2 Add the compatibility check the `project-structure` spec asks for: keep a library file written before the split (schema version 3) under `crates/typr-core/tests/data/`, open it after the move, and grade a card. **Verify**: the test passes and the file's `user_version` is unchanged afterwards.
 - [ ] 5.3 Run the whole gate once from a clean tree. **Verify**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, the dependency-graph check and the scene loop all pass; `openspec validate typr-workspace --strict` is valid.
 
 ## Workflow follow-up
