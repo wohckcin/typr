@@ -16,9 +16,11 @@ use rusqlite::{Connection, OpenFlags};
 use crate::store::StoreError;
 
 mod csv;
+mod markdown;
 pub mod mochi;
 
 pub use csv::{export as export_csv, import as import_csv};
+pub use markdown::{export as export_markdown, import as import_markdown};
 
 /// What an import wrote, in the units the archive itself counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -558,6 +558,14 @@ pub enum Command {
         deck: Id,
         target: std::path::PathBuf,
     },
+    ImportMarkdown {
+        deck: Id,
+        source: std::path::PathBuf,
+    },
+    ExportMarkdown {
+        deck: Id,
+        target: std::path::PathBuf,
+    },
     History {
         card: Id,
     },
@@ -841,6 +849,8 @@ pub trait Store: Send + Sync {
     fn export_library(&self, target: &std::path::Path) -> Result<u64, StoreError>;
     fn import_csv(&self, deck: Id, source: &std::path::Path) -> Result<u64, StoreError>;
     fn export_csv(&self, deck: Id, target: &std::path::Path) -> Result<u64, StoreError>;
+    fn import_markdown(&self, deck: Id, source: &std::path::Path) -> Result<u64, StoreError>;
+    fn export_markdown(&self, deck: Id, target: &std::path::Path) -> Result<u64, StoreError>;
 }
 
 #[cfg(test)]

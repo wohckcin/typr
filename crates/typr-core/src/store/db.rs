@@ -547,6 +547,13 @@ impl Db {
                 transfer::export_csv(self, *deck, target)?;
                 Ok(Outcome::Exported)
             }
+            Command::ImportMarkdown { deck, source } => Ok(Outcome::Imported(
+                transfer::import_markdown(self, *deck, source, now_ms)?,
+            )),
+            Command::ExportMarkdown { deck, target } => {
+                transfer::export_markdown(self, *deck, target)?;
+                Ok(Outcome::Exported)
+            }
         }
     }
 

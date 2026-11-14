@@ -424,6 +424,20 @@ impl Store for Handle {
             target: target.to_path_buf(),
         })
     }
+
+    fn import_markdown(&self, deck: Id, source: &std::path::Path) -> Result<u64, StoreError> {
+        self.submit(Command::ImportMarkdown {
+            deck,
+            source: source.to_path_buf(),
+        })
+    }
+
+    fn export_markdown(&self, deck: Id, target: &std::path::Path) -> Result<u64, StoreError> {
+        self.submit(Command::ExportMarkdown {
+            deck,
+            target: target.to_path_buf(),
+        })
+    }
 }
 
 fn work(

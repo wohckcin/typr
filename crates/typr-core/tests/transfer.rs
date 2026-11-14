@@ -868,3 +868,67 @@ fn a_csv_without_the_header_is_refused() {
         "nothing was imported"
     );
 }
+
+#[test]
+fn markdown_round_trip_reproduces_prompts() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let deck = new_deck(&db, "Geography");
+    let original = one_card(&db, deck, "capital of France?\n---\nIt is {{1::Paris}}");
+    let prompts_before = db.prompt_keys(original).expect("the original prompts");
+    let sides_before = db
+        .snapshot()
+        .expect("the library")
+        .cards
+        .iter()
+        .find(|card| card.id == original)
+        .expect("the original card")
+        .sides;
+
+    let folder = dir.path().join("markdown");
+    db.apply(
+        &Command::ExportMarkdown {
+            deck,
+            target: folder.clone(),
+        },
+        NOW,
+    )
+    .expect("the export");
+    let file = folder.join("Geography.md");
+    let text = std::fs::read_to_string(&file).expect("the exported file");
+    assert!(
+        text.starts_with("# Geography\n\n"),
+        "the deck heads the file"
+    );
+    assert!(text.contains("---"), "the separator survives verbatim");
+    assert!(
+        text.contains("{{1::Paris}}"),
+        "the hidden group survives verbatim"
+    );
+
+    let copy = new_deck(&db, "Geography copy");
+    db.apply(
+        &Command::ImportMarkdown {
+            deck: copy,
+            source: file,
+        },
+        NOW,
+    )
+    .expect("the import");
+
+    let snapshot = db.snapshot().expect("the library");
+    let imported = snapshot
+        .cards
+        .iter()
+        .find(|card| card.deck == copy)
+        .expect("the imported card");
+    assert_eq!(
+        imported.markdown,
+        "capital of France?\n---\nIt is {{1::Paris}}"
+    );
+    assert_eq!(imported.sides, sides_before);
+    assert_eq!(
+        db.prompt_keys(imported.id).expect("the imported prompts"),
+        prompts_before
+    );
+}

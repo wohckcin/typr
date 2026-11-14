@@ -24,7 +24,7 @@ Depends on `card-templates` (fields), `diagram-cards` (masks) and `cloze-deletio
 
 - [x] 3.1 CSV export and import with the documented header, refusing a file whose header lacks a required column.
   - **Verification**: `a_csv_round_trip_keeps_sides_tags_and_fields` and `a_csv_without_the_header_is_refused`.
-- [ ] 3.2 Markdown export per deck and import into a chosen deck, preserving the separator and hidden-text syntax.
+- [x] 3.2 Markdown export per deck and import into a chosen deck, preserving the separator and hidden-text syntax.
   - **Verification**: `markdown_round_trip_reproduces_prompts` asserts the same prompt keys and `sides` after import.
 
 ## 4. UI and close out
