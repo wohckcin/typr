@@ -52,9 +52,11 @@ with `Face { hidden: String, shown: String }`. For sides the two strings are equ
 differ only inside the masked span. Reveal swaps in `shown`, so `revealed`, `read_only` and the grade
 gate stay exactly as they are and every existing session test keeps its meaning.
 
-**The mask is `[ … ]`, keeping the span's word count.** A bare `____` loses length cues in languages
-where that is a hint, and repeating the answer's length leaks it. `[ … ]` marks one span, and the
-preview labels its group: `[ … ]` plus a caption listing which groups the card holds.
+**The mask is one `[ … ]` per span, whatever its length.** A span of underscores sized to the answer
+would leak its length, which is a real cue in conjugation and dates, so the mask drops the cue on
+purpose and marks the span instead. The cost is that a masked sentence loses word-level hints such as
+where a two-word phrase sat; the preview lists which groups the card holds so the author can see what
+will be hidden.
 
 **Parse once, carry the result.** `Shape` is computed when a card is saved and when a session is
 built, never per frame: `sync_prompts` needs it for keys, the session needs it for faces, and the

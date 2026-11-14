@@ -2,14 +2,24 @@
 
 ## MODIFIED Requirements
 
+## REMOVED Requirements
+
 ### Requirement: Each card has at most one prompt
 
-The system SHALL track scheduling state per prompt, where a prompt is identified by a card and a key,
-SHALL hold exactly one prompt for each review variant a card carries, and SHALL hold none for a card
-with neither two sides nor hidden text. The variants are `fwd` for a card with two or more sides,
-`cloze:<n>` for each numbered hidden-text group, and `cloze:0` for the unnumbered hidden text of a card
-that has any. A variant SHALL keep its own schedule and history, and adding or removing one SHALL NOT
-alter another variant's row.
+**Reason**: the card may now carry one prompt per review variant, so "at most one" is false whenever a
+card holds two hidden-text groups.
+
+**Migration**: no data change. Every prominent card keeps the single `fwd` prompt it already had; the
+new keys are only created for cards that hold hidden text.
+
+## ADDED Requirements
+
+### Requirement: Each card has one prompt per review variant
+
+The system SHALL track scheduling state per prompt, identified by a card and a key, SHALL hold exactly
+one prompt per review variant a card carries, and SHALL hold none for a card with no variant. The keys
+are `fwd` for two or more sides, `cloze:<n>` per numbered hidden-text group, and `cloze:0` for unnumbered
+hidden text. Each variant SHALL keep its own schedule and history.
 
 #### Scenario: One prompt per two-sided card
 
