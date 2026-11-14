@@ -554,3 +554,128 @@ fn archiving_a_card_and_a_deck_takes_them_out_of_the_library() {
     );
     assert_eq!(due(&mut state), 0, "and leaves the due queue with it");
 }
+
+#[test]
+fn deleting_a_card_keeps_its_history_until_the_trash_is_emptied() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    refresh_library(&mut state);
+    let graded = state
+        .store
+        .as_ref()
+        .expect("store")
+        .grade(1, "fwd", Grade::Remembered, None)
+        .expect("sent");
+    settle(&mut state, graded);
+
+    /// The records the store holds for one card, as the history panel would count them.
+    fn reviews(state: &mut State, card: Id) -> u32 {
+        let id = state
+            .store
+            .as_ref()
+            .expect("store")
+            .history(card)
+            .expect("sent");
+        for _ in 0..200 {
+            let answer = state
+                .store
+                .as_ref()
+                .expect("store")
+                .poll()
+                .into_iter()
+                .find(|event| event.id == id);
+            if let Some(event) = answer {
+                if let Ok(Outcome::History { reviews, .. }) = event.result {
+                    return reviews;
+                }
+                panic!("expected the card's records");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        panic!("no answer for the records");
+    }
+    assert_eq!(reviews(&mut state, 1), 1, "the grade was recorded");
+
+    library::Host::trash_card(&mut state, 1);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        state.library.cards().is_empty(),
+        "a deleted card leaves the active view"
+    );
+    state.library.set_mode(CardMode::Trash);
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "the trash holds what was deleted"
+    );
+
+    library::Host::restore_card(&mut state, 1);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    state.library.set_mode(CardMode::Active);
+    assert_eq!(
+        state.library.cards().len(),
+        1,
+        "restoring puts it back in the library"
+    );
+    assert_eq!(
+        reviews(&mut state, 1),
+        1,
+        "and its history came back with it"
+    );
+
+    // Deleting again and emptying the trash is the only way the record goes.
+    library::Host::trash_card(&mut state, 1);
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        if state.library.cards().is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    library::Host::empty_trash(&mut state);
+    for _ in 0..200 {
+        if state
+            .store
+            .as_ref()
+            .expect("store")
+            .snapshot()
+            .cards
+            .is_empty()
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        state
+            .store
+            .as_ref()
+            .expect("store")
+            .snapshot()
+            .cards
+            .is_empty(),
+        "the emptied trash holds nothing"
+    );
+    assert_eq!(
+        reviews(&mut state, 1),
+        0,
+        "and its review records went with it"
+    );
+}

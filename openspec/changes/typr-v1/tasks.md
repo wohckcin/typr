@@ -39,7 +39,7 @@
 
   **Open**: `Command::ArchiveCard` and `Db::archive_card` exist and are tested, but nothing in `src/` calls them and no control switches `Library::mode`, so the archived view cannot be reached. The remaining work is the screen, not the store.
 - [x] 4.6 Implement the studyable predicate (not archived, not trashed, no archived ancestor), and verify a card under an archived deck is absent from both queues while a sibling deck's cards remain
-- [ ] 4.7 Implement trash, restore and empty, and verify restored cards keep their history while emptied ones are gone with their `review_log` rows and appear nowhere in the library
+- [x] 4.7 Implement trash, restore and empty, and verify restored cards keep their history while emptied ones are gone with their `review_log` rows and appear nowhere in the library
 
   **Open**: `trash_card`, `restore_card` and `empty_trash` exist and are tested, but no screen calls them, so deletion, restore and emptying are unreachable.
 - [x] 4.8 Build the library view: sidebar of decks, virtualised card list as a growth stack — `col().growth(GrowthSpec::default()).virtual_rows(count, row_height, key, build)` — tag filter and search box, and verify its scene renders with 5000 seeded cards while building only the mounted rows (assert the build closure ran for far fewer than 5000 indices)

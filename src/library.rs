@@ -35,6 +35,9 @@ pub trait Host: 'static {
     /// Take a whole deck, and everything under it, out of the library.
     fn archive_deck(&mut self, _deck: Id) {}
 
+    /// Move a card to the trash, where it waits until the user empties it.
+    fn trash_card(&mut self, _card: Id) {}
+
     /// Bring a card out of the archive or the trash. A host with no store cannot, and says so by
     /// doing nothing.
     fn restore_card(&mut self, _card: Id) {}
@@ -356,13 +359,21 @@ fn card_row<S: Host>(card: &CardSummary, selected: bool, mode: CardMode) -> El {
         .child(text(tags).font(type_::LABEL).color(t.text_secondary))
         .child(text(note).font(type_::LABEL).color(t.text_secondary));
     if mode == CardMode::Active {
-        line = line.child(
-            Button::new("Archive")
-                .variant(ButtonVariant::Ghost)
-                .on_press(move |s: &mut S| s.archive_card(id))
-                .build(&KIT)
-                .key(format!("archive-{id}")),
-        );
+        line = line
+            .child(
+                Button::new("Archive")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press(move |s: &mut S| s.archive_card(id))
+                    .build(&KIT)
+                    .key(format!("archive-{id}")),
+            )
+            .child(
+                Button::new("Delete")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press(move |s: &mut S| s.trash_card(id))
+                    .build(&KIT)
+                    .key(format!("delete-{id}")),
+            );
     } else {
         line = line.child(
             Button::new("Restore")
