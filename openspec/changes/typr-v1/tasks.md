@@ -59,7 +59,9 @@
   **Verification**: `the_tag_line_keeps_one_spelling_of_each_tag` proves `Grammar, grammar, Verbs`
   becomes `Grammar, Verbs` and that a changed line counts as unsaved; the app-level test opens a
   tagged card, finds the `tags` field in a rendered frame, sets new tags through the host and reads
-  them back off the card.
+  them back off the card. **Revert check** (run after the fact, in `/tmp/typr-mut12-target`): deleting
+  the case-fold skip from `Editor::tag_list` fails the first test with
+  `left: ["Grammar", "grammar", "Verbs"]`.
 
 - [x] 4.12 Open a card in the editor from the library, and start a new card from it
 
