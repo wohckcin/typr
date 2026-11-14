@@ -706,13 +706,14 @@ fn filter_bar<S: Host>(s: &S) -> El {
     if library.mode == CardMode::Trash {
         bar = bar.child(empty_trash_button::<S>());
     }
-    let new_card = match crate::keymap::chord(Surface::Library, Command::NewCard) {
-        Some(chord) if s.keycaps() => format!("New card  {chord}"),
-        _ => "New card".to_string(),
-    };
+    let mut new_card = Button::new("New card").variant(ButtonVariant::Submit);
+    if let Some(chord) = crate::keymap::chord(Surface::Library, Command::NewCard)
+        && s.keycaps()
+    {
+        new_card = new_card.shortcut(chord.to_string());
+    }
     bar = bar.child(
-        Button::new(new_card)
-            .variant(ButtonVariant::Submit)
+        new_card
             .on_press(|s: &mut S| s.new_card())
             .build(&KIT)
             // The empty deck's tile owns `new-card`; this bar button is the other way in.

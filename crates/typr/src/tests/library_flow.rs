@@ -909,3 +909,83 @@ fn a_card_under_an_archived_deck_is_reachable_and_the_deck_can_come_back() {
         "the deck coming back does not move the card's due date"
     );
 }
+
+/// A key event for one letter, as a keyboard sends it.
+fn letter_press(letter: &str) -> KeyEvent {
+    KeyEvent {
+        key: Key::Text(letter.to_string()),
+        mods: Mods::default(),
+    }
+}
+
+#[test]
+fn the_library_keys_do_what_the_table_says() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut tx = Tx::default();
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+
+    // `n` asks for the new-card queue.
+    assert!(on_key(&mut state, &letter_press("n"), &mut tx));
+    assert_eq!(state.wanted, Some(Queue::New));
+
+    // `c` opens a card with no id, which is the editor on a new one.
+    state.wanted = None;
+    assert!(on_key(&mut state, &letter_press("c"), &mut tx));
+    assert_eq!(state.screen, Screen::Editor);
+    assert_eq!(state.editor.card, None);
+
+    // `s` asks for the due queue, and a key the table does not bind is refused.
+    state.screen = Screen::Library;
+    assert!(on_key(&mut state, &letter_press("s"), &mut tx));
+    assert_eq!(state.wanted, Some(Queue::Due));
+    assert!(!on_key(&mut state, &letter_press("q"), &mut tx));
+}
+
+#[test]
+fn an_open_panel_keeps_its_keystrokes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut tx = Tx::default();
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+    state.panel.open = true;
+
+    // Typing a letter belongs to the filter, not to the command behind the dialog.
+    assert!(
+        !on_key(&mut state, &letter_press("n"), &mut tx),
+        "a letter behind the panel is refused"
+    );
+    assert_eq!(state.wanted, None, "no session was asked for");
+
+    // Escape closes the panel itself.
+    let escape = KeyEvent {
+        key: Key::Escape,
+        mods: Mods::default(),
+    };
+    assert!(on_key(&mut state, &escape, &mut tx));
+    assert!(!state.panel.open);
+}
+
+#[test]
+fn typing_in_the_palette_does_not_grade() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut tx = Tx::default();
+    let mut state = State {
+        store: Some(store),
+        screen: Screen::Session,
+        session: session_on(1),
+        ..State::default()
+    };
+    state.palette.open = true;
+
+    // `j` would grade if the palette were not open; here it belongs to the filter.
+    assert!(!on_key(&mut state, &letter_press("j"), &mut tx));
+    assert_eq!(state.session.remaining(), 1, "nothing was graded");
+}

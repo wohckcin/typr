@@ -1018,31 +1018,9 @@ impl keymap::Host for State {
 }
 
 fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
-    // An open palette takes the arrows and Enter itself; every other key reaches its filter.
-    if s.palette.open {
-        match &event.key {
-            rune::Key::Escape => {
-                s.palette.open = false;
-                return true;
-            }
-            rune::Key::Up => {
-                let surface = s.surface();
-                keymap::palette::move_up(&mut s.palette);
-                let rows = keymap::palette::visible(surface, &s.palette.filter.text).len();
-                s.palette.index = s.palette.index.min(rows.saturating_sub(1));
-                return true;
-            }
-            rune::Key::Down => {
-                let surface = s.surface();
-                keymap::palette::move_down(&mut s.palette, surface);
-                return true;
-            }
-            rune::Key::Enter => return keymap::palette::run(s),
-            _ => {}
-        }
-    }
-    if s.panel.open && !matches!(event.key, rune::Key::Escape) && event.mods.cmd {
-        return false;
+    // An open overlay owns the keyboard: nothing behind a dialog runs on a keystroke.
+    if s.panel.open || s.palette.open {
+        return overlay_key(s, event);
     }
     let surface = match s.screen {
         Screen::Library => Surface::Library,
@@ -1053,6 +1031,37 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
     match typr::keymap::command_for(surface, event) {
         Some(command) => s.run_command(command),
         None => false,
+    }
+}
+
+/// The keys an open overlay answers itself. Every other key is left to the focused field, so
+/// typing a filter never fires the command behind the dialog.
+fn overlay_key(s: &mut State, event: &rune::KeyEvent) -> bool {
+    if matches!(event.key, rune::Key::Escape) {
+        if s.palette.open {
+            s.palette.open = false;
+        } else {
+            s.panel.open = false;
+        }
+        return true;
+    }
+    if !s.palette.open {
+        return false;
+    }
+    let surface = s.surface();
+    match &event.key {
+        rune::Key::Up => {
+            keymap::palette::move_up(&mut s.palette);
+            let rows = keymap::palette::visible(surface, &s.palette.filter.text).len();
+            s.palette.index = s.palette.index.min(rows.saturating_sub(1));
+            true
+        }
+        rune::Key::Down => {
+            keymap::palette::move_down(&mut s.palette, surface);
+            true
+        }
+        rune::Key::Enter => keymap::palette::run(s),
+        _ => false,
     }
 }
 

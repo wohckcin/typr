@@ -63,12 +63,15 @@ pub fn key<S: Host>(s: &mut S, event: &KeyEvent) -> bool {
     }
 }
 
-/// A control's label, with its keycap when the window has room for one.
-fn with_key<S: Host>(s: &S, command: Command, label: &str) -> String {
-    match crate::keymap::chord(Surface::Session, command) {
-        Some(chord) if s.keycaps() => format!("{label}  {chord}"),
-        _ => label.to_string(),
+/// A control for a command, drawing its keycap when the window has room for one.
+fn with_key<S: Host>(s: &S, command: Command, label: &str, variant: ButtonVariant) -> Button {
+    let mut button = Button::new(label).variant(variant);
+    if let Some(chord) = crate::keymap::chord(Surface::Session, command)
+        && s.keycaps()
+    {
+        button = button.shortcut(chord.to_string());
     }
+    button
 }
 
 /// Give the card on screen the grade the review offers.
@@ -140,8 +143,7 @@ pub fn view<S: Host>(s: &S) -> El {
     }
 
     let mut answers = row().key("answers").gap(8.0).justify_end().child(
-        Button::new(with_key(s, Command::Shuffle, "Shuffle"))
-            .variant(ButtonVariant::Ghost)
+        with_key(s, Command::Shuffle, "Shuffle", ButtonVariant::Ghost)
             .on_press(|s: &mut S| s.reshuffle())
             .build(&rune_kit::Kit::neutral(true))
             .key("shuffle"),
@@ -149,18 +151,21 @@ pub fn view<S: Host>(s: &S) -> El {
     if session.gradeable() {
         answers = answers
             .child(
-                Button::new(with_key(s, Command::GradeForgot, "Forgot"))
-                    .variant(ButtonVariant::Ghost)
+                with_key(s, Command::GradeForgot, "Forgot", ButtonVariant::Ghost)
                     .on_press(|s: &mut S| answer(s, Grade::Forgot))
                     .build(&rune_kit::Kit::neutral(true))
                     .key("forgot"),
             )
             .child(
-                Button::new(with_key(s, Command::GradeRemembered, "Remembered"))
-                    .variant(ButtonVariant::Submit)
-                    .on_press(|s: &mut S| answer(s, Grade::Remembered))
-                    .build(&rune_kit::Kit::neutral(true))
-                    .key("remembered"),
+                with_key(
+                    s,
+                    Command::GradeRemembered,
+                    "Remembered",
+                    ButtonVariant::Submit,
+                )
+                .on_press(|s: &mut S| answer(s, Grade::Remembered))
+                .build(&rune_kit::Kit::neutral(true))
+                .key("remembered"),
             );
     }
 

@@ -570,10 +570,22 @@ fn drawn_text(state: State) -> Vec<String> {
 
 #[test]
 fn the_reveal_action_shows_its_key() {
+    // The keycap is drawn by the button itself and is decorative for assistive technology, so
+    // what a test can hold is the decision: a wide window offers the chord, and the label stays
+    // the label.
+    let state = session_state(900.0);
+    assert_eq!(
+        crate::keymap::keycap(&state, Command::GradeRemembered).as_deref(),
+        Some("J")
+    );
     let drawn = drawn_text(session_state(900.0));
     assert!(
-        drawn.iter().any(|text| text.contains("Remembered  J")),
-        "the grade button does not say which key grades: {drawn:?}"
+        drawn.iter().any(|text| text == "Remembered"),
+        "the grade button lost its label: {drawn:?}"
+    );
+    assert!(
+        !drawn.iter().any(|text| text.contains("Remembered  J")),
+        "the chord went into the label as well as onto the keycap: {drawn:?}"
     );
 }
 
