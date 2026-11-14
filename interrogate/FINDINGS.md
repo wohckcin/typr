@@ -5,9 +5,13 @@ running it before the fix, and each one now has a permanent test in the suite, n
 column. The throwaway reproducers were deleted once that coverage landed; they are still in git at
 `643f652` (`git show 643f652:interrogate/core-audit.rs`).
 
-No requirement changed to accommodate any of them. Every break contradicted text the live spec already
-carried, so the fixes restored the spec rather than amending it, which is why no OpenSpec change was
-opened for this work.
+Sixteen of the seventeen broke text the live spec already carried, so those fixes restored the spec
+rather than amending it. Finding 13 is the exception: restoring an archived deck is behaviour no
+requirement described, so `restore-archived-deck` added the scenario (`card-library`, archived).
+
+Two behaviours behind these fixes are still not requirements, and stay listed here rather than in a
+spec: a card is written only into the deck whose creation the same save asked for, and the deck guard
+that keeps a waiting card from landing in a deck a later press created.
 
 Severity means: **high** = a live spec requirement broken, or data lost/duplicated; **medium** =
 reachable wrong answer or unhelpful failure; **low** = a diagnostic gap.

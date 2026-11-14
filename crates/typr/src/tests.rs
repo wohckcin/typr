@@ -1753,6 +1753,17 @@ fn a_card_under_an_archived_deck_is_reachable_and_the_deck_can_come_back() {
     refresh_library(&mut state);
     assert_eq!(state.library.cards().len(), 1);
 
+    // Give the card a due date, so a schedule lost by the round trip would show.
+    let graded = state
+        .store
+        .as_ref()
+        .expect("store")
+        .grade(1, "fwd", Grade::Remembered, None)
+        .expect("sent");
+    settle(&mut state, graded);
+    let before = due_at(&mut state, 1);
+    assert!(before.is_some(), "the card has a due date to keep");
+
     LibraryHost::archive_deck(&mut state, 1);
     wait_for(&mut state, "the deck to be archived", |s| {
         s.library
@@ -1794,6 +1805,40 @@ fn a_card_under_an_archived_deck_is_reachable_and_the_deck_can_come_back() {
         1,
         "and the card is back in the library"
     );
+    assert_eq!(
+        due_at(&mut state, 1),
+        before,
+        "the deck coming back does not move the card's due date"
+    );
+}
+
+/// The due date the store holds for a card's prompt, read back through its history.
+fn due_at(state: &mut State, card: Id) -> Option<i64> {
+    let id = state
+        .store
+        .as_ref()
+        .expect("store")
+        .history(card)
+        .expect("sent");
+    for _ in 0..200 {
+        let answer = state
+            .store
+            .as_ref()
+            .expect("store")
+            .poll()
+            .into_iter()
+            .find(|event| event.id == id);
+        if let Some(event) = answer {
+            match event.result {
+                Ok(Outcome::History { rows, .. }) => return rows.last().and_then(|row| row.due_at),
+                other => panic!("the history answer was {other:?}"),
+            }
+        }
+        let mut wake = None;
+        frame_step(state, 0, &mut wake);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    panic!("the store never answered the history request");
 }
 
 #[test]
