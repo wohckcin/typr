@@ -42,7 +42,18 @@ fn a_file_that_is_not_a_database_is_reported_and_left_alone() {
     std::fs::write(&path, contents).expect("write");
 
     let error = Db::open(&path).expect_err("not a database");
-    assert!(matches!(error, StoreError::Sqlite(_)), "{error}");
+    let StoreError::Unreadable {
+        path: named,
+        source,
+    } = &error
+    else {
+        panic!("a file that is not a library says which file: {error}");
+    };
+    assert_eq!(*named, path, "the error names the file it could not read");
+    assert!(
+        source.to_string().contains("not a database"),
+        "the reason travels with it: {source}"
+    );
     assert_eq!(std::fs::read(&path).expect("read back"), contents);
 }
 

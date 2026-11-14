@@ -414,6 +414,13 @@ pub enum StoreError {
     /// here, so a chain-aware description reads once.
     #[error("the database refused the statement")]
     Sqlite(#[from] rusqlite::Error),
+    /// A file that could not be read as this app's library, named so the reason can be acted on.
+    #[error("the library at {path} is unreadable: {source}")]
+    Unreadable {
+        path: std::path::PathBuf,
+        #[source]
+        source: rusqlite::Error,
+    },
     /// No home folder, so there is nowhere to keep the library.
     #[error("no home folder to keep the library in")]
     NoDataDir,

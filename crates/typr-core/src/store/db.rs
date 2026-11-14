@@ -54,12 +54,22 @@ impl Db {
     /// A path that is not a database is an error: the file is read for its header before anything
     /// is written, so an unrelated file is reported rather than overwritten.
     pub fn open(path: &Path) -> Result<Self, StoreError> {
+        // A failure here is about this file, so the name of the file travels with the reason: a
+        // reader with "file is not a database" and no path has nothing to act on.
+        let named = |error: StoreError| match error {
+            StoreError::Sqlite(source) => StoreError::Unreadable {
+                path: path.to_path_buf(),
+                source,
+            },
+            other => other,
+        };
         let conn = Connection::open_with_flags(
             path,
             OpenFlags::SQLITE_OPEN_READ_WRITE
                 | OpenFlags::SQLITE_OPEN_CREATE
                 | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )?;
+        )
+        .map_err(|error| named(error.into()))?;
         let mut db = Self {
             conn,
             schema: SchemaFacts {
@@ -69,9 +79,13 @@ impl Db {
             },
             path: path.to_path_buf(),
         };
-        db.conn.pragma_update(None, "journal_mode", "WAL")?;
-        db.conn.pragma_update(None, "foreign_keys", true)?;
-        db.schema = schema::migrate(&mut db.conn)?;
+        db.conn
+            .pragma_update(None, "journal_mode", "WAL")
+            .map_err(|error| named(error.into()))?;
+        db.conn
+            .pragma_update(None, "foreign_keys", true)
+            .map_err(|error| named(error.into()))?;
+        db.schema = schema::migrate(&mut db.conn).map_err(named)?;
         Ok(db)
     }
 

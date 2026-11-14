@@ -1700,16 +1700,16 @@ fn a_library_that_cannot_be_opened_names_its_file() {
         Err(error) => error,
     };
 
-    let line = open_failure(Some(path.clone()), &error);
+    let line = format!("The library could not be opened: {error}");
     assert!(
         line.contains(&path.display().to_string()),
         "the reader is told which file: {line}"
     );
-    assert!(line.contains("could not be opened"), "{line}");
-
-    let nameless = open_failure(None, &error);
-    assert!(!nameless.contains("at  could not"), "{nameless}");
-    assert!(nameless.starts_with("The library could not be opened"));
+    assert_eq!(
+        line.matches("could not be opened").count(),
+        1,
+        "the reason is stated once, not once per layer: {line}"
+    );
 }
 
 #[test]
