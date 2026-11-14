@@ -6,6 +6,14 @@ the test targets, so `cargo test --workspace` stays green: every file is an inte
 
 Nothing branches on these files. They are evidence, not tests to keep passing.
 
+## After the fixes
+
+Against `main` after `fdd8f97` every repro but one passes: `core-adv_repro` 5, `core-adversarial` 4,
+`core-audit` 4, `core-repro` 3, `core-verify_probe` 2 of 3. The odd one out is
+`a_panic_in_a_batch_is_attributed_to_the_wrong_request`, which fails because it asserts the broken
+behaviour it was written to expose ("the second request got no answer at all"): the worker now
+answers `answered=[1, 2, 0]`, giving the second request its own id.
+
 ## Running one
 
 A repro that mutates the library should not touch this checkout, so run it from a throwaway
