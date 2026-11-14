@@ -116,6 +116,48 @@ fn a_typed_value_is_refused_by_the_key_that_does_not_hold_it() {
 }
 
 #[test]
+fn every_setting_round_trips() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    let mut weights = crate::fsrs::DEFAULT_WEIGHTS.to_vec();
+    weights[0] = 0.5;
+    let values = [
+        (SettingKey::NewPerDay, SettingValue::Number(37)),
+        (SettingKey::LearningStepMinutes, SettingValue::Number(25)),
+        (SettingKey::MaxIntervalDays, SettingValue::Number(120)),
+        (
+            SettingKey::Scheduler,
+            SettingValue::Scheduler(SchedulerKind::Fsrs),
+        ),
+        (SettingKey::Retention, SettingValue::Number(85)),
+        (SettingKey::Weights, SettingValue::Weights(weights)),
+        (SettingKey::ReverseDefault, SettingValue::Flag(true)),
+        (
+            SettingKey::Theme,
+            SettingValue::Theme(crate::store::Theme::Light),
+        ),
+        (SettingKey::Scale, SettingValue::Scale(1.25)),
+        (SettingKey::PreviewFontSize, SettingValue::Number(18)),
+    ];
+    for (key, value) in values {
+        db.apply(
+            &Command::SetSetting {
+                key,
+                value: value.clone(),
+            },
+            0,
+        )
+        .unwrap_or_else(|error| panic!("writing {}: {error}", key.as_str()));
+        assert_eq!(
+            db.settings().expect("settings").value(key),
+            value,
+            "{} did not read back what was written",
+            key.as_str()
+        );
+    }
+}
+
+#[test]
 fn a_refused_value_leaves_the_stored_one_alone() {
     let dir = TempDir::new().expect("temp dir");
     let db = open_temp(&dir);

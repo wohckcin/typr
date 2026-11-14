@@ -6,8 +6,9 @@ Depends on `review-reverse` and `fsrs-scheduling` for the keys it exposes.
 
 - [x] 1.1 `SettingKey { NewPerDay, LearningStepMinutes, MaxIntervalDays, Scheduler, Retention, Weights, ReverseDefault, Theme, Scale, PreviewFontSize }` with `parse`, `as_str`, `default_value`, and `Settings` grown to match; one validation function per group in `crates/typr-core/src/store/settings.rs`.
   - **Verification**: `cargo test -p typr-core --lib settings` covers each key's default, each range's two edges, a refused value keeping the old one, and a stored garbage value being reported.
-- [ ] 1.2 `Command::SetSetting { key: SettingKey, value: SettingValue }`, all callers and tests migrated.
+- [x] 1.2 `Command::SetSetting { key: SettingKey, value: SettingValue }`, all callers and tests migrated.
   - **Verification**: `every_setting_round_trips` writes each key and reads `Settings` back; `an_unknown_key_cannot_be_stored` no longer compiles a string key, asserted by the type alone and recorded in the task note.
+  - Note: `an_unknown_key_cannot_be_stored` is not a test any more because a `&str` does not type-check where a `SettingKey` is expected; `SettingKey::parse("new_cards")` returning `None` is covered by `a_text_value_no_build_writes_names_the_key_and_the_text`.
 
 ## 2. Screen
 
