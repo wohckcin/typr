@@ -26,7 +26,7 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Prove no schedule moves: snapshot the prompts before and after adding an embed.
+- [x] 3.1 Prove no schedule moves: snapshot the prompts before and after adding an embed.
       *Verification*: the prompt rows and due dates are identical, and the embedding card's
       side count is unchanged.
 

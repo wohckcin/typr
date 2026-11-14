@@ -1868,3 +1868,89 @@ fn resolution_prefers_the_nearest_deck() {
         "outside either deck the oldest card answers, so one text always opens one card"
     );
 }
+
+/// Every prompt row a card schedules, read back in the order its keys are named.
+fn prompt_rows(db: &Db, card: Id) -> Vec<(String, Option<Folded>)> {
+    db.prompt_keys(card)
+        .expect("prompt keys")
+        .into_iter()
+        .map(|key| {
+            let row = db.prompt(card, &key).expect("prompt row");
+            (key, row)
+        })
+        .collect()
+}
+
+/// The side count the list shows for a card.
+fn sides_of(db: &Db, card: Id) -> u32 {
+    db.snapshot()
+        .expect("snapshot")
+        .cards
+        .into_iter()
+        .find(|summary| summary.id == card)
+        .expect("the card is in the snapshot")
+        .sides
+}
+
+#[test]
+fn adding_an_embed_moves_no_prompt_or_due_date() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Biology");
+    // The target's body carries a side separator. If an embed were expanded before sides were
+    // counted, that separator would become a side of the card naming it; this card proves it does
+    // not.
+    let target = card(
+        &mut db,
+        deck,
+        "Mitosis\n\nMitosis is how one cell becomes two.\n---\nSecond line.",
+    );
+    assert_eq!(name_of(&db, target), "Mitosis");
+    let card = card(&mut db, deck, "front\n---\nback");
+
+    // Grade first, so every row has a due date that a rebuild would move if the text changed shape.
+    let keys = db.prompt_keys(card).expect("prompt keys");
+    for (offset, key) in keys.iter().enumerate() {
+        let at = 1_700_000_000_000 + i64::try_from(offset).expect("offset fits") * 60_000;
+        db.apply(
+            &Command::Grade {
+                card,
+                key: key.clone(),
+                grade: Grade::Remembered,
+                duration_ms: None,
+            },
+            at,
+        )
+        .expect("grade");
+    }
+    let before = prompt_rows(&db, card);
+    assert!(
+        before
+            .iter()
+            .any(|(_, row)| row.is_some_and(|row| row.due_at.is_some())),
+        "no graded row carries a due date, so this test would prove nothing: {before:?}"
+    );
+    let sides = sides_of(&db, card);
+    assert_eq!(sides, 2, "the card under test should start with two sides");
+
+    db.apply(
+        &Command::SaveCard {
+            id: card,
+            markdown: "front\n\n![[Mitosis]]\n---\nback".to_string(),
+        },
+        1_700_000_100_000,
+    )
+    .expect("save the card with an embed");
+
+    assert_eq!(
+        db.prompt_keys(card).expect("prompt keys"),
+        keys,
+        "an embed added or removed a prompt"
+    );
+    assert_eq!(prompt_rows(&db, card), before, "an embed moved a schedule");
+    assert_eq!(
+        sides_of(&db, card),
+        sides,
+        "an embed changed the card's side count"
+    );
+}
