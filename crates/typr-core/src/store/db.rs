@@ -190,7 +190,7 @@ impl Db {
                 self.conn.execute(
                     "INSERT INTO card (deck_id, markdown, sides, search_text, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-                    params![deck, markdown, faces_of(&shape), folded(markdown), now_ms],
+                    params![deck, markdown, hidden::faces(markdown), folded(markdown), now_ms],
                 )?;
                 let id = self.conn.last_insert_rowid();
                 self.sync_prompts(id, &shape)?;
@@ -327,7 +327,7 @@ impl Db {
                 let shape = hidden::shape(markdown);
                 let changed = self.conn.execute(
                     "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
-                    params![id, markdown, faces_of(&shape), folded(markdown), now_ms],
+                    params![id, markdown, hidden::faces(markdown), folded(markdown), now_ms],
                 )?;
                 self.sync_prompts(*id, &shape)?;
                 self.conn
@@ -538,6 +538,13 @@ impl Db {
             // The arm keeps the match total and gives a clear failure if it is ever staged.
             Command::ExportLibrary { target } => {
                 transfer::export_library(&self.path, target)?;
+                Ok(Outcome::Exported)
+            }
+            Command::ImportCsv { deck, source } => Ok(Outcome::Imported(transfer::import_csv(
+                self, *deck, source, now_ms,
+            )?)),
+            Command::ExportCsv { deck, target } => {
+                transfer::export_csv(self, *deck, target)?;
                 Ok(Outcome::Exported)
             }
         }
@@ -903,7 +910,7 @@ impl Db {
         }
         self.conn.execute(
             "UPDATE card SET markdown = ?2, sides = ?3, search_text = ?4, updated_at = ?5 WHERE id = ?1",
-            params![card, text, faces_of(&shape), search, now_ms],
+            params![card, text, hidden::faces(&text), search, now_ms],
         )?;
         self.sync_prompts(card, &shape)?;
         Ok(())
@@ -1629,15 +1636,6 @@ impl Db {
             })
         })
         .collect()
-    }
-}
-
-/// The faces a card shows. Hidden text wins over the separator, so such a card has one face however
-/// many separators its text carries.
-fn faces_of(shape: &Shape) -> i64 {
-    match shape {
-        Shape::Sides(sides) => i64::try_from(sides.len()).unwrap_or(i64::MAX),
-        Shape::Hidden { .. } => 1,
     }
 }
 

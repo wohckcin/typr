@@ -87,6 +87,15 @@ struct Span {
 }
 
 /// How a card is cut into prompts.
+/// The faces a card shows. Hidden text wins over the separator, so such a card has one face
+/// however many separators its text carries.
+pub fn faces(markdown: &str) -> i64 {
+    match shape(markdown) {
+        Shape::Sides(sides) => i64::try_from(sides.len()).unwrap_or(i64::MAX),
+        Shape::Hidden { .. } => 1,
+    }
+}
+
 pub fn shape(markdown: &str) -> Shape {
     let spans = spans(markdown);
     if spans.is_empty() {

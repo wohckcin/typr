@@ -745,3 +745,126 @@ fn a_manifest_count_mismatch_imports_nothing() {
     assert!(snapshot.cards.is_empty(), "no card survived the rollback");
     assert!(snapshot.decks.is_empty(), "no deck survived the rollback");
 }
+
+fn new_deck(db: &Db, name: &str) -> Id {
+    let Outcome::Deck(id) = db
+        .apply(
+            &Command::CreateDeck {
+                parent: None,
+                name: name.to_string(),
+            },
+            NOW,
+        )
+        .expect("a deck")
+    else {
+        panic!("a deck command returned something else");
+    };
+    id
+}
+
+fn one_card(db: &Db, deck: Id, markdown: &str) -> Id {
+    let Outcome::Card(id) = db
+        .apply(
+            &Command::CreateCard {
+                deck,
+                markdown: markdown.to_string(),
+            },
+            NOW,
+        )
+        .expect("a card")
+    else {
+        panic!("a card command returned something else");
+    };
+    id
+}
+
+#[test]
+fn a_csv_round_trip_keeps_sides_tags_and_fields() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let deck = new_deck(&db, "Biology");
+    let original = one_card(&db, deck, "front\n---\nback");
+    db.apply(
+        &Command::SetTags {
+            card: original,
+            tags: vec!["verb".to_string(), "irregular".to_string()],
+        },
+        NOW,
+    )
+    .expect("tags");
+    db.apply(
+        &Command::SetFields {
+            card: original,
+            fields: vec![
+                ("Word".to_string(), "front".to_string()),
+                ("Meaning".to_string(), "back".to_string()),
+            ],
+        },
+        NOW,
+    )
+    .expect("fields");
+
+    let csv = dir.path().join("cards.csv");
+    db.apply(
+        &Command::ExportCsv {
+            deck,
+            target: csv.clone(),
+        },
+        NOW,
+    )
+    .expect("the export");
+    let text = std::fs::read_to_string(&csv).expect("the exported file");
+    assert_eq!(
+        text.lines().next(),
+        Some("deck, sides, tags, fields, markdown"),
+        "the documented header leads the file"
+    );
+    assert!(
+        text.contains("\"front\n---\nback\""),
+        "the markdown cell keeps its newlines and quotes: {text}"
+    );
+
+    db.apply(&Command::ImportCsv { deck, source: csv }, NOW)
+        .expect("the import");
+
+    let snapshot = db.snapshot().expect("the library");
+    let imported = snapshot
+        .cards
+        .iter()
+        .find(|card| card.id != original)
+        .expect("the imported card");
+    assert_eq!(imported.markdown, "front\n---\nback");
+    assert_eq!(imported.sides, 2);
+    assert_eq!(imported.tags, ["irregular", "verb"], "tags come back whole");
+    assert_eq!(
+        imported.fields,
+        [
+            ("Meaning".to_string(), "back".to_string()),
+            ("Word".to_string(), "front".to_string())
+        ]
+    );
+}
+
+#[test]
+fn a_csv_without_the_header_is_refused() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let deck = new_deck(&db, "Biology");
+    let path = dir.path().join("not-cards.csv");
+    std::fs::write(&path, "front,back\none,two\n").expect("a file without the header");
+
+    let error = db
+        .apply(&Command::ImportCsv { deck, source: path }, NOW)
+        .expect_err("the header does not name the columns");
+    let StoreError::Malformed { reason, .. } = error else {
+        panic!("expected the file to be called malformed, got {error:?}");
+    };
+    assert!(
+        reason.contains("missing") && reason.contains("deck") && reason.contains("markdown"),
+        "the reason names the missing columns: {reason}"
+    );
+    assert!(
+        db.snapshot().expect("the library").cards.is_empty(),
+        "nothing was imported"
+    );
+}

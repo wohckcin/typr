@@ -550,6 +550,14 @@ pub enum Command {
     ExportLibrary {
         target: std::path::PathBuf,
     },
+    ImportCsv {
+        deck: Id,
+        source: std::path::PathBuf,
+    },
+    ExportCsv {
+        deck: Id,
+        target: std::path::PathBuf,
+    },
     History {
         card: Id,
     },
@@ -716,6 +724,11 @@ pub enum StoreError {
         path: std::path::PathBuf,
         reason: String,
     },
+    #[error("the file {path} is not in the format this build reads: {reason}")]
+    Malformed {
+        path: std::path::PathBuf,
+        reason: String,
+    },
     /// A Mochi export whose format version this build does not know: refused before writing.
     #[error(
         "the Mochi export {path} records format version {version}, but this build reads version {supported}"
@@ -817,6 +830,17 @@ pub trait Store: Send + Sync {
     fn set_pinned(&self, card: Id, pinned: bool) -> Result<u64, StoreError>;
     fn history(&self, card: Id) -> Result<u64, StoreError>;
     fn stats(&self, from_ms: i64, to_ms: i64) -> Result<u64, StoreError>;
+
+    /// Import a Mochi archive, copying its pictures into `attachments`.
+    fn import_archive(
+        &self,
+        archive: &std::path::Path,
+        attachments: &std::path::Path,
+    ) -> Result<u64, StoreError>;
+    /// Copy the whole library into `target` as one `.typr` file.
+    fn export_library(&self, target: &std::path::Path) -> Result<u64, StoreError>;
+    fn import_csv(&self, deck: Id, source: &std::path::Path) -> Result<u64, StoreError>;
+    fn export_csv(&self, deck: Id, target: &std::path::Path) -> Result<u64, StoreError>;
 }
 
 #[cfg(test)]

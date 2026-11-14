@@ -393,6 +393,37 @@ impl Store for Handle {
     fn stats(&self, from_ms: i64, to_ms: i64) -> Result<u64, StoreError> {
         self.submit(Command::Stats { from_ms, to_ms })
     }
+
+    fn import_archive(
+        &self,
+        archive: &std::path::Path,
+        attachments: &std::path::Path,
+    ) -> Result<u64, StoreError> {
+        self.submit(Command::ImportArchive {
+            archive: archive.to_path_buf(),
+            attachments: attachments.to_path_buf(),
+        })
+    }
+
+    fn export_library(&self, target: &std::path::Path) -> Result<u64, StoreError> {
+        self.submit(Command::ExportLibrary {
+            target: target.to_path_buf(),
+        })
+    }
+
+    fn import_csv(&self, deck: Id, source: &std::path::Path) -> Result<u64, StoreError> {
+        self.submit(Command::ImportCsv {
+            deck,
+            source: source.to_path_buf(),
+        })
+    }
+
+    fn export_csv(&self, deck: Id, target: &std::path::Path) -> Result<u64, StoreError> {
+        self.submit(Command::ExportCsv {
+            deck,
+            target: target.to_path_buf(),
+        })
+    }
 }
 
 fn work(
