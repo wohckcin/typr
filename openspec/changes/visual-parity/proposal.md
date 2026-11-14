@@ -17,8 +17,9 @@ typography that separates a question from its answer.
   surface, all derived from the kit's tokens rather than literals.
 - The review surface becomes a centred card on a dim canvas, with the answer separated from the question
   by space and type weight, not by a border.
-- The library becomes a list of card objects with a name, a preview line and its metadata; the sidebar
-  groups Decks, Tags and Views under headings, with counts.
+- The library becomes a grid of card tiles whose shape `card-grid` decides, and the sidebar becomes
+  the grouped navigator `sidebar` describes; view modes other than the grid belong to `deck-views`.
+  What remains here is colour, type and spacing.
 - The editor gains a toolbar for the actions that are currently loose buttons, and an inline preview that
   shows the masked form.
 - Every screen gets an empty state that says what to do next.
