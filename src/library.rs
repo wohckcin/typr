@@ -38,6 +38,33 @@ pub trait Host: 'static {
     /// Move a card to the trash, where it waits until the user empties it.
     fn trash_card(&mut self, _card: Id) {}
 
+    /// Add a deck under the selected one, or at the top when none is selected.
+    fn new_deck(&mut self) {}
+
+    /// Rename a deck. A host with no store cannot, and says so by doing nothing.
+    fn rename_deck(&mut self, _deck: Id, _name: &str) {}
+
+    /// Move a deck under another, or to the top of the list when `parent` is `None`.
+    fn move_deck(&mut self, _deck: Id, _parent: Option<Id>) {}
+
+    /// Close the name field and send the name. False when no deck was being renamed.
+    fn finish_rename(&mut self) -> bool {
+        match self.library_mut().take_rename() {
+            Some((deck, name)) => {
+                self.rename_deck(deck, &name);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Open the name field on the selected deck.
+    fn begin_rename(&mut self) {
+        if let Some(deck) = self.library().selected_deck {
+            self.library_mut().start_rename(deck);
+        }
+    }
+
     /// Bring a card out of the archive or the trash. A host with no store cannot, and says so by
     /// doing nothing.
     fn restore_card(&mut self, _card: Id) {}
@@ -73,6 +100,12 @@ pub struct Library {
     pub built_rows: AtomicUsize,
     /// Whether the empty-trash question is on screen. Emptying destroys history, so it asks.
     pub confirming_empty: bool,
+    /// The deck whose name is being edited, if any.
+    pub renaming: Option<Id>,
+    /// The name being typed, kept apart from the deck so a cancel costs nothing.
+    pub rename_buffer: TextEdit,
+    /// The deck waiting for a destination, while the sidebar offers itself as one.
+    pub moving: Option<Id>,
 }
 
 impl Default for Library {
@@ -87,6 +120,9 @@ impl Default for Library {
             visible: Vec::new(),
             built_rows: AtomicUsize::new(0),
             confirming_empty: false,
+            renaming: None,
+            rename_buffer: TextEdit::default(),
+            moving: None,
         }
     }
 }
@@ -101,6 +137,26 @@ impl Library {
     /// The cards on screen, in the order they are drawn.
     pub fn cards(&self) -> &[CardSummary] {
         &self.visible
+    }
+
+    /// Open the name field on a deck, holding what the deck is called now.
+    pub fn start_rename(&mut self, deck: Id) {
+        if let Some(found) = self.snapshot.decks.iter().find(|own| own.id == deck) {
+            self.rename_buffer.replace_text(found.name.clone());
+            self.renaming = Some(deck);
+        }
+    }
+
+    /// The name field, for the input that edits it.
+    pub fn rename_field(&mut self) -> &mut TextEdit {
+        &mut self.rename_buffer
+    }
+
+    /// Finish the edit, handing back what was typed. Taking it closes the field, so a rename that
+    /// the store refuses does not leave the field open behind the failure.
+    pub fn take_rename(&mut self) -> Option<(Id, String)> {
+        let deck = self.renaming?;
+        Some((deck, self.rename_buffer.text.clone()))
     }
 
     /// Show another slice of the library: active cards, the archive, or the trash.
@@ -217,16 +273,37 @@ fn empty_trash_button<S: Host>() -> El {
         .key("empty-trash")
 }
 
-fn deck_row<S: Host>(deck: &Deck, selected: bool) -> El {
+fn deck_row<S: Host>(deck: &Deck, selected: bool, renaming: bool, moving: bool) -> El {
     let t = tok::theme(true);
     let id = deck.id;
+    if renaming {
+        return row()
+            .key(format!("deck-{}", deck.id))
+            .h(30.0)
+            .px(10.0)
+            .center_y()
+            .fill(t.control_off)
+            .child(
+                text_input(&TextEdit::default(), type_::LABEL)
+                    .key("deck-name")
+                    .single_line()
+                    .grow(1.0)
+                    .on_edit(|s: &mut S| s.library_mut().rename_field())
+                    .on_submit(|s: &mut S, _| {
+                        s.finish_rename();
+                    }),
+            )
+            .on_press(move |s: &mut S| s.library_mut().start_rename(id));
+    }
     row()
         .key(format!("deck-{}", deck.id))
         .h(30.0)
         .px(10.0)
         .radius(6.0)
         .center_y()
-        .fill(if selected {
+        .fill(if moving {
+            tok::accent(1, true).alpha(0.35)
+        } else if selected {
             tok::accent(0, true).alpha(0.85)
         } else {
             t.control_off.alpha(0.0)
@@ -237,6 +314,14 @@ fn deck_row<S: Host>(deck: &Deck, selected: bool) -> El {
                 .color(if selected { rune::Color::WHITE } else { t.text }),
         )
         .on_press(move |s: &mut S| {
+            // While a deck is being moved, every deck is a possible new parent.
+            if let Some(moving) = s.library().moving {
+                s.library_mut().moving = None;
+                if moving != id {
+                    s.move_deck(moving, Some(id));
+                }
+                return;
+            }
             let library = s.library_mut();
             library.selected_deck = Some(id);
             library.refresh();
@@ -266,13 +351,51 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         })
         .child(text("All cards").font(type_::BODY).color(t.text))
         .on_press(|s: &mut S| {
+            if let Some(moving) = s.library().moving {
+                s.library_mut().moving = None;
+                s.move_deck(moving, None);
+                return;
+            }
             let library = s.library_mut();
             library.selected_deck = None;
             library.refresh();
         });
     sidebar = sidebar.child(all);
+    let renaming = library.renaming;
     for deck in &library.snapshot.decks {
-        sidebar = sidebar.child(deck_row::<S>(deck, library.selected_deck == Some(deck.id)));
+        sidebar = sidebar.child(deck_row::<S>(
+            deck,
+            library.selected_deck == Some(deck.id),
+            renaming == Some(deck.id),
+            library.moving.is_some(),
+        ));
+    }
+    sidebar = sidebar.child(
+        Button::new("New deck")
+            .variant(ButtonVariant::Ghost)
+            .on_press(|s: &mut S| s.new_deck())
+            .build(&KIT)
+            .key("new-deck"),
+    );
+    if library.selected_deck.is_some() {
+        sidebar = sidebar
+            .child(
+                Button::new("Rename")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press(|s: &mut S| s.begin_rename())
+                    .build(&KIT)
+                    .key("rename-deck"),
+            )
+            .child(
+                Button::new("Move")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press(|s: &mut S| {
+                        let selected = s.library().selected_deck;
+                        s.library_mut().moving = selected;
+                    })
+                    .build(&KIT)
+                    .key("move-deck"),
+            );
     }
     sidebar
 }

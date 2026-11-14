@@ -95,6 +95,27 @@ fn remember(
     }
 }
 
+impl State {
+    /// A deck name nothing else is called, so asking for a new deck always works.
+    fn free_deck_name(&self) -> String {
+        let taken: Vec<&str> = self
+            .library
+            .snapshot()
+            .decks
+            .iter()
+            .map(|deck| deck.name.as_str())
+            .collect();
+        let mut index = 1;
+        loop {
+            let candidate = format!("Deck {index}");
+            if !taken.contains(&candidate.as_str()) {
+                return candidate;
+            }
+            index += 1;
+        }
+    }
+}
+
 impl library::Host for State {
     fn library(&self) -> &Library {
         &self.library
@@ -117,6 +138,38 @@ impl library::Host for State {
     fn trash_card(&mut self, card: Id) {
         let sent = match self.store.as_ref() {
             Some(store) => store.trash_card(card),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
+    }
+
+    fn new_deck(&mut self) {
+        let parent = self.library.selected_deck;
+        let name = self.free_deck_name();
+        let sent = match self.store.as_ref() {
+            Some(store) => store.create_deck(parent, &name),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
+    }
+
+    fn rename_deck(&mut self, deck: Id, name: &str) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.rename_deck(deck, name),
+            None => Err(StoreError::Closed),
+        };
+        if let Err(error) = sent {
+            self.failure = Some(error.to_string());
+        }
+    }
+
+    fn move_deck(&mut self, deck: Id, parent: Option<Id>) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.move_deck(deck, parent),
             None => Err(StoreError::Closed),
         };
         if let Err(error) = sent {

@@ -679,3 +679,134 @@ fn deleting_a_card_keeps_its_history_until_the_trash_is_emptied() {
         "and its review records went with it"
     );
 }
+
+/// Wait for the published library to hold `count` decks, then draw it.
+fn wait_for_decks(state: &mut State, count: usize) {
+    for _ in 0..200 {
+        refresh_library(state);
+        if state.library.snapshot().decks.len() == count {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    panic!(
+        "expected {count} decks, found {}",
+        state.library.snapshot().decks.len()
+    );
+}
+
+#[test]
+fn decks_are_created_renamed_and_moved_from_the_sidebar() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        seeded: true,
+        ..State::default()
+    };
+    wait_for_decks(&mut state, 1);
+
+    // The sidebar offers the three deck actions.
+    let mut drawn = State {
+        library: Library::seeded_mixed(),
+        ..State::default()
+    };
+    drawn.library.selected_deck = Some(1);
+    let mut runtime = rune::Runtime::new(drawn, view, (900.0, 600.0), rune::Env::new(true, 1.0));
+    runtime.frame(0.0);
+    for key in ["new-deck", "rename-deck", "move-deck"] {
+        assert!(runtime.find(key).is_some(), "{key} is offered");
+    }
+    drop(runtime);
+
+    library::Host::new_deck(&mut state);
+    wait_for_decks(&mut state, 2);
+    library::Host::new_deck(&mut state);
+    wait_for_decks(&mut state, 3);
+    let names: Vec<String> = state
+        .library
+        .snapshot()
+        .decks
+        .iter()
+        .map(|deck| deck.name.clone())
+        .collect();
+    let existing = state.library.snapshot().decks[0].name.clone();
+    assert_eq!(
+        names,
+        vec![existing, "Deck 1".to_string(), "Deck 2".to_string()],
+        "a new deck gets a name nothing else holds"
+    );
+    let third = state.library.snapshot().decks[2].id;
+    let second = state.library.snapshot().decks[1].id;
+
+    // Renaming goes through the field the row draws.
+    state.library.selected_deck = Some(third);
+    library::Host::begin_rename(&mut state);
+    assert_eq!(state.library.renaming, Some(third), "the field opens");
+    state.library.rename_field().replace_text("Languages");
+    assert!(library::Host::finish_rename(&mut state));
+    let mut name = String::new();
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        name = state
+            .library
+            .snapshot()
+            .decks
+            .iter()
+            .find(|deck| deck.id == third)
+            .map(|deck| deck.name.clone())
+            .expect("the renamed deck");
+        if name == "Languages" {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(name, "Languages", "the new name is stored");
+
+    // Moving makes the third deck a child of the second.
+    library::Host::move_deck(&mut state, third, Some(second));
+    let mut parent = None;
+    for _ in 0..200 {
+        refresh_library(&mut state);
+        parent = state
+            .library
+            .snapshot()
+            .decks
+            .iter()
+            .find(|deck| deck.id == third)
+            .and_then(|deck| deck.parent);
+        if parent == Some(second) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(
+        parent,
+        Some(second),
+        "the deck now sits under its new parent"
+    );
+
+    // Two decks at the top cannot share a name, and the screen says so.
+    let taken = state.library.snapshot().decks[0].name.clone();
+    state.library.selected_deck = Some(second);
+    library::Host::begin_rename(&mut state);
+    state.library.rename_field().replace_text(taken);
+    library::Host::finish_rename(&mut state);
+    for _ in 0..200 {
+        // Answers reach the screen through the frame step, which is what drain does.
+        let mut wake = None;
+        frame_step(&mut state, 0, &mut wake);
+        if state.failure.is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        state
+            .failure
+            .as_deref()
+            .is_some_and(|why| why.contains("UNIQUE")),
+        "a duplicate name is refused out loud, got {:?}",
+        state.failure
+    );
+}
