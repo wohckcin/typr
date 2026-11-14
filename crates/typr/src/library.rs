@@ -176,6 +176,12 @@ impl Library {
     /// Choose which deck the list shows, redrawing it for that deck.
     pub fn select_deck(&mut self, deck: Option<Id>) {
         self.selected_deck = deck;
+        // A name field belongs to the deck it was opened on, so moving to another deck abandons
+        // it: otherwise the only way out of the field is to rename the deck.
+        if self.renaming != deck {
+            self.renaming = None;
+            self.rename_buffer = TextEdit::default();
+        }
         self.refresh();
     }
 

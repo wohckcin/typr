@@ -202,3 +202,29 @@ fn the_rename_field_keeps_each_keystroke() {
     }
     assert_eq!(runtime.state.rename_buffer.text, "Zoo");
 }
+
+#[test]
+fn selecting_another_deck_abandons_the_name_field() {
+    let mut library = Library::seeded_nested();
+    library.select_deck(Some(1));
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (960.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+
+    let (x, y) = runtime.find("rename-deck").expect("the rename button");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+    assert_eq!(runtime.state.renaming, Some(1));
+
+    let (x, y) = runtime.find("deck-2").expect("the second deck");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.1);
+    assert_eq!(runtime.state.renaming, None, "the field stayed open");
+    assert_eq!(runtime.state.snapshot.decks[0].name, "Biology");
+}
