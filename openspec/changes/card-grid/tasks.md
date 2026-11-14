@@ -16,7 +16,7 @@
       *Verification*: a line holding one tagged and one untagged card reports a row height equal to the
       tallest tile, and the untagged tile stays shorter and draws no chip.
 
-- [ ] 1.1c Draw hidden text masked on a tile exactly as a review face draws it, and fail if the answer text
+- [x] 1.1c Draw hidden text masked on a tile exactly as a review face draws it, and fail if the answer text
       reaches the tile.
       *Verification*: a card whose first side holds `{{insulin}}` renders a masked span and the tile's strings
       never contain `insulin`.

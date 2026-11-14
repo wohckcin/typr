@@ -1,4 +1,4 @@
-use super::{State, chips, hidden_sides, state, words};
+use super::{State, chips, first_side, hidden_sides, state, words};
 use crate::library::Library;
 use typr_core::store::{CardSummary, Id};
 
@@ -232,4 +232,20 @@ fn a_tagged_tile_is_not_shorter_than_an_untagged_one() {
         tall[3],
         short[3]
     );
+}
+
+#[test]
+fn a_tile_shows_the_masked_question_of_a_card_that_hides_its_answer() {
+    let shown = first_side(&card(1, "The {{gland}} is small."));
+
+    assert_eq!(
+        shown, "The [ … ] is small.",
+        "the tile asks the question, not the answer"
+    );
+    assert!(!shown.contains("gland"), "the answer stays off the grid");
+}
+
+#[test]
+fn a_tile_shows_the_first_side_of_a_card_with_sides() {
+    assert_eq!(first_side(&card(2, "front\n---\nback")), "front");
 }

@@ -336,10 +336,19 @@ fn chip_row(tags: Vec<String>, width: f32) -> El {
 
 /// The card's first side, which is what a tile shows.
 pub fn first_side(card: &CardSummary) -> String {
-    typr_core::sides::split(&card.markdown)
-        .first()
-        .map(|side| (*side).to_string())
-        .unwrap_or_default()
+    let shape = typr_core::hidden::shape(&card.markdown);
+    match &shape {
+        // A tile shows the question, so a card that hides its answer is drawn masked.
+        typr_core::hidden::Shape::Hidden { .. } => match shape.prompt_keys().first() {
+            Some(key) => typr_core::hidden::masked(&card.markdown, &shape, key),
+            None => String::new(),
+        },
+        // A split side keeps its trailing newline, which would read as an empty line in a tile.
+        typr_core::hidden::Shape::Sides(_) => typr_core::sides::split(&card.markdown)
+            .first()
+            .map(|side| side.trim_end().to_string())
+            .unwrap_or_default(),
+    }
 }
 
 /// A key that changes when the card's first side or its identity does, so the parse is reused
