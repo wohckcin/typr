@@ -14,7 +14,7 @@ the quit record. It is the largest file in the repository and it is a folder pre
 
 ## What Changes
 
-- App-level tests split by subject into `crates/typr/src/tests/{session,library,editor,diagnostics}.rs`
+- App-level tests split by subject into `crates/typr/src/tests/{session_flow,library_flow,editor_flow,diagnostics}.rs`
   behind the same `#[cfg(test)] mod tests;`, with the shared fixtures left in `crates/typr/src/tests/mod.rs`.
 - The four small modules of `typr-core` — `clock`, `day`, `shuffle`, `sides` — move their tests inline into
   the module they test, and their `tests.rs` siblings are deleted.

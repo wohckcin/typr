@@ -32,7 +32,9 @@ The two layouts differ in bookkeeping, not in privacy or reachability.
 A sibling `tests.rs` earns its four boilerplate lines when the module is long enough that a reader wants the
 code without the spec. Below that it is a second file to open for no gain. The threshold I applied is the
 one the tree already suggests: modules under about 120 lines with test files as long as their code carry the
-tests inline (`clock` 58/28, `day` 26/45, `shuffle` 40/41, `sides` 45/45); everything else keeps a sibling.
+tests inline (`clock` 58/28, `day` 26/45, `shuffle` 40/41, `sides` 45/45); everything else keeps a sibling. `hidden` (279 with 140 test lines) and `screen` (19
+lines with no test file at all) were each checked against that threshold: `hidden` keeps its sibling, and
+`screen` has nothing to move.
 
 ### A binary's tests are split by subject, not by size
 
@@ -40,6 +42,13 @@ tests inline (`clock` 58/28, `day` 26/45, `shuffle` 40/41, `sides` 45/45); every
 describes the whole app and nothing in particular. Splitting it into `session`, `library`, `editor` and
 `diagnostics` behind the same `mod tests;` keeps `main.rs`'s declaration unchanged, keeps the shared fixtures
 in one place, and makes `cargo test --bin typr session::` a useful filter.
+
+### A child module may not take a screen's name
+
+The four subjects are named `*_flow` because a child named `editor` or `library` shadows `crate::editor`
+and `crate::library` inside itself, and every test that writes `library::Host::new_deck(&mut state)` or
+`editor::Choice::Discard` then fails with `cannot find Choice in editor` and `trait import Host is
+private`. The first attempt at the split failed exactly that way.
 
 ### Fixtures stay in the module root
 
@@ -51,6 +60,6 @@ it would be a second refactor with no reader benefit.
 
 - A child module that loses access to an import compiles once and then not again; the mitigation is that
   `tests/mod.rs` keeps every `use` the children need and the children glob-import it.
-- Test namespaces change (`typr::tests::a_grade…` becomes `typr::tests::session::a_grade…`), so a saved
+- Test namespaces change (`typr::tests::a_grade…` becomes `typr::tests::session_flow::a_grade…`), so a saved
   `cargo test <filter>` string may need the module prefix. No CI filter depends on it.
 - Inlining four test files makes those modules longer; all four stay under 100 lines.
