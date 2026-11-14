@@ -382,3 +382,61 @@ fn a_mask_can_be_made_without_a_pointer() {
         "and it asks in its own group"
     );
 }
+
+/// A diagram is authored before it exists: the picture and the rectangles are drawn on a card that
+/// has no id yet, so they have to wait for it rather than be dropped.
+#[test]
+fn rectangles_drawn_before_the_card_exists_are_stored_with_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(
+        typr_core::store::Db::open(&path).expect("open"),
+        Box::new(typr_core::clock::SystemClock),
+        waker,
+    )
+    .expect("spawn");
+
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    state.editor = Editor::new(None, String::new());
+    state.editor.attachments =
+        typr::attachments::Attachments::detached(dir.path().join("attachments"));
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/plate.png");
+    state.editor.choose_image(&fixture).expect("a picture");
+    state.editor.add_rect(MaskRect::new(0.1, 0.1, 0.2, 0.2));
+    // No deck yet, so the deck is stored first and the card follows its answer.
+    state.persist();
+
+    for _ in 0..200 {
+        state.drain();
+        if state.editor.card.is_some() && state.pending_masks.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let card = state.editor.card.expect("the card adopted its id");
+    assert!(
+        state.pending_masks.is_empty(),
+        "the rectangles were handed over once the card had an id"
+    );
+
+    drop(state.store.take());
+    let db = typr_core::store::Db::open(&path).expect("reopen");
+    let snapshot = db.snapshot().expect("snapshot");
+    let stored = snapshot
+        .cards
+        .iter()
+        .find(|found| found.id == card)
+        .expect("the card");
+    assert_eq!(stored.kind, CardKind::Diagram, "the card is a diagram");
+    let masks = db.masks(card).expect("the rectangles");
+    assert_eq!(
+        masks.len(),
+        1,
+        "the rectangle drawn before the save is there"
+    );
+    assert_eq!(masks[0].group, 1);
+}

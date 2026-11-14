@@ -665,7 +665,7 @@ fn a_reverse_review_says_so() {
 /// A diagram card is masked one group at a time: the covers sit over the rectangles of the group
 /// being asked and nowhere else, so the other group stays in sight while the question is open.
 #[test]
-fn a_diagram_prompt_covers_only_the_group_it_asks() {
+fn a_diagram_review_covers_only_its_own_group() {
     let state = State {
         screen: Screen::Session,
         session: Session::new(
@@ -744,4 +744,91 @@ fn a_diagram_prompt_covers_only_the_group_it_asks() {
         })
         .count();
     assert_eq!(after, 0, "a revealed diagram has nothing covered");
+}
+
+#[test]
+fn a_diagram_review_shows_its_caption() {
+    let state = State {
+        screen: Screen::Session,
+        session: Session::new(
+            Queue::New,
+            vec![Entry::mask_group(
+                1,
+                "mask:1",
+                "plate.png",
+                Some("The plate: name the shaded regions".to_string()),
+                vec![MaskRect::new(0.1, 0.1, 0.2, 0.2)],
+                0,
+            )],
+        ),
+        ..State::default()
+    };
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 640.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+
+    let caption = runtime
+        .elements()
+        .into_iter()
+        .find(|element| element.key.as_deref() == Some("diagram-caption"))
+        .and_then(|element| element.text.clone());
+    assert_eq!(
+        caption.as_deref(),
+        Some("The plate: name the shaded regions"),
+        "the card says what the picture shows"
+    );
+}
+
+#[test]
+fn a_group_prompt_carries_only_its_own_rectangles() {
+    // One card, two groups. The prompt names the group, so the face must not carry the other
+    // group's rectangles: they belong to the next question.
+    let card = CardSummary {
+        id: 7,
+        kind: CardKind::Diagram,
+        image: Some("plate.png".to_string()),
+        caption: Some("A plate".to_string()),
+        masks: vec![
+            MaskRow {
+                group: 1,
+                rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
+            },
+            MaskRow {
+                group: 1,
+                rect: MaskRect::new(0.4, 0.1, 0.2, 0.2),
+            },
+            MaskRow {
+                group: 2,
+                rect: MaskRect::new(0.7, 0.1, 0.2, 0.2),
+            },
+        ],
+        ..CardSummary::default()
+    };
+
+    let first = crate::entry_for(&card, "mask:1", 0).expect("the first group is asked");
+    let (image, caption, masks) = first.faces[0].picture().expect("a picture face");
+    assert_eq!(image, "plate.png");
+    assert_eq!(caption, Some("A plate"));
+    assert_eq!(
+        masks,
+        &[
+            MaskRect::new(0.1, 0.1, 0.2, 0.2),
+            MaskRect::new(0.4, 0.1, 0.2, 0.2)
+        ],
+        "only the asked group's rectangles are covered"
+    );
+
+    let second = crate::entry_for(&card, "mask:2", 0).expect("the second group is asked");
+    let (_, _, masks) = second.faces[0].picture().expect("a picture face");
+    assert_eq!(masks, &[MaskRect::new(0.7, 0.1, 0.2, 0.2)]);
+
+    assert!(
+        crate::entry_for(&card, "mask:3", 0).is_none(),
+        "a group with no rectangles asks nothing"
+    );
 }

@@ -150,11 +150,13 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
     let unmasked = s.session().revealed() > 0 || !face.unmasks();
     let (pane_w, pane_h) = s.picture_pane();
 
-    let mut pane = col()
-        .key("diagram-face")
+    // The picture box is measured on its own, because a cover is a fraction of the picture and the
+    // caption below it is not part of that fraction.
+    let mut picture_box = col()
+        .key("picture-box")
         .w_full()
-        .gap(6.0)
         .on_layout(|s: &mut S, rect| s.set_picture_pane(rect[2], rect[3]));
+    let mut pane = col().key("diagram-face").w_full().gap(6.0);
 
     match s.picture(image) {
         Some(picture) => {
@@ -162,12 +164,12 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
             if let Some([w, _]) = picture.size() {
                 drawn = drawn.max_w(w as f32);
             }
-            pane = pane.child(drawn.pixels(picture.pixels()));
+            picture_box = picture_box.child(drawn.pixels(picture.pixels()));
         }
         None => {
             // A picture that cannot be read still gets its pane, so the cover has somewhere to sit
             // and the card says what it wanted to show.
-            pane = pane.child(
+            picture_box = picture_box.child(
                 col()
                     .w_full()
                     .h(160.0)
@@ -192,7 +194,7 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
             let top = (mask.y * pane_h).clamp(0.0, pane_h);
             let width = (mask.w * pane_w).min(pane_w - left);
             let height = (mask.h * pane_h).min(pane_h - top);
-            pane = pane.child(
+            picture_box = picture_box.child(
                 col()
                     .key(format!("cover-{index}"))
                     .absolute(left, top)
@@ -204,6 +206,7 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
         }
     }
 
+    pane = pane.child(picture_box);
     if let Some(caption) = caption {
         pane = pane.child(
             text(caption.to_owned())
