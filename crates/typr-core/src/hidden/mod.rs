@@ -222,7 +222,7 @@ fn group_prefix(inner: &str) -> (u32, usize) {
 }
 
 /// The code regions of `markdown`: whole fenced blocks and inline backtick spans.
-fn code_ranges(markdown: &str) -> Vec<Range<usize>> {
+pub(crate) fn code_ranges(markdown: &str) -> Vec<Range<usize>> {
     let mut ranges = Vec::new();
     let mut offset = 0;
     let mut fence: Option<Fence> = None;
@@ -297,7 +297,7 @@ fn find_run(line: &str, from: usize, ticks: usize) -> Option<usize> {
     None
 }
 
-fn inside(ranges: &[Range<usize>], at: usize) -> bool {
+pub(crate) fn inside(ranges: &[Range<usize>], at: usize) -> bool {
     ranges
         .iter()
         .any(|range| range.start <= at && at < range.end)
