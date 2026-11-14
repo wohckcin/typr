@@ -6,8 +6,9 @@
 
 use crate::store::{Grade, Phase};
 
+pub use typr_core::day::DAY_MS;
+
 pub const MINUTE_MS: i64 = 60_000;
-pub const DAY_MS: i64 = 24 * 60 * MINUTE_MS;
 
 /// The step a new card's first success, and every failure, waits.
 pub const LEARNING_STEP_MS: i64 = 10 * MINUTE_MS;

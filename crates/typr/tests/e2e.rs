@@ -2,11 +2,11 @@
 
 use std::path::Path;
 
-use typr_core::clock::{Clock, TestClock};
-use typr::day;
 use typr::store::{
     Command, Db, DuePrompt, Grade, Id, NewPrompt, Outcome, Phase, ReviewRow, StoreError,
 };
+use typr_core::clock::{Clock, TestClock};
+use typr_core::day;
 
 const NOON: i64 = 1_760_000_000_000;
 const DAY: i64 = 24 * 60 * 60 * 1000;

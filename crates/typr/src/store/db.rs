@@ -570,19 +570,19 @@ impl Db {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        let today = crate::day::study_day(now_ms, offset_ms);
+        let today = typr_core::day::study_day(now_ms, offset_ms);
         // Stable sort by overdue study days, so equal days keep the query's order until shuffled.
-        due.sort_by_key(|prompt| -(today - crate::day::study_day(prompt.due_at, offset_ms)));
+        due.sort_by_key(|prompt| -(today - typr_core::day::study_day(prompt.due_at, offset_ms)));
 
         let mut shuffle = typr_core::shuffle::Shuffle::new(seed);
         let mut ordered = Vec::with_capacity(due.len());
         let mut rest = due.as_slice();
         while let Some(first) = rest.first() {
-            let overdue = today - crate::day::study_day(first.due_at, offset_ms);
+            let overdue = today - typr_core::day::study_day(first.due_at, offset_ms);
             let same = rest
                 .iter()
                 .position(|prompt| {
-                    today - crate::day::study_day(prompt.due_at, offset_ms) != overdue
+                    today - typr_core::day::study_day(prompt.due_at, offset_ms) != overdue
                 })
                 .unwrap_or(rest.len());
             let mut group: Vec<DuePrompt> = rest[..same].to_vec();
@@ -606,7 +606,7 @@ impl Db {
             .collect::<Result<Vec<_>, _>>()?;
         let count = firsts
             .into_iter()
-            .filter(|at| crate::day::study_day(*at, offset_ms) == day)
+            .filter(|at| typr_core::day::study_day(*at, offset_ms) == day)
             .count();
         Ok(u32::try_from(count).unwrap_or(u32::MAX))
     }
@@ -637,7 +637,7 @@ impl Db {
             .collect::<Result<Vec<_>, _>>()?;
 
         let allowance = self.settings()?.new_per_day as usize;
-        let today = crate::day::study_day(now_ms, offset_ms);
+        let today = typr_core::day::study_day(now_ms, offset_ms);
         let learned = self.learned_on(today, offset_ms)? as usize;
         let room = allowance.saturating_sub(learned);
 
@@ -650,7 +650,7 @@ impl Db {
 
     /// Grades inside one study day, so a summary and a cap agree about which day it is.
     pub fn stats_for_day(&self, day: i64, offset_ms: i64) -> Result<Stats, StoreError> {
-        let (from, to) = crate::day::study_day_bounds(day, offset_ms);
+        let (from, to) = typr_core::day::study_day_bounds(day, offset_ms);
         self.stats(from, to)
     }
 

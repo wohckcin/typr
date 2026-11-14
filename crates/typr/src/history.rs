@@ -43,7 +43,7 @@ impl Host for History {
 
 /// A moment as the user's clock shows it, `2026-11-14 09:05`.
 fn when(at_ms: i64) -> String {
-    let seconds = i32::try_from(crate::day::local_offset_ms() / 1000).unwrap_or(0);
+    let seconds = i32::try_from(crate::day_offset::local_offset_ms() / 1000).unwrap_or(0);
     let Ok(offset) = time::UtcOffset::from_whole_seconds(seconds) else {
         return String::new();
     };

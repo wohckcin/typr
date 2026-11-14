@@ -3,7 +3,7 @@
 use rune::tok::{self, type_};
 use rune::{AppSpec, Cx, El, Tx, Waker, col, row, text};
 use typr::attachments::Attachments;
-use typr_core::clock::Clock;
+use typr::day_offset;
 use typr::editor::{self, Editor};
 use typr::history::{self, History};
 use typr::library::{self, Library};
@@ -11,8 +11,8 @@ use typr::screen::{Queue, Screen};
 use typr::session::{Entry, Session};
 use typr::store::{self, CardMode, Grade, Handle, Id, Outcome, Store, StoreError};
 use typr::study::{self, Host};
-use typr::day;
-use typr_core::sides;
+use typr_core::clock::Clock;
+use typr_core::{day, sides};
 
 /// A named starting state for a headless `--scene` run.
 type Scene = (&'static str, fn(&mut State));
@@ -383,7 +383,7 @@ impl State {
     fn start_session(&mut self, queue: Queue) {
         let Some(store) = &self.store else { return };
         let now = typr_core::clock::SystemClock.now_ms();
-        let offset = day::local_offset_ms();
+        let offset = day_offset::local_offset_ms();
         let seed = now as u64;
         let due = store.due_prompts(now, offset, seed);
         remember(&mut self.due_request, &mut self.failure, due);
@@ -398,7 +398,7 @@ impl State {
     fn open_session(&mut self, queue: Queue, prompts: Vec<(Id, String, Option<i64>)>) {
         let snapshot = self.store.as_ref().map(Store::snapshot).unwrap_or_default();
         let now = typr_core::clock::SystemClock.now_ms();
-        let offset = day::local_offset_ms();
+        let offset = day_offset::local_offset_ms();
         let entries: Vec<Entry> = prompts
             .into_iter()
             .filter(|(_, key, _)| key == "fwd")
@@ -600,7 +600,7 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
 fn main() {
     // The study day needs the machine's zone, and `time` only answers on the main thread, so read
     // it before any worker starts.
-    let _ = typr::day::local_offset_ms();
+    let _ = typr::day_offset::local_offset_ms();
     let scenes: &'static [Scene] = &[
         ("library-5000", |state: &mut State| {
             state.library = Library::seeded(5000);

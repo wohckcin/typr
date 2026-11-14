@@ -1,5 +1,5 @@
+use super::DAY_MS;
 use super::{ROLLOVER_MS, study_day, study_day_bounds};
-use crate::schedule::DAY_MS;
 
 /// 2026-01-11T00:00:00Z as milliseconds, in a fixed UTC offset so the test never depends on the
 /// machine's zone.

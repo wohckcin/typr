@@ -5,30 +5,11 @@
 //! that runs past midnight inside the same day, which is what a user expects and what Mochi does
 //! with its tomorrow/next-due split.
 
-use std::sync::LazyLock;
-
-use crate::schedule::DAY_MS;
+/// One day in milliseconds.
+pub const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
 /// When one study day becomes the next, counted from local midnight.
 pub const ROLLOVER_MS: i64 = 4 * 60 * 60 * 1000;
-
-/// The machine's offset east of UTC, in milliseconds.
-///
-/// `time` can only answer this on the main thread of a single-threaded program, so the app reads it
-/// once at startup and every later reader reuses the answer. A program that cannot know its zone
-/// (a test, a locked-down sandbox) studies on UTC days, which is wrong by hours at worst and never
-/// inconsistent with itself.
-pub fn local_offset_ms() -> i64 {
-    *LOCAL_OFFSET_MS
-}
-
-/// Resolved on first use, which the app arranges to happen on the main thread before it starts the
-/// store task.
-static LOCAL_OFFSET_MS: LazyLock<i64> =
-    LazyLock::new(|| match time::UtcOffset::current_local_offset() {
-        Ok(offset) => i64::from(offset.whole_seconds()) * 1000,
-        Err(_) => 0,
-    });
 
 /// Which study day `at_ms` falls on, counting from the epoch.
 pub fn study_day(at_ms: i64, offset_ms: i64) -> i64 {

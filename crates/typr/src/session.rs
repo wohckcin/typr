@@ -1,8 +1,8 @@
 //! One study session: the queue it walks, what has been shown, and what has been graded.
 
-use typr_core::clock::LEARNING_STEP_MS;
 use crate::screen::Queue;
 use crate::store::{Grade, Id};
+use typr_core::clock::LEARNING_STEP_MS;
 
 /// A card waiting its turn, with the sides as they will be revealed.
 #[derive(Clone, Debug, PartialEq, Eq)]
