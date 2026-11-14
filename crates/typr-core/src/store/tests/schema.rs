@@ -752,6 +752,109 @@ fn keys_for(db: &Db, card: Id) -> Vec<String> {
         .expect("rows")
 }
 
+/// An older build wrote every card's text itself; V7 adds the columns and the table that could
+/// make a card's text come from a template, and must change nothing for a library that has none.
+#[test]
+fn a_library_from_before_templates_renders_as_before() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let before = {
+        let db = Db::open(&path).expect("open");
+        let deck = match db
+            .apply(
+                &Command::CreateDeck {
+                    parent: None,
+                    name: "Deck".to_string(),
+                },
+                0,
+            )
+            .expect("deck")
+        {
+            Outcome::Deck(id) => id,
+            other => panic!("creating a deck: {other:?}"),
+        };
+        db.apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "front\n---\nback".to_string(),
+            },
+            0,
+        )
+        .expect("two-sided card");
+        db.apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "a note".to_string(),
+            },
+            0,
+        )
+        .expect("note");
+        // Written before V7 existed: no template column anywhere and no field table.
+        rewind_for_test(db.connection_for_test(), 6);
+        capture(&db)
+    };
+
+    let db = Db::open(&path).expect("reopen");
+    assert!(
+        columns(&db, "card").contains(&"template".to_string()),
+        "the card lost its template column"
+    );
+    assert!(
+        columns(&db, "deck").contains(&"template".to_string()),
+        "the deck lost its template column"
+    );
+    assert!(columns(&db, "field").contains(&"value".to_string()));
+
+    let templated: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM card WHERE template IS NOT NULL)
+                  + (SELECT COUNT(*) FROM deck WHERE template IS NOT NULL)",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count");
+    assert_eq!(templated, 0, "no card or deck inherits a template yet");
+    let fields: i64 = db
+        .connection_for_test()
+        .query_row("SELECT COUNT(*) FROM field", [], |row| row.get(0))
+        .expect("count");
+    assert_eq!(fields, 0, "a card from before the fields has none");
+
+    assert_eq!(
+        capture(&db),
+        before,
+        "text, sides and queue are the same on both sides of V7"
+    );
+}
+
+/// What a card's text and its prompts are, for comparing a library across a migration.
+fn capture(db: &Db) -> Vec<(Id, String, i64, String)> {
+    let mut statement = db
+        .connection_for_test()
+        .prepare(
+            "SELECT c.id, c.markdown, c.sides, COALESCE(p.keys, '')
+             FROM card c LEFT JOIN (
+                 SELECT card_id, GROUP_CONCAT(key, ',') AS keys
+                 FROM studyable_prompt GROUP BY card_id
+             ) p ON p.card_id = c.id
+             ORDER BY c.id",
+        )
+        .expect("prepare");
+    statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, Id>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })
+        .expect("query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("rows")
+}
+
 /// The column names of one table, as SQLite reports them.
 fn columns(db: &Db, table: &str) -> Vec<String> {
     let mut statement = db

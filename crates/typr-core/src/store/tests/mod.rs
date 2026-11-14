@@ -110,6 +110,16 @@ fn schedule(db: &mut Db, card: Id, due_at: i64) {
 /// Put a file back to an older schema: the version number alone is not a simulation, because a build
 /// of that age had none of the objects later migrations added.
 pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
+    if version < 7 {
+        // A version-6 file knew neither the fields nor the templates, and every card's text was
+        // its own markdown.
+        conn.execute_batch("DROP TABLE IF EXISTS field")
+            .expect("drop the field table");
+        conn.execute_batch("ALTER TABLE card DROP COLUMN template")
+            .expect("drop the card template");
+        conn.execute_batch("ALTER TABLE deck DROP COLUMN template")
+            .expect("drop the deck template");
+    }
     if version < 6 {
         // The view names the mask table and the diagram columns, so it goes before they do, and a
         // version-5 file then carries the view that step installed.

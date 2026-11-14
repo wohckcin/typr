@@ -11,7 +11,7 @@ Depends on `cloze-deletions` for the second sigil's meaning and on nothing else.
 
 ## 2. Store
 
-- [ ] 2.1 Migration V7: `card.template TEXT`, `deck.template TEXT`, and `field(card_id INTEGER NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (card_id, name))` with a cascading foreign key.
+- [x] 2.1 Migration V7: `card.template TEXT`, `deck.template TEXT`, and `field(card_id INTEGER NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (card_id, name))` with a cascading foreign key.
   - **Verification**: `a_library_from_before_templates_renders_as_before` rewinds a real file to `user_version = 6`, reopens, and finds every card's text and queue unchanged; `opening_reports_what_the_schema_did` counts the step.
 - [ ] 2.2 Commands `SetFields { card, fields: Vec<(String, String)> }`, `SetCardTemplate { card, template: Option<String> }`, `SetDeckTemplate { deck, template: Option<String> }`; `CardSummary` and `Snapshot` carry fields and which template is in force.
   - **Verification**: `a_card_reports_the_template_it_inherits` and `a_fifty_card_deck_renders_in_one_pass` (the second asserts fifty rendered cards and that each holds the prompt its text deserves).

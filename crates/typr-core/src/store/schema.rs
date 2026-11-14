@@ -16,7 +16,26 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7];
+
+/// Card templates: a card's text can be rendered from a template and a set of named fields.
+///
+/// The template lives in two places because it is inherited: a card may carry its own, a deck may
+/// carry a default for its cards, and the nearest one wins. `NULL` in both means "nothing above me
+/// sets one", which is how a library with no templates keeps behaving exactly as it did.
+///
+/// Fields are a table rather than a column of JSON: the next roadmap row asks "which cards have an
+/// Example" for custom views, and that is a `WHERE` clause here rather than a parser in Rust.
+const V7: &str = r#"
+ALTER TABLE card ADD COLUMN template TEXT;
+ALTER TABLE deck ADD COLUMN template TEXT;
+CREATE TABLE field (
+    card_id INTEGER NOT NULL REFERENCES card (id) ON DELETE CASCADE,
+    name    TEXT NOT NULL,
+    value   TEXT NOT NULL,
+    PRIMARY KEY (card_id, name)
+);
+"#;
 
 /// Diagram cards: a card may carry an image instead of markdown, and each group of rectangles drawn
 /// on it is a review of its own.
