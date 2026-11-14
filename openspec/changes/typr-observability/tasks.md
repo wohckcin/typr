@@ -82,14 +82,24 @@ The layout this change works in: `crates/typr-core` holds the store and must kee
 
 ## 4. Verification and documentation
 
-- [ ] 4.1 Cover every scenario in `specs/diagnostics/spec.md` with a test at the level where it is observable, and reverse each guard once in a scratch worktree with its own `CARGO_TARGET_DIR` to confirm the test fails without the change.
+- [x] 4.1 Cover every scenario in `specs/diagnostics/spec.md` with a test at the level where it is observable, and reverse each guard once in a scratch worktree with its own `CARGO_TARGET_DIR` to confirm the test fails without the change.
 
-  **Verification**: the list of scenario-to-test pairs is complete, and each reversed guard has a recorded failing run.
+  **Verification**: every scenario names a test, and each reversed guard has a recorded failing run:
 
-- [ ] 4.2 Keep the boundary in the backend and the sink in the app: extend the CI guard so it fails if `typr-core` ever gains `log`, a file helper or a timestamp formatter.
+  | reversed | test that fails |
+  | --- | --- |
+  | `catch_unwind` around the apply pass | `a_worker_panic_answers_the_request_it_was_applying` |
+  | the `try_recv` drain that answers queued ids | `a_panic_answers_every_command_that_was_already_queued` |
+  | `status.set` after a panic | `the_worker_status_outlives_the_handle` |
+  | the record `finish` writes at quit | `a_panicked_worker_is_written_down_at_quit` |
+  | the threshold in `slow_record` | `a_slow_answer_is_recorded_and_a_quick_one_is_not` |
 
-  **Verification**: the CI step passes on the current graph, and fails when `log` is added to `crates/typr-core/Cargo.toml` in a scratch worktree.
+  Scenario coverage: a stoppage names itself → `a_stoppage_names_itself_and_has_no_cause`; the request in flight is answered → `a_worker_panic_answers_the_request_it_was_applying`; queued ids answered → `a_panic_answers_every_command_that_was_already_queued`; a payload without text → `a_panic_payload_without_text_is_still_reported`; later sends refused → `a_send_after_a_panic_is_refused`; the stoppage reaches the screen through an event → `a_grade_that_could_not_be_sent_is_not_waited_on`; one bounded file, one rotated copy → `an_oversized_log_is_rotated_once_on_open` and `a_log_under_the_limit_is_left_alone`; chain in the log and one line on screen → `a_description_walks_the_whole_chain` and `decks_are_created_renamed_and_moved_from_the_sidebar`; `TYPR_LOG` level → `the_level_defaults_to_warn_and_follows_the_variable`; startup facts as data → `opening_reports_what_the_schema_did` and `a_library_from_one_version_back_reports_the_step_it_ran`; slow command → `a_slow_answer_is_recorded_and_a_quick_one_is_not`; abnormal end at quit → `a_panicked_worker_is_written_down_at_quit`; drops counted → `a_full_channel_drops_records_and_the_next_write_counts_them`; the installer reaches the file → `installing_writes_the_next_record_and_the_quit_reaches_the_file`; backend names no logging crate → the CI guard in 4.2.
 
-- [ ] 4.3 Update `README.md` with the log path, the `TYPR_LOG` variable, the size limit and the rotated name, and record in `design.md` anything the implementation settled differently.
+- [x] 4.2 Keep the boundary in the backend and the sink in the app: extend the CI guard so it fails if `typr-core` ever gains `log`, a file helper or a timestamp formatter.
 
-  **Verification**: the README names the path and variable, and `openspec validate typr-observability --strict` is valid.
+  **Verification**: the guard passes on the current graph (`cargo tree -p typr-core --edges normal` matches no `log`, `env_logger` or `tracing`) and fails when `log = "0.4"` is added to `crates/typr-core/Cargo.toml` in a scratch worktree; the workflow still parses as YAML.
+
+- [x] 4.3 Update `README.md` with the log path, the `TYPR_LOG` variable, the size limit and the rotated name, and record in `design.md` anything the implementation settled differently.
+
+  **Verification**: the README has a `## Logs` section naming the per-platform path, `RUNE_DIRS_ROOT`, `TYPR_LOG` with its `warn` default, the 1 MiB limit and `typr.log.1`; `design.md` has a "What the implementation settled differently" section; `openspec validate typr-observability --strict` is valid.

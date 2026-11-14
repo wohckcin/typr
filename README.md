@@ -68,6 +68,22 @@ add it here.
 `dev` is fast-forward-only, so a revision is a stable target and upgrades are deliberate: bump the
 revision, re-read Rune's `[patch.crates-io]`, rebuild.
 
+## Logs
+
+The app writes one log file, `<logs>/typr.log`, where `<logs>` is Rune's per-app logs folder:
+`~/Library/Logs/typr` on macOS, `$XDG_STATE_HOME/typr/logs` (by default
+`~/.local/state/typr/logs`) on Linux, `%LOCALAPPDATA%\typr\Logs` on Windows, and
+`<root>/logs/typr` when `RUNE_DIRS_ROOT` is set. It holds what the screen cannot: the cause chain
+behind a failure line, the startup facts (database path, the schema version found and written, how
+many migrations ran, the log path), any command whose answer took longer than 250 ms, and how the
+library worker ended.
+
+`TYPR_LOG` sets the level (`error`, `warn`, `info`, `debug`, `trace`); unset or unparseable means
+`warn`. The file is rotated once on open when it is larger than 1 MiB: the old one becomes
+`typr.log.1`, replacing any previous copy. Records are handed to a writer thread through a bounded
+channel, so a full channel drops records rather than stalling a frame; the next successful write
+reports how many were dropped.
+
 ## Tests
 
 ```sh

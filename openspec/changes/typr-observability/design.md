@@ -54,6 +54,14 @@ The gap this change closes is narrower than "the app goes silent". A worker pani
 
 **`close` keeps the join result, and `main` writes it down.** `let _ = worker.join()` becomes a match that stores the panic in `WorkerStatus` instead of discarding it, so quitting after a panic leaves a record even if the screen was already gone. The writer thread and its sender are process-wide statics, so the log is still reachable at that point. The flush runs in `main` after `rune::run` returns, never inside `close`: Rune has no quit hook, `Drop for Handle` runs during teardown inside `rune::run`, and a flush placed there would run before this record is written.
 
+## What the implementation settled differently
+
+- **`Db` keeps its path.** `Db::path()` was added so the startup record can name the file without the desktop remembering a second copy of it.
+- **`Display` no longer repeats the cause.** `StoreError::Sqlite` and `Io` used to embed their `source()` in their message, which made `describe` print the cause twice. Their `Display` now names only the failure and the cause is reached through `source()`, which is also what the failure line shows: one line on screen, the chain in the log.
+- **The writer ends on a message, not on a disconnect.** The sender is a process-wide static, so it never drops; the writer would have waited forever. `Message::Shutdown` makes it flush, answer and return, and the quit path joins it after a `recv_timeout`.
+- **The dropped-record counter is per sink, not per process.** A process-wide counter made two tests share a number; the counter now travels with the `Sink` and its writer.
+- **Two seams were extracted to be testable.** `slow_record(name, elapsed) -> Option<String>` and `finish(status: Option<&WorkerStatus>)` are free functions, so the slow-answer line and the quit record are asserted without a GUI session.
+
 ## Risks / Trade-offs
 
 - **A double panic aborts the process.** A panic inside the panic handler (or in a `Drop` during unwinding) calls `abort`. The handler is kept to: build strings, lock the events `Mutex` through the poison-tolerant `lock`, push events, and `try_send` log lines. It never calls `Db`, never touches SQLite, and never writes a file.

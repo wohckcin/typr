@@ -43,6 +43,12 @@ jobs:
             echo "$graph" | grep -E 'rune|wgpu|winit|parley|accesskit' >&2
             exit 1
           fi
+          # The backend reports failures through events; writing them down belongs to the app.
+          if echo "$graph" | grep -Eq '(^|[^a-z-])(log|env_logger|tracing)( |$)'; then
+            echo "typr-core depends on a logging crate:" >&2
+            echo "$graph" | grep -E '(^|[^a-z-])(log|env_logger|tracing)( |$)' >&2
+            exit 1
+          fi
 
       - name: Build
         run: cargo build --workspace --locked
