@@ -2,7 +2,7 @@
 
 ## 1. Recognition
 
-- [ ] 1.1 Add `pub fn embeds(text: &str) -> Vec<String>` and `pub fn expand(text: &str, resolve: impl Fn(&str) -> Option<String>) -> String`
+- [x] 1.1 Add `pub fn embeds(text: &str) -> Vec<String>` and `pub fn expand(text: &str, resolve: impl Fn(&str) -> Option<String>) -> String`
       to `crates/typr-core/src/markdown_ext.rs`, rewriting `![[Name]]` into a `typr-embed`
       fenced block outside fences and code spans.
       *Verification*: `![[A]]` yields one name; `` `![[A]]` `` and a fenced copy yield
