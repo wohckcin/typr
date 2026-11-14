@@ -17,6 +17,9 @@ use rune_kit::{CodeFrame, Kit, Markdown, MarkdownStyle};
 use typr_core::markdown_ext;
 use typr_core::store::{CardSummary, Id, Snapshot, folded};
 
+#[cfg(test)]
+mod tests;
+
 static KIT: LazyLock<Kit> = LazyLock::new(|| Kit::neutral(true));
 
 /// What the caption under an embed that names nothing says.
@@ -78,16 +81,26 @@ pub(crate) struct Embeds {
 
 impl Embeds {
     /// Resolve every name `text` embeds, in the order they were written.
+    ///
+    /// The names inside an embedded body are resolved too, one level down. One level is all that is
+    /// drawn, but `expanded` still rewrites those names while building the inset, and a name it
+    /// cannot answer is written as a missing target — which would paint a card that exists in the
+    /// same danger tone as one that does not.
     pub(crate) fn of(text: &str, resolve: impl Fn(&str) -> Option<String>) -> Embeds {
-        Embeds {
-            entries: markdown_ext::embeds(text)
-                .into_iter()
-                .map(|name| {
-                    let body = resolve(&name);
-                    (name, body)
-                })
-                .collect(),
+        let mut entries: Vec<(String, Option<String>)> = Vec::new();
+        for name in markdown_ext::embeds(text) {
+            let body = resolve(&name);
+            let deeper: Vec<String> = body
+                .as_deref()
+                .map(markdown_ext::embeds)
+                .unwrap_or_default();
+            remember(&mut entries, &name, body);
+            for inner in deeper {
+                let body = resolve(&inner);
+                remember(&mut entries, &inner, body);
+            }
         }
+        Embeds { entries }
     }
 
     /// The body a name resolved to, compared the way the store compares names.
@@ -108,6 +121,15 @@ impl Embeds {
         }
         hasher.finish()
     }
+}
+
+/// Keep the first answer for a name, compared the way the store compares names.
+fn remember(entries: &mut Vec<(String, Option<String>)>, name: &str, body: Option<String>) {
+    let wanted = folded(name);
+    if entries.iter().any(|(own, _)| folded(own) == wanted) {
+        return;
+    }
+    entries.push((name.to_string(), body));
 }
 
 /// The text to hand the renderer: every embed written as the fence it is drawn from.
