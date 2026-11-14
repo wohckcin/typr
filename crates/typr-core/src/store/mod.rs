@@ -115,6 +115,14 @@ impl CardKind {
     }
 }
 
+/// A card as another card's reference names it: enough to show it and open it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CardRef {
+    pub id: Id,
+    /// The name the card answered to when the reference was resolved.
+    pub name: String,
+}
+
 /// A card as the library lists it.
 ///
 /// `Default` is what a fixture fills in: a card that asks nothing, in deck 0. Tests name only the
@@ -167,6 +175,10 @@ pub struct CardSummary {
     pub template: Option<String>,
     /// The deck the template is inherited from; `None` means the card carries its own.
     pub template_from: Option<Id>,
+    /// The cards this one's text refers to, as of the last save of either side.
+    pub references: Vec<CardRef>,
+    /// The cards whose text refers to this one, each with the name it answered to.
+    pub backlinks: Vec<CardRef>,
 }
 
 impl CardSummary {

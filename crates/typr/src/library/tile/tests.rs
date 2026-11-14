@@ -32,6 +32,8 @@ fn card(sides: u32, markdown: &str) -> CardSummary {
         fields: Vec::new(),
         template: None,
         template_from: None,
+        references: Vec::new(),
+        backlinks: Vec::new(),
     }
 }
 

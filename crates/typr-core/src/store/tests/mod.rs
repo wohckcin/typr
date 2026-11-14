@@ -127,6 +127,11 @@ fn schedule(db: &mut Db, card: Id, due_at: i64) {
 /// Put a file back to an older schema: the version number alone is not a simulation, because a build
 /// of that age had none of the objects later migrations added.
 pub(crate) fn rewind_for_test(conn: &Connection, version: i64) {
+    if version < 10 {
+        // A version-9 file knew no references between cards.
+        conn.execute_batch("DROP TABLE IF EXISTS reference")
+            .expect("drop the reference table");
+    }
     if version < 9 {
         // A version-8 file knew no names. The index names the column, so it goes first.
         conn.execute_batch("DROP INDEX IF EXISTS card_name")

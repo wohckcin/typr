@@ -1737,3 +1737,103 @@ fn a_name_template_names_the_card_over_its_text() {
         "the text template still renders the text"
     );
 }
+
+#[test]
+fn a_saved_card_records_its_references() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Biology");
+    let target = card(&mut db, deck, "Krebs cycle\n---\nThe second stage");
+    let referrer = card(
+        &mut db,
+        deck,
+        "The citric acid cycle\n---\nSee [[Krebs cycle]] for the steps",
+    );
+
+    assert_eq!(
+        summary(&db, referrer).references,
+        vec![CardRef {
+            id: target,
+            name: "Krebs cycle".to_string(),
+        }],
+        "the save records the card its text names"
+    );
+    let backlinks = db.backlinks(target).expect("backlinks");
+    assert_eq!(backlinks.len(), 1);
+    assert_eq!(backlinks[0].id, referrer, "and the target lists it back");
+}
+
+#[test]
+fn a_backlink_disappears_when_the_target_is_renamed_away() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Biology");
+    let target = card(&mut db, deck, "Krebs cycle\n---\nThe second stage");
+    let referrer = card(&mut db, deck, "Notes\n---\nSee [[Krebs cycle]]");
+    assert_eq!(db.backlinks(target).expect("backlinks").len(), 1);
+
+    db.apply(
+        &Command::SaveCard {
+            id: target,
+            markdown: "The citric acid cycle\n---\nThe second stage".to_string(),
+        },
+        0,
+    )
+    .expect("save");
+
+    assert!(
+        db.backlinks(target).expect("backlinks").is_empty(),
+        "a name that moved leaves no backlink behind"
+    );
+    assert!(
+        summary(&db, referrer).references.is_empty(),
+        "nothing answers to the old name any more"
+    );
+    assert!(
+        summary(&db, referrer).markdown.contains("[[Krebs cycle]]"),
+        "the author's words stay, so the broken reference is still there to fix"
+    );
+}
+
+#[test]
+fn resolution_prefers_the_nearest_deck() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let near = deck(&mut db, "Biology");
+    let far = deck(&mut db, "Advanced");
+    let local = card(&mut db, near, "Introduction\n---\nThe local one");
+    let distant = card(&mut db, far, "Introduction\n---\nThe distant one");
+
+    let here = card(
+        &mut db,
+        far,
+        "Lecture one\n---\nStart with [[Introduction]]",
+    );
+    assert_eq!(
+        summary(&db, here).references[0].id,
+        distant,
+        "the referring card's own deck comes first"
+    );
+    let there = card(
+        &mut db,
+        near,
+        "Lecture two\n---\nStart with [[Introduction]]",
+    );
+    assert_eq!(
+        summary(&db, there).references[0].id,
+        local,
+        "and each deck's notes point at that deck's card"
+    );
+
+    let elsewhere = deck(&mut db, "Chemistry");
+    let other = card(
+        &mut db,
+        elsewhere,
+        "Reading\n---\nStart with [[Introduction]]",
+    );
+    assert_eq!(
+        summary(&db, other).references[0].id,
+        local,
+        "outside either deck the oldest card answers, so one text always opens one card"
+    );
+}

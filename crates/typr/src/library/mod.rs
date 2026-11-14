@@ -735,6 +735,8 @@ impl Library {
                 fields: Vec::new(),
                 template: None,
                 template_from: None,
+                references: Vec::new(),
+                backlinks: Vec::new(),
             })
             .collect();
         library.refresh();

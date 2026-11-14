@@ -18,7 +18,7 @@ pub struct SchemaFacts {
 }
 
 /// One SQL script per version, applied in order. `PRAGMA user_version` records how many ran.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
 
 /// The step that adds the name column, whose backfill needs more than SQL.
 const NAMES: usize = 9;
@@ -36,6 +36,23 @@ const V9: &str = r#"
 ALTER TABLE card ADD COLUMN name TEXT NOT NULL DEFAULT '';
 ALTER TABLE card ADD COLUMN name_template TEXT;
 CREATE INDEX card_name ON card (name COLLATE NOCASE);
+"#;
+
+/// References between cards: a `[[name]]` in one card's text that names another.
+///
+/// A row is written when the referring card is saved and dropped when it no longer says that name,
+/// which is what makes a backlink a join rather than a scan of every card's text. Both sides
+/// cascade, so deleting a card takes the references it made and the ones made to it.
+///
+/// `reference_to` is the direction a card's own backlinks are read in; the primary key already
+/// serves the direction its outgoing references are read in.
+const V10: &str = r#"
+CREATE TABLE reference (
+    from_card INTEGER NOT NULL REFERENCES card (id) ON DELETE CASCADE,
+    to_card   INTEGER NOT NULL REFERENCES card (id) ON DELETE CASCADE,
+    PRIMARY KEY (from_card, to_card)
+);
+CREATE INDEX reference_to ON reference (to_card);
 "#;
 
 /// Custom views: a pin on a card, and the filters the user saved.

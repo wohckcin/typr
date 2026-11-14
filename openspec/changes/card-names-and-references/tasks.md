@@ -14,9 +14,9 @@ that shows names.
 
 - [x] 2.1 New `crates/typr-core/src/reference.rs`: `pub fn links(text: &str) -> Vec<&str>` collecting `[[…]]` outside fences and inline code, and `pub fn rewrite(text: &str, resolved: &HashMap<String, Id>) -> String` producing markdown links with the `typr-card:` scheme.
   - **Verification**: `links_ignores_code` and `rewrite_leaves_unresolved_text_alone`.
-- [ ] 2.2 Migration V10: `reference(from_card INTEGER NOT NULL, to_card INTEGER NOT NULL, PRIMARY KEY (from_card, to_card))` with both foreign keys cascading; `Db::rebuild_references(card)` deletes and re-inserts that card's rows inside the save transaction; `Db::backlinks(card) -> Vec<CardSummary>`.
+- [x] 2.2 Migration V10: `reference(from_card INTEGER NOT NULL, to_card INTEGER NOT NULL, PRIMARY KEY (from_card, to_card))` with both foreign keys cascading; `Db::rebuild_references(card)` deletes and re-inserts that card's rows inside the save transaction; `Db::backlinks(card) -> Vec<CardSummary>`.
   - **Verification**: `a_saved_card_records_its_references` and `a_backlink_disappears_when_the_target_is_renamed_away`.
-- [ ] 2.3 Resolution order: the referencing card's deck, then its ancestors, then the library, then the oldest card.
+- [x] 2.3 Resolution order: the referencing card's deck, then its ancestors, then the library, then the oldest card.
   - **Verification**: `resolution_prefers_the_nearest_deck` builds two same-named decks and asserts the chosen target.
 
 ## 3. Tags as paths

@@ -14,9 +14,9 @@ use crate::template;
 use crate::transfer::{self, mochi};
 
 use super::{
-    CardKind, CardMode, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect, MaskRow,
-    NewPrompt, Outcome, Phase, ReviewRow, SavedView, Settings, Snapshot, Sort, SortDir, Stats,
-    StoreError, ViewSpec,
+    CardKind, CardMode, CardRef, CardSummary, Command, Deck, DuePrompt, Grade, Id, MaskRect,
+    MaskRow, NewPrompt, Outcome, Phase, ReviewRow, SavedView, Settings, Snapshot, Sort, SortDir,
+    Stats, StoreError, ViewSpec,
     schema::{self, SchemaFacts},
 };
 use unicode_normalization::UnicodeNormalization;
@@ -620,9 +620,50 @@ impl Db {
                     // below, once every deck is in hand.
                     template: row.get(15)?,
                     template_from: None,
+                    references: Vec::new(),
+                    backlinks: Vec::new(),
                 })
             })?;
             let mut cards = rows.collect::<Result<Vec<_>, _>>()?;
+
+            // One join answers both directions: what each card refers to, and who refers to it.
+            // The name comes from the card as it is now, so a rename shows up in both lists.
+            let mut stmt = self.conn.prepare(
+                "SELECT r.from_card, f.name, t.id, t.name
+                 FROM reference r
+                 JOIN card f ON f.id = r.from_card
+                 JOIN card t ON t.id = r.to_card
+                 ORDER BY r.from_card, t.id",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, Id>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Id>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })?;
+            let mut outgoing: HashMap<Id, Vec<CardRef>> = HashMap::new();
+            let mut incoming: HashMap<Id, Vec<CardRef>> = HashMap::new();
+            for row in rows {
+                let (from, from_name, to, to_name) = row?;
+                outgoing.entry(from).or_default().push(CardRef {
+                    id: to,
+                    name: to_name,
+                });
+                incoming.entry(to).or_default().push(CardRef {
+                    id: from,
+                    name: from_name,
+                });
+            }
+            for summary in &mut cards {
+                if let Some(targets) = outgoing.remove(&summary.id) {
+                    summary.references = targets;
+                }
+                if let Some(referrers) = incoming.remove(&summary.id) {
+                    summary.backlinks = referrers;
+                }
+            }
 
             let mut stmt = self.conn.prepare(
                 "SELECT ct.card_id, t.name FROM card_tag ct JOIN tag t ON t.id = ct.tag_id
@@ -954,6 +995,136 @@ impl Db {
                 "UPDATE card SET name = ?2 WHERE id = ?1",
                 params![card, name],
             )?;
+            // A card that gains or loses a name changes what `[[that name]]` means everywhere it is
+            // written, so the rows that pointed at it — and the ones that could not — are rebuilt.
+            // Skipping this when the name is unchanged keeps a deck-wide re-render from scanning
+            // the library once per card.
+            self.rebuild_named(&current)?;
+            self.rebuild_named(&name)?;
+        }
+        self.rebuild_references(card)?;
+        Ok(())
+    }
+
+    /// Rebuild one card's reference rows from its text, inside the save's transaction.
+    ///
+    /// The rows are a second record of what the text says, so deleting and re-inserting them in the
+    /// same transaction as the text is what keeps a backlink from outliving the words that made it.
+    pub fn rebuild_references(&self, card: Id) -> Result<(), StoreError> {
+        self.conn
+            .execute("DELETE FROM reference WHERE from_card = ?1", params![card])?;
+        let markdown: String = self.conn.query_row(
+            "SELECT markdown FROM card WHERE id = ?1",
+            params![card],
+            |row| row.get(0),
+        )?;
+        for name in crate::reference::links(&markdown) {
+            let Some(target) = self.resolve(card, name)? else {
+                continue;
+            };
+            self.conn.execute(
+                "INSERT OR IGNORE INTO reference (from_card, to_card) VALUES (?1, ?2)",
+                params![card, target],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// The cards whose text refers to `card`.
+    ///
+    /// Read off one snapshot rather than a query per card, so a caller and the list cannot disagree
+    /// about which references exist.
+    pub fn backlinks(&self, card: Id) -> Result<Vec<CardSummary>, StoreError> {
+        Ok(self
+            .snapshot()?
+            .cards
+            .into_iter()
+            .filter(|other| other.references.iter().any(|target| target.id == card))
+            .collect())
+    }
+
+    /// The card `name` refers to from `from`, if any.
+    ///
+    /// The referring card's own deck comes first, then its ancestors, then the whole library: a
+    /// deck of notes refers to its own "Introduction" rather than a distant one. Folding is the
+    /// rule names are made unique with, so the two cannot disagree about whether two names are the
+    /// same, and ties go to the oldest card, so one text always opens one card.
+    fn resolve(&self, from: Id, name: &str) -> Result<Option<Id>, StoreError> {
+        let wanted = folded(name);
+        let mut deck = self
+            .conn
+            .query_row(
+                "SELECT deck_id FROM card WHERE id = ?1",
+                params![from],
+                |row| row.get::<_, Id>(0),
+            )
+            .optional()?;
+        while let Some(id) = deck {
+            if let Some(found) = self.oldest_named(Some(id), &wanted)? {
+                return Ok(Some(found));
+            }
+            deck = self
+                .conn
+                .query_row(
+                    "SELECT parent_id FROM deck WHERE id = ?1",
+                    params![id],
+                    |row| row.get::<_, Option<Id>>(0),
+                )
+                .optional()?
+                .flatten();
+        }
+        self.oldest_named(None, &wanted)
+    }
+
+    /// The oldest card answering to `wanted`, in one deck or anywhere; a trashed card does not
+    /// answer to its name, so a reference never points into the trash.
+    fn oldest_named(&self, deck: Option<Id>, wanted: &str) -> Result<Option<Id>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name FROM card
+             WHERE (?1 IS NULL OR deck_id = ?1) AND trashed_at IS NULL AND name <> ''
+             ORDER BY id",
+        )?;
+        let rows = stmt.query_map(params![deck], |row| {
+            Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (id, name) = row?;
+            if folded(&name) == wanted {
+                return Ok(Some(id));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Re-resolve every card whose text names `name`.
+    fn rebuild_named(&self, name: &str) -> Result<(), StoreError> {
+        if name.is_empty() {
+            return Ok(());
+        }
+        let wanted = folded(name);
+        // Only a card that could hold a reference is worth reading: the same cheap prefilter the
+        // index cannot help with, because a reference is inside the text rather than a column.
+        let named = {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, markdown FROM card WHERE instr(markdown, '[') > 0 ORDER BY id",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, Id>(0)?, row.get::<_, String>(1)?))
+            })?;
+            let mut found = Vec::new();
+            for row in rows {
+                let (id, markdown) = row?;
+                if crate::reference::links(&markdown)
+                    .iter()
+                    .any(|link| folded(link) == wanted)
+                {
+                    found.push(id);
+                }
+            }
+            found
+        };
+        for id in named {
+            self.rebuild_references(id)?;
         }
         Ok(())
     }
