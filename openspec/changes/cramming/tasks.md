@@ -22,7 +22,7 @@ Depends on `custom-views` for `ViewSpec`.
   - **Verification**: `cramming_a_tag_with_nothing_due_visits_exactly_its_cards` drives the key path and reads the rendered card.
 - [x] 3.2 The session screen names the mode and says the answers are not scheduled; the summary reports the count and offers "Save as view".
   - **Verification**: `a_cram_review_says_nothing_is_scheduled` and `saving_a_cram_session_keeps_its_filter`.
-- [ ] 3.3 "Save as view" creates the view through `CreateView` with the session's own spec, once.
+- [x] 3.3 "Save as view" creates the view through `CreateView` with the session's own spec, once.
   - **Verification**: `the_summary_saves_the_drill_once` presses twice and finds one view.
 
 ## 4. Close out
