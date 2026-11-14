@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use super::{Attachments, attach};
+use super::Attachments;
+use typr_core::transfer::attach;
 
 fn root() -> tempfile::TempDir {
     tempfile::tempdir().unwrap()

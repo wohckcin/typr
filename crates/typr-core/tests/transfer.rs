@@ -271,6 +271,17 @@ fn write_mochi(
     cards: &serde_json::Value,
     counts: serde_json::Value,
 ) -> std::path::PathBuf {
+    write_mochi_media(dir, name, decks, cards, counts, &[])
+}
+
+fn write_mochi_media(
+    dir: &Path,
+    name: &str,
+    decks: &serde_json::Value,
+    cards: &serde_json::Value,
+    counts: serde_json::Value,
+    media: &[(&str, &[u8])],
+) -> std::path::PathBuf {
     let archive = dir.join(name);
     let manifest = serde_json::json!({
         "format": "mochi",
@@ -283,7 +294,7 @@ fn write_mochi(
         &manifest.to_string(),
         &decks.to_string(),
         &cards.to_string(),
-        &[],
+        media,
     );
     archive
 }
@@ -577,4 +588,124 @@ fn an_imported_due_date_matches_its_last_record() {
     let card = &db.snapshot().expect("the library").cards[0];
     assert_eq!(card.due_at, last.due_at);
     assert_eq!(card.due_at, Some(start + 10 * MINUTE));
+}
+
+#[test]
+fn an_imported_image_is_present_after_its_source_is_deleted() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let picture: &[u8] = b"\x89PNG\r\n\x1a\na tiny picture";
+    let decks = serde_json::json!([{"id": 1, "name": "Anatomy", "parent": null}]);
+    let cards = serde_json::json!([{
+        "id": 1,
+        "deck": 1,
+        "text": "",
+        "image": "media/leak.png",
+        "caption": "Where is the leak?",
+    }]);
+    let archive = write_mochi_media(
+        dir.path(),
+        "picture.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 1, "cards": 1, "images": 1}),
+        &[("media/leak.png", picture)],
+    );
+    let attachments = dir.path().join("attachments");
+
+    let db = open(&dir.path().join("typr.sqlite3"));
+    db.apply(
+        &Command::ImportArchive {
+            archive: archive.clone(),
+            attachments: attachments.clone(),
+        },
+        NOW,
+    )
+    .expect("the import");
+    std::fs::remove_file(&archive).expect("the archive is the only source");
+
+    let card = &db.snapshot().expect("the library").cards[0];
+    assert_eq!(card.kind, typr_core::store::CardKind::Diagram);
+    assert_eq!(card.image.as_deref(), Some("leak.png"));
+    assert_eq!(card.caption.as_deref(), Some("Where is the leak?"));
+    assert_eq!(
+        std::fs::read(attachments.join("leak.png")).expect("the copied picture"),
+        picture,
+        "the picture outlives the archive it came from"
+    );
+}
+
+#[test]
+fn imported_masks_keep_their_group_and_position() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([{"id": 1, "name": "Anatomy", "parent": null}]);
+    let cards = serde_json::json!([{
+        "id": 1,
+        "deck": 1,
+        "text": "",
+        "image": "media/body.png",
+        "caption": "",
+        "masks": [
+            {"group": 1, "x": 0.25, "y": 0.125, "w": 0.5, "h": 0.25},
+            {"group": 0, "x": 0.0, "y": 0.0, "w": 0.125, "h": 0.125},
+        ],
+    }]);
+    let archive = write_mochi_media(
+        dir.path(),
+        "masks.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 1, "cards": 1, "images": 1, "masks": 2}),
+        &[("media/body.png", b"png")],
+    );
+
+    let db = open(&dir.path().join("typr.sqlite3"));
+    db.apply(
+        &Command::ImportArchive {
+            archive,
+            attachments: dir.path().join("attachments"),
+        },
+        NOW,
+    )
+    .expect("the import");
+
+    let card = &db.snapshot().expect("the library").cards[0];
+    let expected = [
+        typr_core::store::MaskRow {
+            group: 0,
+            rect: typr_core::store::MaskRect::new(0.0, 0.0, 0.125, 0.125),
+        },
+        typr_core::store::MaskRow {
+            group: 1,
+            rect: typr_core::store::MaskRect::new(0.25, 0.125, 0.5, 0.25),
+        },
+    ];
+    assert_eq!(card.masks, expected, "fractions and groups survive exactly");
+    assert_eq!(db.mask_groups(card.id).expect("groups"), [0, 1]);
+    assert_eq!(
+        db.prompt_keys(card.id).expect("prompts"),
+        ["mask:0", "mask:1"]
+    );
+}
+
+#[test]
+fn a_copied_picture_never_overwrites_the_first_copy() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let source = dir.path().join("leak.png");
+    let pictures = dir.path().join("attachments");
+    std::fs::write(&source, b"first").expect("a source picture");
+
+    let first = typr_core::transfer::attach(&pictures, &source).expect("the first copy");
+    std::fs::write(&source, b"second").expect("the same name, new bytes");
+    let second = typr_core::transfer::attach(&pictures, &source).expect("the second copy");
+
+    assert_eq!(first, "leak.png");
+    assert_eq!(second, "leak-2.png");
+    assert_eq!(
+        std::fs::read(pictures.join(&first)).expect("the first copy"),
+        b"first"
+    );
+    assert_eq!(
+        std::fs::read(pictures.join(&second)).expect("the second copy"),
+        b"second"
+    );
 }

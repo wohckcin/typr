@@ -74,28 +74,5 @@ impl Attachments {
     }
 }
 
-/// Copy `source` into `root` under a name that is not taken, and answer the reference to write
-/// into the card.
-pub fn attach(root: &Path, source: &Path) -> std::io::Result<String> {
-    std::fs::create_dir_all(root)?;
-    let name = source
-        .file_name()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "no file name"))?
-        .to_string_lossy()
-        .into_owned();
-    let (stem, extension) = match name.rfind('.') {
-        Some(dot) if dot > 0 => (&name[..dot], &name[dot..]),
-        _ => (name.as_str(), ""),
-    };
-    let mut candidate = name.clone();
-    let mut copy = 1;
-    while root.join(&candidate).exists() {
-        copy += 1;
-        candidate = format!("{stem}-{copy}{extension}");
-    }
-    std::fs::copy(source, root.join(&candidate))?;
-    Ok(candidate)
-}
-
 #[cfg(test)]
 mod tests;

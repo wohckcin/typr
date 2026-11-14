@@ -10,7 +10,7 @@ use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root
 /// Kept for the lifetime of the app: a Kit rebuilds its palette and type ramp.
 static KIT: std::sync::LazyLock<Kit> = std::sync::LazyLock::new(|| Kit::neutral(true));
 
-use crate::attachments::{self, Attachments};
+use crate::attachments::Attachments;
 use typr_core::hidden::{self, Shape};
 use typr_core::store::{CardKind, CardSummary, Id, MaskRect, MaskRow};
 use typr_core::template;
@@ -412,7 +412,7 @@ impl Editor {
             self.attach_error = Some(format!("The image was not attached: {error}"));
             return Err(error);
         }
-        let name = attachments::attach(self.attachments.root(), source)?;
+        let name = typr_core::transfer::attach(self.attachments.root(), source)?;
         self.image = Some(name);
         self.kind = CardKind::Diagram;
         self.attach_error = None;
@@ -616,7 +616,7 @@ impl Editor {
     }
 
     fn copy_in(&mut self, source: &std::path::Path) -> std::io::Result<String> {
-        let name = attachments::attach(self.attachments.root(), source)?;
+        let name = typr_core::transfer::attach(self.attachments.root(), source)?;
         let alt = name
             .rsplit_once('.')
             .map_or(name.as_str(), |(stem, _)| stem);

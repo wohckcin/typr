@@ -12,15 +12,15 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use zip::ZipArchive;
 
-use crate::store::{Command, Db, Grade, Id, Outcome, StoreError};
+use crate::store::{Command, Db, Grade, Id, MaskRect, Outcome, StoreError};
 
-use super::ImportReport;
+use super::{ImportReport, attach_bytes};
 
 /// The `format` field every Mochi manifest this build reads must name.
 pub const FORMAT: &str = "mochi";
@@ -173,6 +173,24 @@ struct ArchiveCard {
     tags: Vec<String>,
     #[serde(default)]
     reviews: Vec<ArchiveReview>,
+    /// A picture inside the archive (`media/...`), which makes this a diagram card.
+    #[serde(default)]
+    image: Option<String>,
+    #[serde(default)]
+    caption: String,
+    #[serde(default)]
+    masks: Vec<ArchiveMask>,
+}
+
+/// A mask rectangle in image fractions, so it lands where Mochi drew it whatever the picture's
+/// pixel size.
+#[derive(Deserialize)]
+struct ArchiveMask {
+    group: u32,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
 }
 
 /// One graded review, named the way Mochi names the card's variants. A cloze deletion and a mask
@@ -228,14 +246,32 @@ struct ArchiveField {
 pub(crate) fn import(
     db: &Db,
     archive: &Path,
-    _attachments: &Path,
+    attachments: &Path,
     now_ms: i64,
+) -> Result<ImportReport, StoreError> {
+    let mut copied = Vec::new();
+    let result = import_into(db, archive, attachments, now_ms, &mut copied);
+    if result.is_err() {
+        // The transaction is about to roll back its rows, so the pictures copied out of the
+        // archive must not outlive the cards that would have named them.
+        for path in copied {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+    result
+}
+
+fn import_into(
+    db: &Db,
+    archive: &Path,
+    attachments: &Path,
+    now_ms: i64,
+    copied: &mut Vec<PathBuf>,
 ) -> Result<ImportReport, StoreError> {
     let declared = manifest(archive)?;
     let mut zip = open(archive)?;
     let decks: Vec<ArchiveDeck> = read_json(&mut zip, "decks.json", archive)?;
     let cards: Vec<ArchiveCard> = read_json(&mut zip, "cards.json", archive)?;
-    drop(zip);
 
     let mut report = ImportReport::default();
     let mut deck_ids: HashMap<i64, Id> = HashMap::new();
@@ -290,20 +326,57 @@ pub(crate) fn import(
                 reason: format!("card {} names deck {}", card.id, card.deck),
             });
         };
-        let Outcome::Card(id) = db.staged(
-            &Command::CreateCard {
-                deck,
-                markdown: card.text,
-            },
-            now_ms,
-        )?
-        else {
+        let diagram = card
+            .image
+            .as_deref()
+            .is_some_and(|image| !image.trim().is_empty());
+        let outcome = if diagram {
+            let image = card.image.as_deref().unwrap_or_default();
+            let bytes = picture(&mut zip, image, archive)?;
+            let name =
+                attach_bytes(attachments, image, &bytes).map_err(|source| StoreError::Write {
+                    path: attachments.join(image),
+                    source,
+                })?;
+            copied.push(attachments.join(&name));
+            report.images += 1;
+            db.staged(
+                &Command::CreateDiagram {
+                    deck,
+                    image: name,
+                    caption: card.caption,
+                },
+                now_ms,
+            )?
+        } else {
+            db.staged(
+                &Command::CreateCard {
+                    deck,
+                    markdown: card.text,
+                },
+                now_ms,
+            )?
+        };
+        let Outcome::Card(id) = outcome else {
             return Err(StoreError::Archive {
                 path: archive.to_path_buf(),
                 reason: "a card command did not return a card".to_string(),
             });
         };
-        if !card.fields.is_empty() {
+        for mask in card.masks {
+            db.staged(
+                &Command::AddMask {
+                    card: id,
+                    group: mask.group,
+                    rect: MaskRect::new(mask.x, mask.y, mask.w, mask.h),
+                },
+                now_ms,
+            )?;
+            report.masks += 1;
+        }
+        // A diagram has no text to render, so its template and fields (which a text card would
+        // carry) have nothing to apply to; our own export leaves them out for diagrams.
+        if !diagram && !card.fields.is_empty() {
             db.staged(
                 &Command::SetFields {
                     card: id,
@@ -316,7 +389,7 @@ pub(crate) fn import(
                 now_ms,
             )?;
         }
-        if let Some(template) = card.template {
+        if !diagram && let Some(template) = card.template {
             db.staged(
                 &Command::SetCardTemplate {
                     card: id,
@@ -383,6 +456,20 @@ pub(crate) fn import(
         });
     }
     Ok(report)
+}
+
+fn picture(zip: &mut ZipArchive<File>, entry: &str, archive: &Path) -> Result<Vec<u8>, StoreError> {
+    let mut file = zip.by_name(entry).map_err(|_| StoreError::Archive {
+        path: archive.to_path_buf(),
+        reason: format!("the archive holds no picture {entry:?}"),
+    })?;
+    let mut bytes = Vec::with_capacity(usize::try_from(file.size()).unwrap_or(0));
+    file.read_to_end(&mut bytes)
+        .map_err(|error| StoreError::Archive {
+            path: archive.to_path_buf(),
+            reason: format!("picture {entry:?} could not be read: {error}"),
+        })?;
+    Ok(bytes)
 }
 
 fn bad_review(archive: &Path, card: i64, reason: &str) -> StoreError {
