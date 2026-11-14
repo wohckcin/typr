@@ -15,7 +15,7 @@
       *Verification*: a scene card embedding another draws the inset block and the caption,
       and its own text still renders around it.
 
-- [ ] 2.2 Draw a missing target as the name in the danger tone with the caption "no such
+- [x] 2.2 Draw a missing target as the name in the danger tone with the caption "no such
       card", leaving the rest of the card intact.
       *Verification*: an embed naming an absent card draws the marker and the card's other
       text.

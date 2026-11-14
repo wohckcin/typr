@@ -115,6 +115,32 @@ fn an_embed_draws_as_an_inset_in_the_preview() {
     );
 }
 
+/// An embed naming nothing keeps the name, says it is missing, and leaves the card readable.
+#[test]
+fn a_missing_embed_names_the_card_and_says_so() {
+    let drawn = drawn_text(editor_state(
+        "Look at this:\n\n![[Ghost]]\n---\nCell division.",
+    ));
+    assert!(
+        drawn.iter().any(|text| text == "Ghost"),
+        "the missing name is not drawn: {drawn:?}"
+    );
+    assert!(
+        drawn.iter().any(|text| text == typr::embed::NO_SUCH_CARD),
+        "the missing caption is not drawn: {drawn:?}"
+    );
+    assert!(
+        drawn.iter().any(|text| text.contains("Cell division.")),
+        "the rest of the card is not drawn: {drawn:?}"
+    );
+    assert!(
+        !drawn
+            .iter()
+            .any(|text| text.contains("Mitosis is how one cell becomes two")),
+        "a card that was not named was drawn anyway: {drawn:?}"
+    );
+}
+
 /// The same block draws on a review face, so a side is not the only place an embed can be read.
 #[test]
 fn an_embed_draws_on_a_review_face() {
