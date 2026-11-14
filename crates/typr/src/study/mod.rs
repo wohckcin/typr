@@ -15,6 +15,9 @@ pub trait Host: 'static {
     fn session_mut(&mut self) -> &mut Session;
     /// Send the grade to the store and answer the id it was sent under. The key names the prompt
     /// being answered: a card may hold a forward prompt, a reverse one, or a group apiece.
+    ///
+    /// A cram run sends nothing, because it writes nothing: the grade is taken by the session and
+    /// `0` comes back, which is the id of no command and acknowledges nothing.
     fn submit_grade(&mut self, card: Id, key: &str, grade: Grade) -> Result<u64, StoreError>;
     /// How many cards are due right now, for the summary.
     fn due_now(&self) -> usize;

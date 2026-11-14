@@ -832,3 +832,96 @@ fn a_group_prompt_carries_only_its_own_rectangles() {
         "a group with no rectangles asks nothing"
     );
 }
+
+/// Every prompt row, dumped in a fixed order: a cram run must leave the schedules untouched.
+fn prompt_rows(path: &std::path::Path) -> Vec<String> {
+    let conn = rusqlite::Connection::open(path).expect("raw connection");
+    let mut stmt = conn
+        .prepare(
+            "SELECT card_id, key, phase, ifnull(due_at, -1), interval_ms, reps, lapses
+               FROM prompt ORDER BY card_id, key",
+        )
+        .expect("prepare");
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(format!(
+                "{}|{}|{}|{}|{}|{}|{}",
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })
+        .expect("query");
+    rows.collect::<Result<Vec<_>, _>>().expect("rows")
+}
+
+/// Every recorded answer, dumped the same way.
+fn review_rows(path: &std::path::Path) -> Vec<String> {
+    let conn = rusqlite::Connection::open(path).expect("raw connection");
+    let mut stmt = conn
+        .prepare(
+            "SELECT card_id, key, phase, at, grade, interval_ms, ifnull(due_at, -1)
+               FROM review_log ORDER BY card_id, key, at",
+        )
+        .expect("prepare");
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(format!(
+                "{}|{}|{}|{}|{}|{}|{}",
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })
+        .expect("query");
+    rows.collect::<Result<Vec<_>, _>>().expect("rows")
+}
+
+#[test]
+fn a_cram_grade_writes_nothing() {
+    use typr_core::store::Store as _;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let mut state = State {
+        store: Some(library_with_one_card(&dir)),
+        session: Session::cram(vec![Entry::sides(1, ["front", "back"], 0)]),
+        screen: Screen::Session,
+        ..State::default()
+    };
+    let prompts_before = prompt_rows(&path);
+    assert!(!prompts_before.is_empty(), "the card has a prompt");
+    assert!(review_rows(&path).is_empty(), "nothing has been answered");
+
+    for grade in [Grade::Forgot, Grade::Forgot, Grade::Remembered] {
+        while state.session.hidden() > 0 {
+            assert!(state.session.reveal());
+        }
+        study::answer(&mut state, grade);
+        assert_eq!(
+            state.session.grades.last(),
+            Some(&grade),
+            "the answer landed"
+        );
+    }
+
+    assert_eq!(prompt_rows(&path), prompts_before, "no prompt moved");
+    assert!(review_rows(&path).is_empty(), "no answer was recorded");
+    assert!(
+        state.store.as_ref().expect("store").poll().is_empty(),
+        "nothing was sent, so there is no answer to come back"
+    );
+    assert!(state.failure.is_none());
+    assert!(
+        matches!(state.screen, Screen::Summary),
+        "the run ends when the last pass is remembered"
+    );
+}

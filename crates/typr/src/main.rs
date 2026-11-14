@@ -19,7 +19,7 @@ use typr::study::{self, Host};
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Command, Surface};
 use typr_core::screen::Queue;
-use typr_core::session::{Entry, Session};
+use typr_core::session::{Entry, Mode, Session};
 use typr_core::store::{
     CardKind, CardMode, CardSummary, Grade, Handle, Id, MaskRect, MaskRow, Outcome, SavedView,
     Sort, SortDir, Store, StoreError, ViewSpec, WorkerStatus,
@@ -583,6 +583,15 @@ impl study::Host for State {
     }
 
     fn submit_grade(&mut self, card: Id, key: &str, grade: Grade) -> Result<u64, StoreError> {
+        if self.session.mode() == Mode::Cram {
+            // A cram answer stays in the session: it schedules nothing, so no request goes out and
+            // no answer is coming back. The id is the one an unsent command carries.
+            self.session.answer_here();
+            if self.session.finished() {
+                self.screen = Screen::Summary;
+            }
+            return Ok(0);
+        }
         let Some(store) = &self.store else {
             self.fail(&StoreError::Closed);
             return Err(StoreError::Closed);
