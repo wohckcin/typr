@@ -666,7 +666,7 @@ fn a_reverse_review_says_so() {
 /// being asked and nowhere else, so the other group stays in sight while the question is open.
 #[test]
 fn a_diagram_prompt_covers_only_the_group_it_asks() {
-    let mut state = State {
+    let state = State {
         screen: Screen::Session,
         session: Session::new(
             Queue::New,
