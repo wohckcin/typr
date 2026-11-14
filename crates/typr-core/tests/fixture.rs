@@ -1,8 +1,10 @@
 //! A library file written before the crate split must keep working after it.
 //!
-//! The fixture next to this file was produced by the single-crate build: one deck, one two-sided
-//! card, and one grade on its prompt. Its schema version is the same one this crate writes, so the
-//! test proves the format survived the move rather than the migration.
+//! The fixture next to this file was written by the single-crate build at commit `0acaded`, before
+//! any module moved: one deck, one two-sided card, and one grade on its prompt. To regenerate it,
+//! check that commit out in a worktree with its own target directory, create a deck, a card and a
+//! grade through `typr::store::Db`, and copy the resulting file here. Never regenerate it from this
+//! crate: a file this crate wrote proves only that it can read its own output.
 
 use std::path::{Path, PathBuf};
 
@@ -92,56 +94,4 @@ fn a_library_written_before_the_split_still_opens_and_grades() {
         db.snapshot().expect("snapshot").cards[0].markdown == "front\n---\nback",
         "the card still carries its text"
     );
-}
-
-/// Regenerate the fixture from the current schema. Run deliberately:
-/// `cargo test -p typr-core --test fixture -- --ignored write_the_fixture`, then commit the file.
-#[test]
-#[ignore = "writes the committed fixture"]
-fn write_the_fixture() {
-    let path = fixture_path();
-    std::fs::create_dir_all(path.parent().expect("tests/data")).expect("create tests/data");
-    for suffix in ["", "-wal", "-shm"] {
-        let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
-    }
-
-    let db = Db::open(&path).expect("create the fixture");
-    let deck = match db
-        .apply(
-            &Command::CreateDeck {
-                parent: None,
-                name: "Biology".to_string(),
-            },
-            NOON,
-        )
-        .expect("deck")
-    {
-        Outcome::Deck(id) => id,
-        other => panic!("unexpected outcome: {other:?}"),
-    };
-    let card = match db
-        .apply(
-            &Command::CreateCard {
-                deck,
-                markdown: "front\n---\nback".to_string(),
-            },
-            NOON,
-        )
-        .expect("card")
-    {
-        Outcome::Card(id) => id,
-        other => panic!("unexpected outcome: {other:?}"),
-    };
-    db.apply(
-        &Command::Grade {
-            card,
-            key: "fwd".to_string(),
-            grade: Grade::Remembered,
-            duration_ms: Some(1_000),
-        },
-        NOON,
-    )
-    .expect("grade");
-
-    println!("wrote {}", path.display());
 }
