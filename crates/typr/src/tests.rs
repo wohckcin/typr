@@ -1503,6 +1503,71 @@ fn a_save_the_library_refuses_leaves_the_card_dirty() {
 }
 
 #[test]
+fn a_deck_this_call_did_not_ask_for_does_not_write_the_waiting_card() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(
+        typr_core::store::Db::open(&path).expect("open"),
+        Box::new(typr_core::clock::SystemClock),
+        waker,
+    )
+    .expect("spawn");
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    state.pending_new_card = Some("waiting\n---\ntext".to_string());
+
+    // The sidebar makes a deck, which answers with a deck id this state never asked a card for.
+    library::Host::new_deck(&mut state);
+    // Long enough for the deck and for any card it might have carried.
+    for _ in 0..100 {
+        let mut wake = None;
+        frame_step(&mut state, 0, &mut wake);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+
+    let snapshot = state.library.snapshot().clone();
+    assert_eq!(snapshot.decks.len(), 1, "the sidebar deck was made");
+    assert!(
+        snapshot.cards.is_empty(),
+        "the waiting text is not written into a deck this call did not ask for"
+    );
+    assert!(
+        state.pending_new_card.is_some(),
+        "the text is still waiting"
+    );
+}
+
+#[test]
+fn a_deck_send_that_fails_lets_the_waiting_card_go() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("library.sqlite3");
+    let waker: Waker = std::sync::Arc::new(|| {});
+    let handle = Handle::spawn(
+        typr_core::store::Db::open(&path).expect("open"),
+        Box::new(typr_core::clock::SystemClock),
+        waker,
+    )
+    .expect("spawn");
+    handle.close();
+    let mut state = State {
+        store: Some(handle),
+        ..State::default()
+    };
+    state.screen = Screen::Editor;
+    state.editor = Editor::new(None, "front\n---\nback".to_string());
+
+    assert!(!state.persist(), "nothing was stored");
+    assert!(
+        state.pending_new_card.is_none(),
+        "a text whose deck could not be made is not left armed"
+    );
+    assert!(state.failure.is_some(), "the refusal is on the line");
+}
+
+#[test]
 fn a_card_that_still_needs_a_deck_is_not_reported_saved() {
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("library.sqlite3");

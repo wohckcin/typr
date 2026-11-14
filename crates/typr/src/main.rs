@@ -102,6 +102,7 @@ struct State {
     seed: u64,
     /// A new card waiting for the deck that has to be created for it.
     pending_new_card: Option<String>,
+    deck_request: Option<u64>,
     /// Every command that went out and has not been answered: what it was, and when it left.
     sent: HashMap<u64, (&'static str, Instant)>,
 }
@@ -129,6 +130,7 @@ impl Default for State {
             seeded: false,
             seed: 1,
             pending_new_card: None,
+            deck_request: None,
             sent: HashMap::new(),
         }
     }
@@ -557,16 +559,20 @@ impl State {
                         // A library with no deck yet: the first card brings one with it.
                         self.pending_new_card = Some(text.clone());
                         let name = self.free_deck_name();
-                        if let Err(error) = store.create_deck(None, &name) {
-                            self.fail(&error);
+                        let sent = store.create_deck(None, &name);
+                        if !remember(
+                            &mut self.sent,
+                            "create_deck",
+                            &mut self.deck_request,
+                            &mut self.failure,
+                            sent,
+                        ) {
                             self.pending_new_card = None;
                             self.pending_tags.clear();
-                            false
-                        } else {
-                            // The card itself is still to come, so the buffer is not saved yet:
-                            // reporting it saved would lose the text if the app quit now.
-                            false
                         }
+                        // The card itself is still to come, so the buffer is not saved yet:
+                        // reporting it saved would lose the text if the app quit now.
+                        false
                     }
                 }
             }
@@ -776,17 +782,19 @@ impl State {
                         self.last_draft = self.editor.buffer.text.clone();
                     }
                 }
-                Ok(Outcome::Deck(id)) => {
-                    if let (Some(text), Some(store)) = (self.pending_new_card.clone(), &self.store)
-                    {
+                Ok(Outcome::Deck(id)) if self.deck_request == Some(event.id) => {
+                    self.deck_request = None;
+                    if let (Some(text), Some(store)) = (self.pending_new_card.take(), &self.store) {
                         let sent = store.create_card(id, &text);
-                        remember(
+                        if !remember(
                             &mut self.sent,
                             "create_card",
                             &mut self.card_request,
                             &mut self.failure,
                             sent,
-                        );
+                        ) {
+                            self.pending_tags.clear();
+                        }
                     }
                 }
                 Ok(_) => {}
