@@ -21,8 +21,8 @@ use typr_core::keymap::{Command, Surface};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Mode, Session};
 use typr_core::store::{
-    CardKind, CardMode, CardSummary, Grade, Handle, Id, MaskRect, MaskRow, Outcome, SavedView,
-    Sort, SortDir, Store, StoreError, ViewSpec, WorkerStatus,
+    CardKind, CardMode, CardRef, CardSummary, Grade, Handle, Id, MaskRect, MaskRow, Outcome,
+    SavedView, Sort, SortDir, Store, StoreError, ViewSpec, WorkerStatus,
 };
 use typr_core::{day, hidden};
 
@@ -2055,6 +2055,36 @@ fn main() {
             ];
             state.session = Session::cram(entries);
             state.screen = Screen::Session;
+        }),
+        ("editor-backlinks", |state: &mut State| {
+            let text = "The citric acid cycle\n---\nRuns in the mitochondrion.".to_string();
+            state.screen = Screen::Editor;
+            state.editor = Editor::new(Some(1), text.clone());
+            // Three referrers, so the panel shows the whole list rather than one lucky row.
+            state.editor.load(
+                &CardSummary {
+                    id: 1,
+                    deck: 2,
+                    name: "The citric acid cycle".to_string(),
+                    markdown: text,
+                    backlinks: vec![
+                        CardRef {
+                            id: 2,
+                            name: "Krebs cycle".to_string(),
+                        },
+                        CardRef {
+                            id: 3,
+                            name: "Notes".to_string(),
+                        },
+                        CardRef {
+                            id: 4,
+                            name: "Glycolysis".to_string(),
+                        },
+                    ],
+                    ..CardSummary::default()
+                },
+                Some("Biology"),
+            );
         }),
     ];
     // Without this Rune ends a window close with `_exit`, so both the worker's flush and the quit

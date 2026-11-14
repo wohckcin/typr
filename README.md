@@ -88,6 +88,25 @@ While you type, the preview masks every answer and names the group it belongs to
 numbered span, `[ … ]` for the plain form — and the caption counts prompts rather than sides — so a card with two numbered groups reports two prompts, not two
 sides.
 
+## Names, references and tags
+
+Every card has a name: the first line of its first side, cut at a readable length, or what its own
+name template renders (`<<Word>> (<<Kind>>)` for a language deck). Names are unique inside a deck —
+the second `Introduction` becomes `Introduction (2)` — while two decks may each hold one; the name is
+stored when the card is written, so renaming a deck never renames its cards. Lists show the name over
+the preview, and the editor header shows it too.
+
+`[[Name]]` refers to another card. The store resolves it when the card is saved, preferring the
+card's own deck, then the decks above it, then the whole library, so the same text can point at
+different cards in different decks. A resolved reference is drawn as a link that opens the target;
+its text is stored as written, so resolving never rewrites the card. A name that matches no card
+stays plain text and the editor lists it as unresolved. Every target lists who refers to it in a
+**Referenced by** panel under the preview, and typing `[[` offers the names in the library to finish
+the reference.
+
+Tags are paths: `spanish/verbs` is one tag with two segments, listed under `spanish`, and filtering
+by `spanish` includes the cards tagged with any of its children.
+
 ## Diagram cards
 
 A card can also be a diagram: switch the editor to **Diagram**, choose a picture, and draw
