@@ -487,7 +487,9 @@ pub trait Store: Send + Sync {
     ) -> Result<u64, StoreError>;
     fn reset_history(&self, card: Id, key: &str) -> Result<u64, StoreError>;
 
-    /// The due queue as the scheduler would serve it: most overdue first, ties shuffled.
+    /// Prompts whose relearning step or review date has come, most overdue first and shuffled
+    /// within one study day. `deck` scopes the queue to that deck and its descendants; `None` is
+    /// the whole library, and a scope on an archived deck answers nothing.
     fn due_prompts(
         &self,
         now_ms: i64,
@@ -495,7 +497,8 @@ pub trait Store: Send + Sync {
         seed: u64,
         deck: Option<Id>,
     ) -> Result<u64, StoreError>;
-    /// The new-card queue, capped by what this study day still allows.
+    /// Prompts with nothing scheduled yet, capped by what this study day still allows. `deck`
+    /// scopes the queue to that deck and its descendants; `None` is the whole library.
     fn new_prompts(
         &self,
         now_ms: i64,

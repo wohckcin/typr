@@ -336,3 +336,97 @@ fn a_reshuffle_never_hands_over_a_revealed_card() {
     }
     assert!(moved > 0, "no seed reordered the front of the queue");
 }
+
+#[test]
+fn a_card_that_arrives_with_a_schedule_waits_out_its_learning_step() {
+    let mut session = Session::new(
+        Queue::New,
+        vec![Entry {
+            card: 1,
+            sides: vec!["a".to_string(), "b".to_string()],
+            overdue: 0,
+        }],
+    );
+    session.arrive(Entry {
+        card: 2,
+        sides: vec!["a".to_string(), "b".to_string()],
+        overdue: 0,
+    });
+
+    // The card the session opened with is new, so a lapse sends it straight back.
+    session.reveal();
+    assert!(session.grade(Grade::Forgot).is_some());
+    session.sent(1);
+    assert!(session.acknowledge(1, 0));
+    assert!(
+        !session.waiting.iter().any(|(_, entry)| entry.card == 1),
+        "a card that never had a schedule is not made to wait"
+    );
+    assert_eq!(session.current().map(|entry| entry.card), Some(2));
+
+    // The card that arrived with a schedule behind it waits out its relearning step.
+    session.reveal();
+    assert!(session.grade(Grade::Forgot).is_some());
+    session.sent(2);
+    assert!(session.acknowledge(2, 0));
+    assert!(
+        session.waiting.iter().any(|(_, entry)| entry.card == 2),
+        "the card that arrived scheduled keeps its relearning step"
+    );
+}
+
+#[test]
+fn a_card_landing_at_an_empty_cursor_shows_its_first_side() {
+    // Arriving while nothing is on screen.
+    let mut session = Session::new(Queue::Due, Vec::new());
+    session.arrive(Entry {
+        card: 7,
+        sides: vec!["a".to_string(), "b".to_string()],
+        overdue: 0,
+    });
+    assert_eq!(
+        session.revealed(),
+        1,
+        "the arriving card shows its first side"
+    );
+
+    // A relearning step landing while nothing is on screen.
+    let mut waiting = Session::new(
+        Queue::Due,
+        vec![Entry {
+            card: 3,
+            sides: vec!["a".to_string(), "b".to_string()],
+            overdue: 0,
+        }],
+    );
+    waiting.reveal();
+    assert!(waiting.grade(Grade::Forgot).is_some());
+    waiting.sent(1);
+    assert!(waiting.acknowledge(1, 0));
+    assert!(waiting.current().is_none(), "the only card is waiting");
+    assert_eq!(waiting.advance_clock(LEARNING_STEP_MS), 1);
+    assert_eq!(
+        waiting.revealed(),
+        1,
+        "the card that came back shows its first side"
+    );
+
+    // Forgetting the last new card while nothing is on screen.
+    let mut last = Session::new(
+        Queue::New,
+        vec![Entry {
+            card: 4,
+            sides: vec!["a".to_string(), "b".to_string()],
+            overdue: 0,
+        }],
+    );
+    last.reveal();
+    assert!(last.grade(Grade::Forgot).is_some());
+    last.sent(1);
+    assert!(last.acknowledge(1, 0));
+    assert_eq!(
+        last.revealed(),
+        1,
+        "the card that came straight back shows its first side"
+    );
+}

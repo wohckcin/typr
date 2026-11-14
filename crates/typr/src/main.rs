@@ -481,6 +481,10 @@ impl study::Host for State {
     fn leave_session(&mut self) {
         self.screen = Screen::Library;
         self.session = Session::empty();
+        // A question already sent has no reader once the screen is gone, and its answer must not
+        // put a card into a session nobody is looking at.
+        self.arrivals = None;
+        self.session_deck = None;
     }
 }
 
@@ -652,7 +656,17 @@ impl State {
                 new,
             );
         }
+        // The scope travels with the request: a selection changed while the answer is in flight
+        // must not move the session's arrivals into another deck.
+        self.session_deck = deck;
         self.wanted = Some(queue);
+    }
+
+    /// Whether an arrivals answer is for the session on screen. A request already sent when the
+    /// reader walked away must not put a card into a session nobody is looking at, because that
+    /// session then reads as unfinished and the app stops offering a new one.
+    fn takes_arrivals(&self, id: u64) -> bool {
+        self.arrivals == Some(id) && matches!(self.screen, Screen::Session)
     }
 
     /// Turn the prompts the store answered with into session entries.
@@ -685,7 +699,6 @@ impl State {
             return;
         }
         self.session = Session::new(queue, entries);
-        self.session_deck = self.library.selected_deck;
         self.screen = Screen::Session;
     }
 
@@ -730,7 +743,7 @@ impl State {
                         }
                     }
                 }
-                Ok(Outcome::Due(prompts)) if self.arrivals == Some(event.id) => {
+                Ok(Outcome::Due(prompts)) if self.takes_arrivals(event.id) => {
                     self.arrivals = None;
                     self.due_now = prompts.iter().filter(|prompt| prompt.key == "fwd").count();
                     let arriving: Vec<(Id, String, Option<i64>)> = prompts

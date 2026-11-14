@@ -37,6 +37,9 @@ pub struct Session {
     /// Cards answered in this session. They stay in the queue so `backward` can show them again,
     /// and are skipped everywhere the queue is read forward.
     answered: HashSet<Id>,
+    /// Cards that joined this session with a schedule already behind them. They keep the relearning
+    /// route after a lapse even when the session itself was opened on the new-card queue.
+    scheduled: HashSet<Id>,
 }
 
 impl Session {
@@ -57,6 +60,7 @@ impl Session {
             waiting: Vec::new(),
             read_only: false,
             answered: HashSet::new(),
+            scheduled: HashSet::new(),
         };
         session.show_first_side();
         session
@@ -154,12 +158,23 @@ impl Session {
         }
         self.awaiting = None;
         self.grades.push(grade);
-        match (self.queue, grade) {
+        // A card that arrived with a schedule behind it keeps that schedule: it waits out its
+        // relearning step instead of being handed straight back as if it were new.
+        let queue = if self.scheduled.contains(&card) {
+            Queue::Due
+        } else {
+            self.queue
+        };
+        match (queue, grade) {
             // A forgotten card is not answered: one leaves the queue for later, the other comes
             // straight back, and neither counts as done.
             (Queue::New, Grade::Forgot) => {
                 if let Some(entry) = self.take(card) {
+                    let empty = self.current().is_none();
                     self.entries.push(entry);
+                    if empty {
+                        self.show_first_side();
+                    }
                 }
             }
             (Queue::Due, Grade::Forgot) => {
@@ -279,13 +294,19 @@ impl Session {
             || self.waiting.iter().any(|(_, entry)| entry.card == card)
     }
 
-    /// A prompt that fell due while the session was running joins it.
+    /// A prompt that fell due while the session was running joins it, with the schedule it had.
     pub fn arrive(&mut self, entry: Entry) {
+        let empty = self.current().is_none();
+        self.scheduled.insert(entry.card);
         self.entries.push(entry);
+        if empty {
+            self.show_first_side();
+        }
     }
 
     /// Relearning steps whose moment has come rejoin the queue.
     pub fn advance_clock(&mut self, now_ms: i64) -> usize {
+        let empty = self.current().is_none();
         let mut landed = 0;
         let mut still_waiting = Vec::new();
         for (due_at, entry) in self.waiting.drain(..) {
@@ -297,6 +318,9 @@ impl Session {
             }
         }
         self.waiting = still_waiting;
+        if empty && landed > 0 {
+            self.show_first_side();
+        }
         landed
     }
 

@@ -681,3 +681,63 @@ fn a_search_matches_a_card_by_its_tag() {
         "a tag is part of what a card is searched by"
     );
 }
+
+#[test]
+fn a_deck_scope_covers_the_decks_under_it() {
+    let dir = TempDir::new().expect("tempdir");
+    let mut db = open_temp(&dir);
+    let verbs = deck(&mut db, "Verbs");
+    let irregular = match db
+        .apply(
+            &Command::CreateDeck {
+                parent: Some(verbs),
+                name: "Irregular".to_string(),
+            },
+            0,
+        )
+        .expect("child deck")
+    {
+        Outcome::Deck(id) => id,
+        other => panic!("expected a deck, got {other:?}"),
+    };
+    let nouns = deck(&mut db, "Nouns");
+    let under = card(&mut db, irregular, " ir\n---\n to go");
+    let beside = card(&mut db, nouns, " perro\n---\n dog");
+    schedule(&mut db, under, NOON - HOUR);
+    schedule(&mut db, beside, NOON - HOUR);
+
+    let cards = |prompts: Vec<super::super::DuePrompt>| -> Vec<Id> {
+        prompts.into_iter().map(|prompt| prompt.card).collect()
+    };
+    assert_eq!(
+        cards(db.due_prompts(NOON, 0, 1, Some(verbs)).expect("due")),
+        vec![under],
+        "a card in a deck under the scope is in the scope"
+    );
+}
+
+#[test]
+fn a_new_card_queue_can_be_scoped_to_one_deck() {
+    let dir = TempDir::new().expect("tempdir");
+    let mut db = open_temp(&dir);
+    let verbs = deck(&mut db, "Verbs");
+    let nouns = deck(&mut db, "Nouns");
+    let mine = card(&mut db, verbs, " hablar\n---\n to speak");
+    let theirs = card(&mut db, nouns, " perro\n---\n dog");
+
+    let cards = |prompts: Vec<super::super::NewPrompt>| -> Vec<Id> {
+        prompts.into_iter().map(|prompt| prompt.card).collect()
+    };
+    assert_eq!(
+        cards(db.new_prompts(NOON, 0, 1, Some(verbs)).expect("new")),
+        vec![mine],
+        "only the scoped deck's new card is offered"
+    );
+    let mut all = cards(db.new_prompts(NOON, 0, 1, None).expect("new"));
+    all.sort();
+    assert_eq!(
+        all,
+        vec![mine.min(theirs), mine.max(theirs)],
+        "and unscoped is every deck"
+    );
+}

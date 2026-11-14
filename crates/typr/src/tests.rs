@@ -1339,7 +1339,8 @@ fn a_quiet_quit_says_so() {
     );
 }
 
-/// A library with two cards due now and a third that falls due two seconds from now.
+/// A library with two cards due now and a third that falls due six seconds from now, which
+/// leaves the queue it is missing from a margin wide enough for a slow machine.
 fn library_with_one_card_due_and_one_almost(dir: &tempfile::TempDir) -> Handle {
     let path = dir.path().join("library.sqlite3");
     {
@@ -1374,7 +1375,7 @@ fn library_with_one_card_due_and_one_almost(dir: &tempfile::TempDir) -> Handle {
         for (card, graded_at) in [
             (1, now - 3_600_000),
             (2, now - 3_600_000),
-            (3, now + 2_000 - 600_000),
+            (3, now + 6_000 - 600_000),
         ] {
             db.apply(
                 &typr_core::store::Command::Grade {
@@ -1423,7 +1424,7 @@ fn a_prompt_that_falls_due_during_a_session_joins_it() {
     );
 
     // Wait for the second card's due moment to pass, then answer the first.
-    std::thread::sleep(std::time::Duration::from_millis(2_200));
+    std::thread::sleep(std::time::Duration::from_millis(6_300));
     let mut answered = false;
     let mut settled = 0;
     while settled < 100 {
@@ -1709,4 +1710,85 @@ fn a_library_that_cannot_be_opened_names_its_file() {
     let nameless = open_failure(None, &error);
     assert!(!nameless.contains("at  could not"), "{nameless}");
     assert!(nameless.starts_with("The library could not be opened"));
+}
+
+#[test]
+fn the_summary_counts_what_is_due_now_not_what_was_due_at_the_start() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_one_card_due_and_one_almost(&dir);
+    let mut state = State {
+        store: Some(store),
+        ..State::default()
+    };
+
+    refresh_library(&mut state);
+    let deck = state.library.snapshot().decks[0].id;
+    state.library.select_deck(Some(deck));
+    state.start_session(Queue::Due);
+    wait_for(&mut state, "the session to open", |s| {
+        matches!(s.screen, Screen::Session)
+    });
+    assert_eq!(state.due_now, 2, "two cards are due when the session opens");
+
+    // Answer the card on screen through the key path, so the answer is acknowledged the way the
+    // app acknowledges it. The arrival query that follows is what recounts the queue.
+    state.session.reveal();
+    assert!(state.session.current().is_some(), "a card is on screen");
+    assert!(crate::study::key(
+        &mut state,
+        &KeyEvent {
+            key: Key::Text("f".to_string()),
+            mods: Mods::default(),
+        }
+    ));
+    assert!(
+        !state.session.gradeable(),
+        "the grade left a card awaiting its answer"
+    );
+    wait_for(&mut state, "the count to be taken again", |s| {
+        s.due_now != 2
+    });
+
+    assert_eq!(
+        state.due_now, 1,
+        "the answered card left the queue, so the summary counts one"
+    );
+}
+
+#[test]
+fn an_arrivals_answer_that_lands_after_leaving_is_not_taken() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let store = library_with_a_card(&dir);
+    let mut state = State {
+        store: Some(store),
+        session: session_on(1),
+        screen: Screen::Session,
+        arrivals: Some(9),
+        ..State::default()
+    };
+    assert!(
+        state.takes_arrivals(9),
+        "an answer for the session on screen is taken"
+    );
+    assert!(
+        !state.takes_arrivals(8),
+        "an answer to some other question is not"
+    );
+
+    crate::study::Host::leave_session(&mut state);
+    assert!(
+        state.arrivals.is_none(),
+        "leaving forgets the question it asked"
+    );
+    assert!(
+        !state.takes_arrivals(9),
+        "and an answer that arrives afterwards is ignored, so the app still offers a session"
+    );
+    // Even a question the app is still waiting for must not land off the session screen.
+    state.arrivals = Some(9);
+    assert!(
+        !state.takes_arrivals(9),
+        "an answer is only taken while a session is on screen"
+    );
+    assert!(state.session.finished(), "with nothing left to answer");
 }

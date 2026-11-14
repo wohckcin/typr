@@ -669,7 +669,7 @@ impl Db {
         Ok(u32::try_from(count).unwrap_or(u32::MAX))
     }
 
-    /// The new-card queue: studyable cards whose prompt has never been graded, capped by the
+    /// The new-card queue: studyable cards with nothing scheduled yet (phase `learn` and no due date), capped by the
     /// settings' daily allowance minus what was already learned today.
     pub fn new_prompts(
         &self,
