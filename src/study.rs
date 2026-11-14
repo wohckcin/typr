@@ -18,6 +18,9 @@ pub trait Host: 'static {
     fn due_now(&self) -> usize;
     /// Leave the session and go back to the library.
     fn leave_session(&mut self);
+
+    /// Reorder the cards still to answer, without touching any schedule.
+    fn reshuffle(&mut self);
 }
 
 /// The answers a session offers, and the keys that give them.
@@ -27,6 +30,7 @@ pub const BINDINGS: &[(&str, &str)] = &[
     ("F", "Forgot"),
     ("Right", "Forward"),
     ("Left", "Back"),
+    ("R", "Shuffle"),
     ("Esc", "Library"),
 ];
 
@@ -61,6 +65,10 @@ pub fn key<S: Host>(s: &mut S, event: &KeyEvent) -> bool {
             }
             "f" => {
                 answer(s, Grade::Forgot);
+                true
+            }
+            "r" => {
+                s.reshuffle();
                 true
             }
             _ => false,
@@ -130,7 +138,13 @@ pub fn view<S: Host>(s: &S) -> El {
         );
     }
 
-    let mut answers = row().key("answers").gap(8.0).justify_end();
+    let mut answers = row().key("answers").gap(8.0).justify_end().child(
+        Button::new("Shuffle")
+            .variant(ButtonVariant::Ghost)
+            .on_press(|s: &mut S| s.reshuffle())
+            .build(&rune_kit::Kit::neutral(true))
+            .key("shuffle"),
+    );
     if session.gradeable() {
         answers = answers
             .child(

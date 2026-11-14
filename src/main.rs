@@ -40,6 +40,8 @@ struct State {
     failure: Option<String>,
     /// A scene brought its own library, so opening the real one must not replace it.
     seeded: bool,
+    /// The seed the next shuffle uses, so each press reorders differently.
+    seed: u64,
     /// A new card waiting for the deck that has to be created for it.
     pending_new_card: Option<String>,
 }
@@ -60,6 +62,7 @@ impl Default for State {
             card_request: None,
             failure: None,
             seeded: false,
+            seed: 1,
             pending_new_card: None,
         }
     }
@@ -91,6 +94,12 @@ impl editor::Host for State {
             self.failure = Some(error.to_string());
         }
     }
+}
+
+/// How many whole study days a prompt is past its due date, which is what decides whether a
+/// shuffle may move it. A prompt that is not due yet counts as zero.
+fn overdue_days(now_ms: i64, due_at_ms: i64, offset_ms: i64) -> i64 {
+    (day::study_day(now_ms, offset_ms) - day::study_day(due_at_ms, offset_ms)).max(0)
 }
 
 /// Remember the id of a command that went out, and say why when one could not.
@@ -288,6 +297,11 @@ impl study::Host for State {
         self.due_now
     }
 
+    fn reshuffle(&mut self) {
+        self.seed = self.seed.wrapping_add(1);
+        self.session.reshuffle(self.seed);
+    }
+
     fn leave_session(&mut self) {
         self.screen = Screen::Library;
         self.session = Session::empty();
@@ -380,19 +394,23 @@ impl State {
     }
 
     /// Open the session over the prompts the store answered with.
-    fn open_session(&mut self, queue: Queue, prompts: Vec<(Id, String)>) {
+    fn open_session(&mut self, queue: Queue, prompts: Vec<(Id, String, Option<i64>)>) {
         let snapshot = self.store.as_ref().map(Store::snapshot).unwrap_or_default();
+        let now = typr::clock::SystemClock.now_ms();
+        let offset = day::local_offset_ms();
         let entries: Vec<Entry> = prompts
             .into_iter()
-            .filter(|(_, key)| key == "fwd")
-            .filter_map(|(id, _)| {
+            .filter(|(_, key, _)| key == "fwd")
+            .filter_map(|(id, _, due_at)| {
                 let card = snapshot.cards.iter().find(|card| card.id == id)?;
+                let overdue = due_at.map_or(0, |due_at| overdue_days(now, due_at, offset));
                 Some(Entry {
                     card: card.id,
                     sides: sides::split(&card.markdown)
                         .into_iter()
                         .map(str::to_string)
                         .collect(),
+                    overdue,
                 })
             })
             .collect();
@@ -431,7 +449,10 @@ impl State {
                     self.due_now = prompts.iter().filter(|prompt| prompt.key == "fwd").count();
                     if self.wanted == Some(Queue::Due) {
                         self.wanted = None;
-                        let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
+                        let prompts = prompts
+                            .into_iter()
+                            .map(|p| (p.card, p.key, Some(p.due_at)))
+                            .collect();
                         self.open_session(Queue::Due, prompts);
                     }
                 }
@@ -445,7 +466,7 @@ impl State {
                 Ok(Outcome::New(prompts)) if self.new_request == Some(event.id) => {
                     self.new_request = None;
                     if self.wanted.take() == Some(Queue::New) {
-                        let prompts = prompts.into_iter().map(|p| (p.card, p.key)).collect();
+                        let prompts = prompts.into_iter().map(|p| (p.card, p.key, None)).collect();
                         self.open_session(Queue::New, prompts);
                     }
                 }
@@ -648,6 +669,7 @@ fn main() {
                     "What is **osmosis**?".to_string(),
                     "Water across a membrane.".to_string(),
                 ],
+                overdue: 0,
             }];
             state.session = Session::new(Queue::New, entries);
             state.screen = Screen::Session;
@@ -660,6 +682,7 @@ fn main() {
                         "What is **mitosis**?".to_string(),
                         "Cell division.".to_string(),
                     ],
+                    overdue: 1,
                 },
                 Entry {
                     card: 2,
@@ -667,6 +690,7 @@ fn main() {
                         "What is **osmosis**?".to_string(),
                         "Water across a membrane.".to_string(),
                     ],
+                    overdue: 1,
                 },
             ];
             state.session = Session::new(Queue::Due, entries);

@@ -9,6 +9,9 @@ use crate::store::{Grade, Id};
 pub struct Entry {
     pub card: Id,
     pub sides: Vec<String>,
+    /// How many study days overdue this card was when the session started. Entries with a larger
+    /// number stay in front of the others, so a reshuffle never promotes a card that is not due.
+    pub overdue: i64,
 }
 
 /// The cards this session is walking, in order.
@@ -174,6 +177,34 @@ impl Session {
         self.entries.push(entry);
         self.revealed = 0;
         true
+    }
+
+    /// The cards still to answer, in the order they will come.
+    pub fn order(&self) -> Vec<Id> {
+        self.entries
+            .get(self.at.min(self.entries.len())..)
+            .unwrap_or_default()
+            .iter()
+            .map(|entry| entry.card)
+            .collect()
+    }
+
+    /// Reorder the cards still to answer, keeping the more overdue ones in front.
+    ///
+    /// Only cards sharing the same overdue day may swap places, which is what keeps a reshuffle
+    /// from breaking the order the scheduler asked for.
+    pub fn reshuffle(&mut self, seed: u64) {
+        let mut shuffle = crate::shuffle::Shuffle::new(seed);
+        let mut index = self.at;
+        while index < self.entries.len() {
+            let overdue = self.entries[index].overdue;
+            let mut end = index;
+            while end < self.entries.len() && self.entries[end].overdue == overdue {
+                end += 1;
+            }
+            shuffle.reorder(&mut self.entries[index..end]);
+            index = end;
+        }
     }
 
     /// Revisit the previous card read-only: its answer is already recorded.

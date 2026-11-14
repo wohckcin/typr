@@ -12,6 +12,7 @@ struct App {
     sent: Vec<(u64, Id, Grade)>,
     due: usize,
     left: bool,
+    shuffles: u32,
 }
 
 impl App {
@@ -21,6 +22,7 @@ impl App {
             .map(|(card, sides)| Entry {
                 card: *card as Id,
                 sides: sides.iter().map(|s| s.to_string()).collect(),
+                overdue: 0,
             })
             .collect();
         App {
@@ -28,6 +30,7 @@ impl App {
             sent: Vec::new(),
             due: 0,
             left: false,
+            shuffles: 0,
         }
     }
 
@@ -62,6 +65,10 @@ impl Host for App {
 
     fn leave_session(&mut self) {
         self.left = true;
+    }
+
+    fn reshuffle(&mut self) {
+        self.shuffles += 1;
     }
 }
 
@@ -195,4 +202,26 @@ fn the_summary_counts_this_sessions_answers_and_what_is_due_now() {
     rt.pointer_up(x, y);
     rt.frame(0.0);
     assert!(rt.state.left, "the way back to the library works");
+}
+
+#[test]
+fn the_shuffle_key_reorders_without_answering() {
+    let mut app = App::with(Queue::Due, &[(1, &["one", "1"]), (2, &["two", "2"])]);
+    app.session.reveal();
+    let graded = app.session.grades.len();
+    let handled = key(
+        &mut app,
+        &KeyEvent {
+            key: Key::Text("r".into()),
+            mods: Mods::default(),
+        },
+    );
+    assert!(handled, "the key is taken");
+    assert_eq!(app.shuffles, 1, "and asks the host to shuffle");
+    assert_eq!(
+        app.session.grades.len(),
+        graded,
+        "shuffling records no grade"
+    );
+    assert!(app.sent.is_empty(), "and sends nothing to the store");
 }

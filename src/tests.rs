@@ -10,6 +10,7 @@ fn forgotten_due_card() -> State {
         vec![Entry {
             card: 7,
             sides: vec!["front".to_string(), "back".to_string()],
+            overdue: 0,
         }],
     );
     while session.next_side().is_some() {
@@ -66,6 +67,7 @@ fn session_on(card: Id) -> Session {
         vec![Entry {
             card,
             sides: vec!["front".to_string(), "back".to_string()],
+            overdue: 0,
         }],
     );
     while session.next_side().is_some() {
@@ -1086,4 +1088,71 @@ fn a_card_moves_to_another_deck_and_keeps_its_schedule() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     assert_eq!(due, Some(1), "and its due date survived the move");
+}
+
+#[test]
+fn a_prompt_due_yesterday_is_one_day_overdue() {
+    const HOUR: i64 = 60 * 60 * 1000;
+    const NOON: i64 = 1_760_000_000_000;
+    // Noon today, due at noon yesterday: one whole study day late.
+    assert_eq!(crate::overdue_days(NOON, NOON - 24 * HOUR, 0), 1);
+    // Due an hour ago, same study day: nothing to be late for yet.
+    assert_eq!(crate::overdue_days(NOON, NOON - HOUR, 0), 0);
+    // Due tomorrow: never negative.
+    assert_eq!(crate::overdue_days(NOON, NOON + 24 * HOUR, 0), 0);
+    // Three study days late.
+    assert_eq!(crate::overdue_days(NOON, NOON - 3 * 24 * HOUR, 0), 3);
+}
+
+#[test]
+fn the_session_screen_offers_a_shuffle() {
+    let mut state = State {
+        session: Session::new(
+            Queue::Due,
+            vec![
+                Entry {
+                    card: 1,
+                    sides: vec!["a".to_string(), "b".to_string()],
+                    overdue: 0,
+                },
+                Entry {
+                    card: 2,
+                    sides: vec!["c".to_string(), "d".to_string()],
+                    overdue: 0,
+                },
+                Entry {
+                    card: 3,
+                    sides: vec!["e".to_string(), "f".to_string()],
+                    overdue: 3,
+                },
+            ],
+        ),
+        ..State::default()
+    };
+    state.screen = Screen::Session;
+    let before = state.session.order();
+    study::Host::reshuffle(&mut state);
+    let after = state.session.order();
+    let mut was = before.clone();
+    let mut now = after.clone();
+    was.sort_unstable();
+    now.sort_unstable();
+    assert_eq!(now, was, "a shuffle keeps every card in the queue");
+    assert_eq!(
+        after.last().copied(),
+        Some(3),
+        "and keeps the most overdue card behind the rest"
+    );
+
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::view,
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    assert!(
+        runtime.find("shuffle").is_some(),
+        "the screen offers the shuffle"
+    );
 }

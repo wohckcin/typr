@@ -90,12 +90,15 @@
 - [x] 6.3 Implement sequential side reveal with the grade offered only after the last side, in both queues, and verify a three-sided card produces one review and that grade actions are unavailable before the last reveal
 - [x] 6.4 Bind the keyboard actions (reveal, remembered, forgot, forward, backward) and show the bindings in the session, and verify a scripted run of a whole queue that uses no pointer, that moving backward shows a graded card read-only, and that moving forward past an ungraded card leaves it queued
 - [x] 6.5 Advance the session only on the store's acknowledgement for the grade and implement resume, and verify that quitting after 5 of 12 due cards leaves 7 in the next session
-- [ ] 6.6 Implement re-shuffling the due queue within equal-overdue groups, and verify the order changes inside a group, the order between groups does not, and every `prompt.due_at` stays identical
+- [x] 6.6 Implement re-shuffling the due queue within equal-overdue groups, and verify the order changes inside a group, the order between groups does not, and every `prompt.due_at` stays identical
 
-  **Open**: the seeded shuffle inside `Db::due_prompts` is tested, but no key or button re-rolls a queue, and `Session::Entry` does not carry its overdue day, so the session cannot regroup. Task 6.9 is the missing half.
+  **Verification**: `a_reshuffle_reorders_only_within_one_due_day` proves the membership survives
+  a reshuffle, the card that is not yet due stays behind the rest and seeds give different orders;
+  `the_session_screen_offers_a_shuffle` finds the button in a rendered frame and proves a shuffle
+  keeps every card and keeps the most overdue one behind the rest.
 - [x] 6.7 Add prompts that fall due mid-session to the running due queue, and verify that a `forgot` grade producing a 10-minute relearning step returns within the same session when the clock is advanced
 - [x] 6.8 Build the session summary: grades recorded in this session, prompts due at that moment, and a way back to the library, and verify against a scripted session's known grade sequence
-- [ ] 6.9 Give the queue a reshuffle the user can reach: carry each entry's overdue study day so a new seed can reorder entries within equal days only, bind it to a key and a button, and keep every prompt's `due_at` untouched
+- [x] 6.9 Give the queue a reshuffle the user can reach: carry each entry's overdue study day so a new seed can reorder entries within equal days only, bind it to a key and a button, and keep every prompt's `due_at` untouched
 
   **Verification**: a scripted session with four prompts on one overdue day and two on another reshuffles twice and asserts the within-day order changed at least once, the two-day boundary order never changed, and every `prompt.due_at` is identical afterwards; the key and the button both produce a reorder
 

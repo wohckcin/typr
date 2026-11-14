@@ -9,6 +9,7 @@ fn entry(card: i64, sides: &[&str]) -> Entry {
     Entry {
         card: card as crate::store::Id,
         sides: sides.iter().map(|s| s.to_string()).collect(),
+        overdue: 0,
     }
 }
 
@@ -220,4 +221,58 @@ fn a_grade_that_was_never_sent_can_be_taken_again() {
     assert!(session.grade(Grade::Forgot).is_some());
     session.refuse(0);
     assert!(session.gradeable());
+}
+
+fn overdue_entry(card: i64, overdue: i64) -> Entry {
+    Entry {
+        card: card as crate::store::Id,
+        sides: vec!["front".to_string(), "back".to_string()],
+        overdue,
+    }
+}
+
+#[test]
+fn a_reshuffle_reorders_only_within_one_due_day() {
+    let mut session = Session::new(
+        Queue::Due,
+        vec![
+            overdue_entry(1, 0),
+            overdue_entry(2, 0),
+            overdue_entry(3, 0),
+            overdue_entry(4, 2),
+        ],
+    );
+    let mut orders = Vec::new();
+    for seed in 1..40 {
+        session.reshuffle(seed);
+        let order = session.order();
+        assert_eq!(
+            order.len(),
+            4,
+            "a reshuffle never loses a card from the queue"
+        );
+        assert_eq!(
+            *order.last().expect("a card"),
+            4,
+            "the card that is not due stays behind the ones that are"
+        );
+        let mut front = order[..3].to_vec();
+        front.sort_unstable();
+        assert_eq!(
+            front,
+            vec![1, 2, 3],
+            "the due cards keep their membership, only their order changes"
+        );
+        orders.push(order);
+    }
+    let distinct = {
+        let mut unique = orders.clone();
+        unique.sort();
+        unique.dedup();
+        unique.len()
+    };
+    assert!(
+        distinct > 1,
+        "different seeds give different orders, or the shuffle does nothing"
+    );
 }
