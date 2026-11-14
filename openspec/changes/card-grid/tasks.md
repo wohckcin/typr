@@ -3,6 +3,23 @@
 ## 1. The tile
 
 - [ ] 1.1 Add `crates/typr/src/library/tile.rs` with `pub fn tile<S: Host>(card: &CardSummary, width: f32) -> El` drawing the surface, the rendered first side and the footer strip. Verification: `cargo test -p typr --lib library::tile` passes `a_tile_draws_the_first_side_only`.
+- [ ] 1.1a Draw the strip and the footer to the measured anatomy: body 96 above a footer 26, the hidden-side
+      label a full-width 22-point strip at the bottom of the body (9px/600, uppercase, 30% white,
+      `rgba(0,0,0,0.1)`), the footer `rgba(0,0,0,0.09)` with `0 0 8px 8px` radius holding a 13px sentence-case
+      word and a 10px/500 uppercase kicker.
+      *Verification*: a scene tile measures 245x124 at a 997-point window, the strip 22 and the footer 26; a
+      rendered tile's strings read `New`, `0 days`, `1 hidden side`, with case as drawn.
+
+- [ ] 1.1b Reserve the tag strip's height on every tile and draw it only when the card has tags, so a line's
+      tiles stay one height.
+      *Verification*: two cards, one tagged and one not, draw at the same height, and the untagged one draws
+      no chip.
+
+- [ ] 1.1c Draw hidden text masked on a tile exactly as a review face draws it, and fail if the answer text
+      reaches the tile.
+      *Verification*: a card whose first side holds `{{insulin}}` renders a masked span and the tile's strings
+      never contain `insulin`.
+
 - [ ] 1.2 Add `fn hidden_sides(card: &CardSummary) -> usize` (sides minus one, floored at zero) and render the badge only above zero. Verification: `a_tile_states_the_sides_it_hides` and `a_note_carries_no_hidden_side_badge`.
 - [ ] 1.0 Widen the snapshot: `CardSummary` gains `prompts: u32`, `unscheduled: u32` and `due_at: Option<i64>`, filled by the card query's left join on `studyable_prompt` (see design.md). No schema change. Verification: `a_card_with_one_due_prompt_snapshots_its_due_date` and `a_note_snapshots_no_prompts`; the existing snapshot tests still pass.
 - [ ] 1.4 Draw tag chips with `fn chips(tags: &[String], width: f32) -> (Vec<&String>, usize)` and the `+N` overflow. Verification: `the_chips_count_what_they_drop`.

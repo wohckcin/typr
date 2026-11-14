@@ -9,10 +9,15 @@ filtered cards, and `CardSummary` (`crates/typr-core/src/store/mod.rs:87`) carri
 holds no scheduling state. A tile's badge needs three facts that are not there, so this change adds them
 in one place, and `sidebar`'s deck counts read the same fields instead of inventing a second query.
 
-Measured on the Mochi web app, dark theme, 2026-11-14: tile 233x157 (845 px window) and 287x132 (1485 px
-window), radius 8 px, border `1px solid rgba(255,255,255,0.04)`, the shared card shadow, 10 px padding,
-footer strip 27 px with `0 0 8px 8px` radius, badges in 12 px uppercase, first side in 16 px, tags as chips
-6 px apart.
+Measured on the Mochi web app, dark theme, 2026-11-14, at a 997-point window with a 200-point sidebar: the
+grid starts at x=215, a tile is 245x124, the gap is 16, and three tiles sit on the line. A tile is a body of
+96 above a footer of 26, radius 8, background `rgb(46,47,49)`, the shared card shadow, 10 padding. The
+hidden-side label is a full-width strip 22 tall at the bottom of the body — 9px/600, uppercase, 30% white,
+background `rgba(0,0,0,0.1)` — and the footer is `rgba(0,0,0,0.09)` with `0 0 8px 8px` radius, holding a
+13px sentence-case word on the left and a 10px/500 uppercase kicker at 40% white on the right. The empty
+tile is 245x124 with radius 4, `1px dashed rgba(255,255,255,0.1)`, 10 padding, the label `New Card` and a
+9px/500 uppercase keycap `N` on 30% black with radius 4. A card carrying hidden text draws it masked
+(`rgb(36,36,38)`, radius 3) exactly as a review face does, and a card with one side draws no strip.
 
 ## Goals
 
@@ -39,12 +44,27 @@ each row builds `columns` tiles, and the row height is `TILE_HEIGHT + GAP`. Pass
 
 `fn columns_for(width: f32) -> usize` returns `((width + GAP) / (MIN_TILE_WIDTH + GAP)).floor().max(1.0)` with
 `MIN_TILE_WIDTH = 233.0` and `GAP = 16.0`. Tiles then take `(width - GAP * (columns - 1)) / columns`, so they
-fill the line instead of leaving a ragged edge. Measured Mochi widths (233 at 845, 287 at 1485) both fall out
+fill the line instead of leaving a ragged edge. Mochi's rule is `repeat(auto-fill, minmax(233px, 1fr))` with a
+16-point gap, which this reproduces at every width measured: content 767 gives three tiles of 245, content 590
+gives two of 287, content 1255 gives five of 238. An earlier draft of this design quoted "233 at 845 and 287
+at 1485", which was two different windows' arithmetic labelled as one; the widths fall out
 of this rule with the same constants, which is why the numbers are these and not round ones.
+
+### Every tile in a line is the same height, and the tag strip's height is reserved
+
+`virtual_rows` needs one height per row, and Mochi's tiles are not all the same height: a deck whose cards
+carry tags measured 157 against 124 for a deck whose cards do not. Two ways out — reserve the tag strip's
+height on every tile, or abandon `virtual_rows` for a masonry flow — and this change reserves it, because a
+lagging scroll on a 5000-card list costs more than 33 points of empty space on a card without tags. The
+reserved strip is drawn only when the card has tags; the space is held either way. That is a deliberate
+departure from Mochi, which lets a row's tiles grow to the tallest, and it is the reason the design keeps
+`virtual_rows` (`crates/rune/src/el/virtual_rows.rs:80`) with `col().growth(GrowthSpec::default())`.
 
 ### The badge vocabulary is three states, not a date
 
-A tile states `new`, or the interval in whole days with the word day, or `due` when the prompt is due now.
+A tile states `New`, or `N days` for the interval in whole days, or `Due` when the prompt is due now;
+the footer's word is sentence case and pluralised (`0 days`, `1 day`), and only the small kicker beside it is
+uppercase.
 Dates were rejected: a tile is read at a glance, and "in 3 days" versus "13 Nov" costs a decode step the
 badge cannot afford.
 

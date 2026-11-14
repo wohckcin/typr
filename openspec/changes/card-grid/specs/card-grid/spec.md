@@ -3,8 +3,9 @@
 ### Requirement: A deck is drawn as a wrapped grid of card tiles
 
 The system SHALL draw the cards of the selected deck as tiles that wrap into as many columns as the window
-allows, each tile at least 233 points wide and at least 130 points tall, so that a deck of many cards is
-read as a wall rather than a list.
+allows, each tile at least 233 points wide and at least 124 points tall, so that a deck of many cards is
+read as a wall rather than a list. A tile SHALL be a body above a footer, the body no shorter than 96
+points and the footer 26 points.
 
 #### Scenario: A wide window shows more columns
 
@@ -19,27 +20,39 @@ read as a wall rather than a list.
 ### Requirement: A tile shows the first side of its card
 
 The system SHALL render only the first side of a card on its tile, with the markdown of that side rendered
-as it is in the preview, and SHALL NOT reveal any later side.
+as it is in the preview, and SHALL NOT reveal any later side. Hidden text SHALL stay hidden on a tile: a
+card carrying hidden spans SHALL draw them masked, exactly as a review face does before a reveal.
 
 #### Scenario: A two-sided card hides its answer
 
 - **WHEN** a card holds the sides "front" and "back"
 - **THEN** its tile shows "front" and does not contain the text "back"
 
+#### Scenario: Hidden text stays hidden on the tile
+
+- **WHEN** a card's first side holds `{{insulin}}`
+- **THEN** its tile draws the span masked, and the word "insulin" is nowhere in the tile
+
 ### Requirement: A tile states how many sides it hides
 
 The system SHALL show the number of hidden sides on a tile whose card holds more than one side, and SHALL
-show no such badge on a card with a single side.
+show no such label on a card with a single side. The label SHALL read as a full-width strip at the bottom
+of the tile's body, and SHALL read `1 hidden side` in the singular and `N hidden sides` otherwise.
 
 #### Scenario: A two-sided card carries a hidden-side badge
 
 - **WHEN** a two-sided card is drawn
 - **THEN** its tile states that one side is hidden
 
-#### Scenario: A note carries no badge
+#### Scenario: A note carries no label
 
 - **WHEN** a card with one side is drawn
-- **THEN** its tile shows no hidden-side badge
+- **THEN** its tile draws no hidden-side strip
+
+#### Scenario: The label counts in words
+
+- **WHEN** a card holds three sides
+- **THEN** its strip reads `2 hidden sides`
 
 ### Requirement: A tile states where its schedule stands
 
