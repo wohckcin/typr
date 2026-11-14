@@ -9,12 +9,12 @@ SHALL offer a control that toggles reverse for that one card without opening it.
 
 #### Scenario: A card shows its directions
 
-- **WHEN** a two-sided card is enabled in reverse and its list row is drawn
-- **THEN** the row says the card is asked in both directions, and a card without reverse does not
+- **WHEN** a two-sided card is enabled in reverse and its tile is drawn
+- **THEN** the tile says the card is asked in both directions, and a card without reverse does not
 
-#### Scenario: The row toggles one card
+#### Scenario: The tile toggles one card
 
-- **WHEN** the user toggles reverse off from the card's row
+- **WHEN** the user toggles reverse off from the card's tile
 - **THEN** that card stops queueing in reverse and its deck setting is unchanged
 
 ### Requirement: A deck carries its own review settings
