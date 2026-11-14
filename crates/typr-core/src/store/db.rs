@@ -1951,33 +1951,43 @@ impl Db {
     /// order they happened. The columns are all fixed words or numbers — no markdown, no card text
     /// — which is why nothing here needs quoting. The optimiser is not run: this is history out,
     /// weights in.
+    /// The history in the schema the FSRS optimiser reads, one row per record, oldest first.
+    ///
+    /// `review_rating` is the optimiser's number rather than our word for it, and `review_state` is
+    /// the state the prompt was in *before* the grade — `review_log.phase` holds where the grade
+    /// left it, so copying that column would shift every state by one review.
     pub fn export_reviews(&self) -> Result<String, StoreError> {
         use std::fmt::Write as _;
 
         let mut stmt = self.conn.prepare(
-            "SELECT card_id, at, grade, phase, interval_ms, due_at, duration_ms
+            "SELECT card_id, at, grade,
+                    LAG(phase) OVER (PARTITION BY card_id, key ORDER BY at, rowid),
+                    duration_ms
              FROM review_log ORDER BY at, rowid",
         )?;
         let mut rows = stmt.query([])?;
         let mut out =
-            String::from("card_id,review_time,grade,phase,interval_ms,due_at,duration_ms\n");
+            String::from("card_id,review_time,review_rating,review_state,review_duration\n");
         while let Some(row) = rows.next()? {
             let card: Id = row.get(0)?;
             let at: i64 = row.get(1)?;
             let grade: String = row.get(2)?;
-            let phase: String = row.get(3)?;
-            let interval: i64 = row.get(4)?;
-            let due: Option<i64> = row.get(5)?;
-            let duration: Option<i64> = row.get(6)?;
-            let due = due.map(|at| at.to_string()).unwrap_or_default();
+            let before: Option<String> = row.get(3)?;
+            let duration: Option<i64> = row.get(4)?;
+            let rating =
+                Grade::parse(&grade)
+                    .map(crate::fsrs::rating_of)
+                    .ok_or(StoreError::Text {
+                        column: "review_log.grade",
+                        value: grade,
+                    })?;
+            let state = state_number(before.as_deref());
             let duration = duration.map(|ms| ms.to_string()).unwrap_or_default();
-            writeln!(
-                out,
-                "{card},{at},{grade},{phase},{interval},{due},{duration}"
-            )
-            .map_err(|_| StoreError::Text {
-                column: "review_log",
-                value: "row".to_string(),
+            writeln!(out, "{card},{at},{rating},{state},{duration}").map_err(|_| {
+                StoreError::Text {
+                    column: "review_log",
+                    value: "row".to_string(),
+                }
             })?;
         }
         Ok(out)
@@ -2066,6 +2076,16 @@ fn mode_parse(text: &str) -> CardMode {
         "archived" => CardMode::Archived,
         "trash" => CardMode::Trash,
         _ => CardMode::Active,
+    }
+}
+
+/// The optimiser's name for the state a prompt was in: New, Learning, Review, Relearning.
+fn state_number(before: Option<&str>) -> u8 {
+    match before.and_then(Phase::parse) {
+        None => 0,
+        Some(Phase::Learn) => 1,
+        Some(Phase::Review) => 2,
+        Some(Phase::Relearn) => 3,
     }
 }
 

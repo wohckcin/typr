@@ -1347,13 +1347,14 @@ fn the_export_holds_every_record_with_its_grade() {
     grade(&mut db, card, "fwd", Grade::Forgot, NOON);
     grade(&mut db, card, "fwd", Grade::Remembered, NOON + TEN_MINUTES);
     grade(&mut db, card, "fwd", Grade::Remembered, NOON + DAY);
+    grade(&mut db, card, "rev", Grade::Remembered, NOON + 2 * DAY);
 
     let exported = db.export_reviews().expect("export");
     let lines: Vec<&str> = exported.lines().collect();
     let records = usize::try_from(db.record_total().expect("the log")).expect("a count");
     assert_eq!(
-        lines[0], "card_id,review_time,grade,phase,interval_ms,due_at,duration_ms",
-        "the header names every column the optimiser reads"
+        lines[0], "card_id,review_time,review_rating,review_state,review_duration",
+        "the header names every column the optimiser reads, in its own words"
     );
     assert_eq!(
         lines.len(),
@@ -1361,16 +1362,28 @@ fn the_export_holds_every_record_with_its_grade() {
         "one row per record and one header, nothing lost and nothing invented"
     );
 
-    // Oldest first, so a file read in order is each card's history in the order it happened.
+    // Oldest first, so a file read in order is each card's history in the order it happened. The
+    // rating is the optimiser's number, and the state is the one the prompt was in *before* the
+    // grade: New, then Learning, then Review.
     assert!(
-        lines[1].starts_with(&format!("{card},{NOON},forgot,")),
+        lines[1].starts_with(&format!("{card},{NOON},1,0,")),
         "the first record: {}",
         lines[1]
     );
     assert!(
-        lines[2].starts_with(&format!("{card},{},remembered,", NOON + TEN_MINUTES)),
+        lines[2].starts_with(&format!("{card},{},3,1,", NOON + TEN_MINUTES)),
         "the second: {}",
         lines[2]
+    );
+    assert!(
+        lines[3].starts_with(&format!("{card},{},3,2,", NOON + DAY)),
+        "the third: {}",
+        lines[3]
+    );
+    assert!(
+        lines[4].starts_with(&format!("{card},{},3,0,", NOON + 2 * DAY)),
+        "the reverse prompt's first review is New even though the card has a history: {}",
+        lines[4]
     );
 }
 

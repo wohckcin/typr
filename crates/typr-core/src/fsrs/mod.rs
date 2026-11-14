@@ -78,9 +78,17 @@ impl Memory {
 /// buttons; typr's review screen offers two, so the scheduler maps onto the same scale instead of
 /// inventing a fifth.
 fn rating(grade: Grade) -> f64 {
+    f64::from(rating_of(grade))
+}
+
+/// The rating the optimiser's review log uses: `1` for again, `3` for good.
+///
+/// The exporter writes this, and `rating` feeds the same number to the formula, so a grade cannot
+/// mean one thing in the maths and another in the file.
+pub fn rating_of(grade: Grade) -> u8 {
     match grade {
-        Grade::Forgot => 1.0,
-        Grade::Remembered => 3.0,
+        Grade::Forgot => 1,
+        Grade::Remembered => 3,
     }
 }
 

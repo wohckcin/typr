@@ -24,8 +24,9 @@ pub const MAX_INTERVAL_MS: i64 = 365 * DAY_MS;
 
 /// What the scheduler needs to know about a prompt.
 ///
-/// The two extra fields are what FSRS needs and the fixed scheduler ignores: when the prompt fell
-/// due (elapsed time is `at_ms - due_at`) and the memory state the last grade left behind.
+/// The fields after the first two are what FSRS needs and the fixed scheduler ignores: when the
+/// prompt fell due, when it was last reviewed (elapsed time is `at_ms - last_at`), and the memory
+/// state the last grade left behind.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PromptState {
     pub phase: Phase,

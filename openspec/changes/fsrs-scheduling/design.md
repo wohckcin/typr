@@ -49,17 +49,23 @@ interval_days.clamp(0.1, MAX)`), which is the documented behaviour for migrating
 existing `settings` table and its `StoreError::Setting` refusal, which is already how `new_per_day`
 reports a bad value.
 
-**The trait stays synchronous and pure.** FSRS needs the elapsed days, which the caller already has as
-`at_ms - prompt.due_at`; nothing in the algorithm needs a clock or a database, so the trait signature
-does not change and both schedulers remain trivially testable.
+**The trait stays synchronous and pure.** FSRS needs the elapsed days, which the caller supplies as
+the time since the prompt was last reviewed (`at_ms - prompt.last_at`, falling back to
+`due_at - interval_ms` for a prompt the fixed scheduler scheduled and never replayed), not the time
+since it fell due: a card answered exactly on time has still waited a whole interval, and anchoring
+on the due date would score it `t = 0`, hold retrievability at 1 and freeze stability. Nothing in the
+algorithm needs a clock or a database, so the trait signature does not change and both schedulers
+remain trivially testable.
 
 ## Risks / Trade-offs
 
 - Getting FSRS subtly wrong is worse than not having it: an over-long interval hides a card for months.
   Mitigations are the golden tests, the off-by-default setting, and keeping the fixed scheduler one
   click away.
-- Exporting history for the optimiser means a stable output format. It is a documented CSV in
-  `typr-export`-shaped rows, and `mochi-import-export` will reuse it.
+- Exporting history for the optimiser means a stable output format. It is the optimiser's own review
+  log schema (`card_id,review_time,review_rating,review_state,review_duration`, from its README), not
+  a layout of our choosing: the numbers are its numbers and the state is the state before the grade,
+  because a format we invent is a format no optimiser reads.
 - FSRS's first-grade behaviour differs from the fixed scheduler's ten-minute learning step; the spec
   requires the fixed path to be unchanged, so a switch is visible in the first review rather than
   hidden.

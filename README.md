@@ -166,11 +166,14 @@ FSRS state lives beside the prompt, in two nullable columns: a prompt that has n
 FSRS has no memory rather than a made-up one, and grading it under the fixed scheduler leaves those
 columns untouched, so switching back and forth does not lose what either scheduler learned.
 
-The history can be exported for tuning — `Db::export_reviews` returns CSV, one row per record, with
-`card_id,review_time,grade,phase,interval_ms,due_at,duration_ms`. Every column is a number or one of
-the fixed words the store writes, so no cell needs quoting. The optimiser itself is not in the app:
-that file goes out, a weights list comes back in through `fsrs_weights`, and the next FSRS grade
-uses it.
+The history can be exported for tuning — `Db::export_reviews` returns CSV, one row per record, in
+the schema the FSRS optimiser reads:
+`card_id,review_time,review_rating,review_state,review_duration`. The rating is the optimiser's
+number (1 for again, 3 for good) rather than this app's word, the state is the one the prompt was in
+*before* the grade (0 New, 1 Learning, 2 Review, 3 Relearning), and the duration is empty when the
+review was not timed. Every column is a number, so no cell needs quoting. The optimiser itself is not
+in the app: that file goes out, a weights list comes back in through `fsrs_weights`, and the next
+FSRS grade uses it.
 
 ## Views
 
