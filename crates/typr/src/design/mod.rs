@@ -98,16 +98,31 @@ pub fn elevation() -> Vec<Shadow> {
     KIT.elevation.raised.clone()
 }
 
+/// The fill a card surface is painted in.
+pub fn surface_fill() -> rune::Color {
+    tok::theme(true).card
+}
+
+/// The overlay a hover paints on a surface: colour only, so the surface does not move.
+pub fn hover_color() -> rune::Color {
+    tok::theme(true).hover
+}
+
 /// A card: one bordered surface with a radius and one step of elevation, holding everything it
 /// shows. `focused` adds the ring inside the border, which takes no layout space, so focus never
 /// moves the card.
 pub fn surface_card(children: Vec<El>, focused: bool) -> El {
-    let t = tok::theme(true);
+    surface_card_on(children, focused, surface_fill())
+}
+
+/// [`surface_card`] painted in `fill`, for a surface that says something about its own state — a
+/// selected card reads as chosen rather than as a different kind of object.
+pub fn surface_card_on(children: Vec<El>, focused: bool, fill: rune::Color) -> El {
     let mut card = col()
         .radius(radius())
         .padding(space(4))
         .gap(space(1))
-        .fill(t.card)
+        .fill(fill)
         .border(HAIRLINE, surface_border());
     for layer in elevation() {
         card = card.box_shadow(layer);

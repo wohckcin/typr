@@ -348,3 +348,86 @@ fn the_list_shows_the_name_even_when_the_preview_differs() {
         "and the text is still under it as the second line: {strings:?}"
     );
 }
+
+/// One tile of the seeded library, drawn and settled.
+fn drawn_tile(selected: Option<Id>) -> rune::Runtime<Library> {
+    drawn_tile_named(selected, "")
+}
+
+/// The same tile with the card's name set, which is what a template writes: a name derived from
+/// the first side is that side, so the tile does not repeat it.
+fn drawn_tile_named(selected: Option<Id>, name: &str) -> rune::Runtime<Library> {
+    let mut library = Library::seeded(1);
+    library.selected_card = selected;
+    if let Some(card) = library.cards().first().cloned() {
+        let mut renamed = card;
+        renamed.name = name.to_string();
+        let mut cards = library.snapshot().cards.clone();
+        cards[0] = renamed;
+        let mut snapshot = (*library.snapshot()).clone();
+        snapshot.cards = cards;
+        library.set_snapshot(std::sync::Arc::new(snapshot));
+    }
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| {
+            let card = s.cards().first().expect("one card").clone();
+            super::tile::<Library>(s, &card, 245.0, NOON)
+        },
+        (400.0, 400.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    runtime
+}
+
+fn rect(runtime: &rune::Runtime<Library>, key: &str) -> [f32; 4] {
+    runtime
+        .elements()
+        .iter()
+        .find(|element| element.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("{key} is drawn"))
+        .rect
+}
+
+fn inside(inner: [f32; 4], outer: [f32; 4]) -> bool {
+    let [x, y, w, h] = inner;
+    let [ox, oy, ow, oh] = outer;
+    x >= ox - 0.5 && y >= oy - 0.5 && x + w <= ox + ow + 0.5 && y + h <= oy + oh + 0.5
+}
+
+#[test]
+fn a_row_is_one_surface_with_its_metadata_inside() {
+    let runtime = drawn_tile_named(None, "gato (animal)");
+    let surface = rect(&runtime, "tile-card-1");
+    let tile = rect(&runtime, "tile-1");
+    // The surface is the whole tile: nothing is drawn beside it.
+    assert!((surface[0] - tile[0]).abs() < 0.5 && (surface[2] - tile[2]).abs() < 0.5);
+    for key in ["tile-name-1", "tile-preview-1", "tile-state-1"] {
+        let child = rect(&runtime, key);
+        assert!(
+            inside(child, surface),
+            "{key} sits inside the card surface: {child:?} in {surface:?}"
+        );
+    }
+}
+
+#[test]
+fn hovering_a_row_moves_nothing() {
+    let mut runtime = drawn_tile(None);
+    let before = [
+        rect(&runtime, "tile-1"),
+        rect(&runtime, "tile-preview-1"),
+        rect(&runtime, "tile-state-1"),
+    ];
+    let [x, y, w, h] = rect(&runtime, "tile-1");
+    runtime.pointer_move(x + w / 2.0, y + h / 2.0);
+    runtime.frame(0.1);
+    let after = [
+        rect(&runtime, "tile-1"),
+        rect(&runtime, "tile-preview-1"),
+        rect(&runtime, "tile-state-1"),
+    ];
+    assert_eq!(before, after, "a hover moved the card");
+}

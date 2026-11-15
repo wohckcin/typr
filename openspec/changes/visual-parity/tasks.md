@@ -11,7 +11,7 @@ Depends on `settings-screen` (theme and scale tokens) and on every screen it res
 
 ## 2. Card object
 
-- [ ] 2.1 Library rows become cards through `surface_card`: name, preview line, metadata as secondary text, hover and focus states that change colour and shadow only.
+- [x] 2.1 Library rows become cards through `surface_card`: name, preview line, metadata as secondary text, hover and focus states that change colour and shadow only.
   - **Verification**: `a_row_is_one_surface_with_its_metadata_inside` reads `runtime.elements()` and asserts one border ancestor contains name, preview and metadata; `hovering_a_row_moves_nothing` compares geometry before and after a pointer move.
 - [ ] 2.2 Sidebar groups into Decks, Tags and Views with headings and counts, empty groups included.
   - **Verification**: `the_sidebar_groups_and_counts` asserts the three headings and their counts, and `an_empty_group_is_still_named`.

@@ -119,7 +119,6 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
     let mut body = col()
         .key(format!("tile-body-{id}"))
         .w_full()
-        .padding(PADDING)
         .gap(design::space(1));
     if named {
         // The name reads first and the text under it, which is what makes a templated card
@@ -133,9 +132,11 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
                 .w_full(),
         );
     }
-    body = body.child(memo("tile-side", side_key(card), || {
-        Markdown::new(side).render(&MarkdownStyle::neutral(true))
-    }));
+    body = body.child(col().key(format!("tile-preview-{id}")).w_full().child(memo(
+        "tile-side",
+        side_key(card),
+        || Markdown::new(side).render(&MarkdownStyle::neutral(true)),
+    )));
     if sides > 0 {
         body = body.child(hidden_strip(sides));
     }
@@ -156,9 +157,11 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
         .px(PADDING)
         .center_y()
         .gap(design::space(2))
+        .radius(design::radius_small())
         .fill(t.control_off.alpha(0.1))
         .child(
             text(word)
+                .key(format!("tile-state-{id}"))
                 .font(type_::LABEL)
                 .grow(1.0)
                 .shrink()
@@ -208,20 +211,21 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
 
     // The body opens the card and the footer keeps its own buttons, so assistive technology finds
     // both: one press target for the card and one for its actions.
+    let fill = if library.selected_card == Some(id) {
+        t.control_off
+    } else {
+        design::surface_fill()
+    };
+    let card = design::surface_card_on(vec![body, footer], library.selected_card == Some(id), fill)
+        .key(format!("tile-card-{id}"))
+        .hover(design::hover_color());
     col()
         .key(format!("tile-{id}"))
         .w(width)
         .max_h(TILE_MAX_HEIGHT)
         .mb(crate::library::GAP)
-        .radius(RADIUS)
-        .clip_rounded(RADIUS)
-        .fill(if library.selected_card == Some(id) {
-            t.control_off
-        } else {
-            t.card
-        })
-        .child(body)
-        .child(footer)
+        .clip_rounded(design::radius())
+        .child(card)
 }
 
 /// The actions a tile offers, shown inside its body while its menu is open.

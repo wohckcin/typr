@@ -2283,46 +2283,59 @@ fn list_row<S: Host>(s: &S, index: usize, now: i64) -> El {
         return row().key("line").h(ROW_HEIGHT).w_full();
     };
     let id = card.id;
-    let (word, kicker) = self::tile::words(self::tile::state(card, now));
+    let (word, _kicker) = self::tile::words(self::tile::state(card, now));
     let mut line = row()
+        .key(format!("list-line-{id}"))
         .w_full()
-        .h(ROW_HEIGHT)
-        .px(design::space(3))
+        .h(design::size(8))
         .center_y()
         .gap(design::space(2))
-        .fill(if library.selected_card == Some(id) {
-            t.control_off
-        } else {
-            t.bg
-        })
         .child(
             text(card.name.clone())
-                .font(type_::LABEL)
+                .key(format!("list-name-{id}"))
+                .font(design::type_title())
                 .shrink()
                 .color(t.text),
         )
         .child(
             text(card.preview.clone())
-                .font(type_::BODY)
+                .key(format!("list-preview-{id}"))
+                .font(design::type_body())
                 .grow(1.0)
                 .shrink()
                 .color(t.text_secondary),
         )
-        .child(text(word).font(type_::MONO_CAPTION).color(t.text_secondary));
+        .child(
+            text(word)
+                .key(format!("list-state-{id}"))
+                .font(design::type_caption())
+                .color(t.text_secondary),
+        );
     if card.pinned {
         line = line.child(text("\u{2605}").color(t.text));
     }
-    let _ = kicker;
-    // The virtual row keys the element the builder returns, so the line that carries the card's
+    // A list row is the same object as a tile: one surface, the metadata inside it.
+    let selected = library.selected_card == Some(id);
+    let fill = if selected {
+        t.control_off
+    } else {
+        design::surface_fill()
+    };
+    let surface = design::surface_card_on(vec![line], selected, fill)
+        .key(format!("list-card-{id}"))
+        .hover(design::hover_color());
+    // The virtual row keys the element the builder returns, so the surface that carries the card's
     // key is one level in: a key on the returned element would be replaced by `line-{index}`.
-    col().w_full().h(ROW_HEIGHT).child(
-        line.on_press(move |s: &mut S| {
-            s.library_mut().select_card(id);
-            s.open_card(id);
-        })
-        // The key is set last because a press target wraps its element, and the wrapper is what the
-        // elements list shows.
-        .key(format!("list-row-{id}")),
+    col().w_full().child(
+        col()
+            .key(format!("list-row-{id}"))
+            .w_full()
+            .py(design::TIGHT)
+            .on_press(move |s: &mut S| {
+                s.library_mut().select_card(id);
+                s.open_card(id);
+            })
+            .child(surface),
     )
 }
 
