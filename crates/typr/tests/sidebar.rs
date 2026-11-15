@@ -23,7 +23,7 @@ fn fixture() -> Vec<Item> {
 #[component]
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
-    let state = Sidebar::new(fixture(), false, "Ctrl+F");
+    let state = Sidebar::new(fixture(), false, typr::screens::sidebar::search_chord());
     view()
         .flex_row()
         .child(sidebar(state))
@@ -92,9 +92,11 @@ fn a_fold_survives_a_refresh() -> Result<(), String> {
 }
 
 #[test]
-fn the_search_row_shows_its_chord() -> Result<(), String> {
+fn the_search_row_shows_the_chord_the_keymap_binds() -> Result<(), String> {
+    let chord = typr::screens::sidebar::search_chord();
+    assert!(!chord.is_empty(), "the library binds no search chord");
     let mut app = start();
-    app.wait_for("Ctrl+F")?;
+    app.wait_for(format!("text:{chord}").as_str())?;
     Ok(())
 }
 

@@ -1,67 +1,36 @@
-//! The NSH app's root and its shell: a sidebar that groups what the library holds, beside the
-//! work area. Pages and screens join the shell as they are ported.
+//! The NSH app's root and its shell: the sidebar beside the work area. Pages and screens join the
+//! shell as they are ported.
 
 use nsh_core::prelude::*;
+use typr_core::clock::{Clock, SystemClock};
+use typr_core::store::Snapshot;
 
+use crate::screens::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
 use crate::ui::{surface, tokens};
 
-/// What the sidebar groups. Its signals stay private: writes go through the methods.
-#[derive(Clone, Copy)]
-pub struct Library {
-    decks: Signal<Vec<&'static str>>,
-    tags: Signal<Vec<&'static str>>,
-    views: Signal<Vec<&'static str>>,
-}
-
-impl Library {
-    /// A library holding the sample groups a fresh install shows.
-    pub fn sample() -> Self {
-        Self {
-            decks: signal(vec!["Spanish", "Biology"]),
-            tags: signal(vec!["verbs"]),
-            views: signal(Vec::new()),
-        }
-    }
-}
-
-fn library() -> Library {
-    use_context::<Library>().expect("the root provides the library")
-}
-
-/// One heading of the sidebar with its count, as the Design Guides ask: the group name, then how many.
-fn group(name: &'static str, count: impl Fn() -> usize + 'static) -> impl IntoElement {
-    view()
-        .flex_row()
-        .justify_between()
-        .child(text(name).text_sm().text_color(move || tokens::muted_foreground()))
-        .child(text(move || count().to_string()).text_sm().text_color(move || tokens::muted_foreground()))
-}
-
-/// The sidebar: Decks, Tags and Views, each with a count, and an empty group still named.
-fn sidebar() -> impl IntoElement {
-    let library = library();
-    view()
-        .w(tokens::sidebar_width())
-        .p_3()
-        .gap_3()
-        .border_r_1()
-        .border_color(move || tokens::border())
-        .child(group("Decks", move || library.decks.with(Vec::len)))
-        .child(surface::separator())
-        .child(group("Tags", move || library.tags.with(Vec::len)))
-        .child(surface::separator())
-        .child(group("Views", move || library.views.with(Vec::len)))
-}
-
-/// The app's root: the sidebar beside the work area, on the theme's background.
-#[component]
-pub fn App() -> impl IntoElement {
-    crate::ui::tokens::install();
-    provide_context(Library::sample());
+/// The shell over `snapshot`: `library_open` says whether the store opened, which the sidebar
+/// states. Tests drive this with a fixture; the app drives it with the real library.
+pub fn shell(snapshot: Snapshot, library_open: bool) -> impl IntoElement {
+    let due = due_counts(&snapshot, SystemClock.now_ms());
+    let state = Sidebar::new(items_from(&snapshot, &due), library_open, search_chord());
     view()
         .flex_1()
         .flex_row()
         .bg(move || tokens::background())
-        .child(sidebar())
-        .child(view().flex_1().p_4().child(text("Pick a deck to study")))
+        .child(sidebar(state))
+        .child(view().flex_1().p_4().child(surface::separator()))
+}
+
+/// The app's root: the real library when it opens, and an empty, closed one when it does not, so
+/// the sidebar says so rather than hiding it.
+#[component]
+pub fn App() -> impl IntoElement {
+    crate::ui::tokens::install();
+    match crate::paths::open_from_environment() {
+        Ok(db) => match db.snapshot() {
+            Ok(snapshot) => shell(snapshot, true).into_element(),
+            Err(_) => shell(Snapshot::default(), false).into_element(),
+        },
+        Err(_) => shell(Snapshot::default(), false).into_element(),
+    }
 }

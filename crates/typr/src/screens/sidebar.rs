@@ -4,7 +4,11 @@
 //! column (the row in force, which decks are folded away) lives in [`Sidebar`], so a refresh keeps
 //! it.
 
+use std::collections::{HashMap, HashSet};
+
 use nsh_core::prelude::*;
+use typr_core::keymap::{Command, Surface, chord_of};
+use typr_core::store::{Id, Snapshot};
 
 use crate::ui::{
     button::{Variant, button},
@@ -205,4 +209,88 @@ fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
         ));
     }
     row
+}
+
+/// The rows the column shows for a library: the whole library, every live deck with its due count
+/// (`due` comes from [`typr_core`]'s subtree counts, so a parent counts its children), the saved
+/// views, and Settings.
+pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
+    let live: Vec<_> = snapshot.decks.iter().filter(|deck| !deck.archived).collect();
+    let live_ids: HashSet<Id> = live.iter().map(|deck| deck.id).collect();
+    let parents: HashSet<Id> = live.iter().filter_map(|deck| deck.parent).filter(|p| live_ids.contains(p)).collect();
+    let mut items = vec![Item {
+        key: "all".into(),
+        label: "All cards".into(),
+        group: Group::Navigation,
+        parent: None,
+        due: 0,
+        has_children: false,
+    }];
+    for deck in &live {
+        items.push(Item {
+            key: format!("deck:{}", deck.id).into(),
+            label: deck.name.clone().into(),
+            group: Group::Decks,
+            parent: deck.parent.filter(|p| live_ids.contains(p)).map(|p| format!("deck:{p}").into()),
+            due: due.get(&deck.id).copied().unwrap_or(0) as usize,
+            has_children: parents.contains(&deck.id),
+        });
+    }
+    for view in &snapshot.views {
+        items.push(Item {
+            key: format!("view:{}", view.id).into(),
+            label: view.name.clone().into(),
+            group: Group::Views,
+            parent: None,
+            due: 0,
+            has_children: false,
+        });
+    }
+    items.push(Item {
+        key: "settings".into(),
+        label: "Settings".into(),
+        group: Group::Utilities,
+        parent: None,
+        due: 0,
+        has_children: false,
+    });
+    items
+}
+
+/// The chord that focuses search, read from the keymap table rather than written here; empty when
+/// the library surface binds none.
+pub fn search_chord() -> String {
+    chord_of(Surface::Library, Command::FocusSearch).map(|chord| chord.to_string()).unwrap_or_default()
+}
+
+/// How many prompts are due in each deck's subtree at `now_ms`: a due card counts for its own deck
+/// and every deck above it. Archived decks, archived cards and trashed cards count for nothing.
+pub fn due_counts(snapshot: &Snapshot, now_ms: i64) -> HashMap<Id, u32> {
+    let parents: HashMap<Id, Option<Id>> = snapshot.decks.iter().map(|deck| (deck.id, deck.parent)).collect();
+    let archived: HashSet<Id> = snapshot.decks.iter().filter(|deck| deck.archived).map(|deck| deck.id).collect();
+    let mut counts: HashMap<Id, u32> = HashMap::new();
+    for card in &snapshot.cards {
+        let Some(due_at) = card.due_at else {
+            continue;
+        };
+        if due_at > now_ms || card.archived || card.trashed_at.is_some() {
+            continue;
+        }
+        let mut current = Some(card.deck);
+        // A parent chain that loops would be walked forever; the hop limit keeps a bad snapshot
+        // from hanging the frame.
+        let mut hops = 0;
+        while let Some(id) = current {
+            if hops > 64 || archived.contains(&id) {
+                break;
+            }
+            let Some(parent) = parents.get(&id).copied() else {
+                break;
+            };
+            *counts.entry(id).or_insert(0) += 1;
+            current = parent;
+            hops += 1;
+        }
+    }
+    counts
 }
