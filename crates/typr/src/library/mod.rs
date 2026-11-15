@@ -1277,11 +1277,13 @@ fn deck_row<S: Host>(state: &DeckRow<'_>, name: &TextEdit) -> El {
     } = *state;
     let t = tok::theme(true);
     let id = deck.id;
-    let inset = 10.0 + depth as f32 * 12.0;
+    // The column already pads its rows by `INSET`; only the nesting step is added here, so a
+    // deck at depth 0 lines its label up with every other row.
+    let inset = depth as f32 * 12.0;
     if renaming {
         return rune::row()
             .key(format!("deck-{}", deck.id))
-            .h(30.0)
+            .h(crate::sidebar::ROW_HEIGHT)
             .px(inset)
             .center_y()
             .fill(t.control_off)
@@ -1299,15 +1301,18 @@ fn deck_row<S: Host>(state: &DeckRow<'_>, name: &TextEdit) -> El {
     }
     let mut line = rune::row()
         .key(format!("deck-{}", deck.id))
-        .h(30.0)
-        .px(inset)
-        .radius(6.0)
+        .h(crate::sidebar::ROW_HEIGHT)
+        .pl(inset)
+        .gap(crate::sidebar::GAP_AFTER_ICON)
+        .radius(5.0)
         .center_y()
         .fill(crate::sidebar::row_fill(selected, moving))
+        .child(crate::sidebar::icon(crate::sidebar::Kind::Deck, &deck.name))
         .child(
             row().grow(1.0).child(
                 text(deck.name.clone())
-                    .font(type_::BODY)
+                    .key(format!("deck-label-{}", deck.id))
+                    .font(type_::LABEL)
                     .color(crate::sidebar::label_color(selected, false)),
             ),
         );
@@ -1678,10 +1683,11 @@ fn view_row<S: Host>(s: &S, view: &SavedView) -> El {
     let library = s.library();
     let id = view.id;
     let selected = library.selected_view == Some(id);
-    let mut label = row().w_full().gap(4.0).child(
+    let mut label = row().grow(1.0).gap(4.0).child(
         text(view.name.clone())
-            .font(type_::BODY)
-            .color(if selected { rune::Color::WHITE } else { t.text }),
+            .key(format!("view-label-{}", view.id))
+            .font(type_::LABEL)
+            .color(crate::sidebar::label_color(selected, false)),
     );
     if view.scope_missing(library.snapshot()) {
         label = label.child(
@@ -1697,15 +1703,12 @@ fn view_row<S: Host>(s: &S, view: &SavedView) -> El {
     }
     row()
         .key(format!("view-{}", view.id))
-        .h(30.0)
-        .px(10.0)
-        .radius(6.0)
+        .h(crate::sidebar::ROW_HEIGHT)
+        .gap(crate::sidebar::GAP_AFTER_ICON)
+        .radius(5.0)
         .center_y()
-        .fill(if selected {
-            tok::accent(0, true).alpha(0.85)
-        } else {
-            t.control_off.alpha(0.0)
-        })
+        .fill(crate::sidebar::row_fill(selected, false))
+        .child(crate::sidebar::icon(crate::sidebar::Kind::View, &view.name))
         .child(label)
         .on_press(move |s: &mut S| s.library_mut().select_view(id))
 }

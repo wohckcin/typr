@@ -1540,3 +1540,48 @@ fn the_sidebar_states_the_library_is_open() {
         "the state row is part of the column, not a function nobody draws"
     );
 }
+
+#[test]
+fn every_kind_of_sidebar_row_lines_up() {
+    let mut library = Library::seeded_nested();
+    library.seed_views(vec![typr_core::store::SavedView {
+        id: 9,
+        name: "Exam week".to_string(),
+        spec: typr_core::store::ViewSpec::default(),
+    }]);
+    let runtime = draw(library);
+    let elements: Vec<(String, [f32; 4])> = runtime
+        .elements()
+        .iter()
+        .filter(|element| !element.exiting)
+        .filter_map(|element| element.key.clone().map(|key| (key, element.rect)))
+        .collect();
+    let find = |key: &str| {
+        elements
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, rect)| *rect)
+            .unwrap_or_else(|| panic!("{key} is drawn"))
+    };
+    let height = crate::sidebar::ROW_HEIGHT;
+    let labels = ["deck-all-label", "deck-label-1", "view-label-9"];
+    let rows = ["deck-all", "deck-1", "view-9"];
+    // The row's own offset is measured from its edge elsewhere (41 points: the inset, the icon
+    // slot and the gap); here the column's padding is on top of it, so what the column must keep
+    // is that every kind of row lands on the same column x.
+    let first = find(labels[0])[0];
+    for (row, label) in rows.iter().zip(labels) {
+        let rect = find(row);
+        assert!(
+            (rect[3] - height).abs() < 0.5,
+            "{row} is {height} points tall, not {}",
+            rect[3]
+        );
+        let drawn = find(label);
+        assert!(
+            (drawn[0] - first).abs() < 0.5,
+            "{label} starts at {first} points like the others, not {}",
+            drawn[0]
+        );
+    }
+}
