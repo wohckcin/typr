@@ -12,7 +12,7 @@ rune-kit = { path = "vendor/rune-kit" }
 # why it lives here rather than beside the package that names Rune. Same rev as `rune` in
 # `crates/typr/Cargo.toml`; when Rune's root `[patch.crates-io]` gains an entry, add it here too.
 [patch.crates-io]
-winit = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
-parley_engine = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
-wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
-accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+winit = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
