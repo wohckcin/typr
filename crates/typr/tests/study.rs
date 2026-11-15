@@ -66,5 +66,17 @@ fn a_refused_grade_leaves_the_card_answerable() -> Result<(), String> {
     app.wait_for("role:button[Remembered]")?;
     assert!(!app.screen().shows("Session complete"));
     assert!(app.screen().shows("1 left"));
+    app.wait_for("text:/was not saved/")?;
+    Ok(())
+}
+
+#[test]
+fn the_keyboard_reveals_and_grades_as_the_keymap_says() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
+    app.wait_for("role:button[Show answer]")?;
+    app.press_key("space")?;
+    app.wait_for("role:button[Remembered]")?;
+    app.press_key("j")?;
+    app.wait_for("text:/Session complete · 1 reviewed/")?;
     Ok(())
 }

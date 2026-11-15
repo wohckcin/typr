@@ -4,6 +4,7 @@
 
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
+use typr_core::keymap::{Chord, Command, Key, Surface, chord_of};
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{Grade, Id};
@@ -15,6 +16,9 @@ use crate::ui::{
     tokens,
 };
 
+/// The line a refused grade leaves on screen, so a failed write is visible.
+pub const REFUSED: &str = "The grade was not saved. Grade again to retry.";
+
 /// Reveals the answer when the face allows it. Grading is never offered before a reveal.
 pub fn can_reveal(session: &Session) -> bool {
     !session.finished() && !session.gradeable()
@@ -25,6 +29,7 @@ pub fn can_reveal(session: &Session) -> bool {
 pub fn study(entries: Vec<Entry>, on_grade: impl Fn(Id, Grade) -> bool + Clone + 'static) -> impl IntoElement {
     let session = stored(Session::new(Queue::Due, entries));
     let version = signal(0_u32);
+    let refused = signal(false);
     let grade_out = on_grade.clone();
     let reveal = move || {
         session.with(|s| {
@@ -36,6 +41,7 @@ pub fn study(entries: Vec<Entry>, on_grade: impl Fn(Id, Grade) -> bool + Clone +
         let sent = session.with(|s| s.grade(g));
         if let Some((id, grade)) = sent {
             let taken = grade_out(id, grade);
+            refused.set(!taken);
             session.with(|s| {
                 if taken {
                     s.sent(id as u64);
@@ -49,6 +55,18 @@ pub fn study(entries: Vec<Entry>, on_grade: impl Fn(Id, Grade) -> bool + Clone +
     };
     let grade_forgot = grade.clone();
     let grade_remembered = grade;
+    // The keys come from the keymap table, so a rebinding moves them here too.
+    if let Some(key) = keystroke_of(Command::Reveal) {
+        on_key(&key, move |_| reveal());
+    }
+    if let Some(key) = keystroke_of(Command::GradeForgot) {
+        let forgot = grade_forgot.clone();
+        on_key(&key, move |_| forgot(Grade::Forgot));
+    }
+    if let Some(key) = keystroke_of(Command::GradeRemembered) {
+        let remembered = grade_remembered.clone();
+        on_key(&key, move |_| remembered(Grade::Remembered));
+    }
     view()
         .flex_1()
         .gap_4()
@@ -85,8 +103,25 @@ pub fn study(entries: Vec<Entry>, on_grade: impl Fn(Id, Grade) -> bool + Clone +
             row.into_element()
         }))
         .child(dynamic(move || {
+            if refused.get() {
+                text(REFUSED).text_sm().text_color(move || tokens::destructive()).into_element()
+            } else {
+                view().into_element()
+            }
+        }))
+        .child(dynamic(move || {
             version.get();
             let left = session.with(|s| s.remaining());
             text(format!("{left} left")).text_xs().text_color(move || tokens::muted_foreground()).into_element()
         }))
+}
+
+/// The keystroke string NSH's `on_key` takes for a command on the review surface, from the table.
+fn keystroke_of(command: Command) -> Option<String> {
+    match chord_of(Surface::Session, command)? {
+        Chord::Key(Key::Space) => Some("space".to_owned()),
+        Chord::Key(Key::Enter) => Some("enter".to_owned()),
+        Chord::Key(Key::Char(c)) => Some(c.to_string()),
+        _ => None,
+    }
 }
