@@ -1643,9 +1643,9 @@ fn frame_step(s: &mut State, now_ms: i64, wake: &mut Option<i64>) -> bool {
 
 impl State {
     /// Run the command a key asked for, on the surface it was pressed on.
-    fn run_command(&mut self, command: Command) -> bool {
+    fn run_command(&mut self, command: Command, tx: &mut rune::Tx) -> bool {
         match self.screen {
-            Screen::Library => self.run_library(command),
+            Screen::Library => self.run_library(command, tx),
             Screen::Editor => self.run_editor(command),
             Screen::Session => study::run(self, command) || self.run_common(command),
             Screen::Summary => self.run_summary(command),
@@ -1683,7 +1683,7 @@ impl State {
         }
     }
 
-    fn run_library(&mut self, command: Command) -> bool {
+    fn run_library(&mut self, command: Command, tx: &mut rune::Tx) -> bool {
         if self.run_common(command) {
             return true;
         }
@@ -1708,6 +1708,10 @@ impl State {
             }
             Command::SelectionNext => {
                 self.library.select_next();
+                true
+            }
+            Command::FocusSearch => {
+                tx.focus("search", true);
                 true
             }
             Command::SelectionPrevious => {
@@ -1923,15 +1927,15 @@ impl keymap::Host for State {
         self.library.grid_width <= 1.0 || self.library.grid_width >= keymap::KEYCAP_MIN_WIDTH
     }
 
-    fn run_command(&mut self, command: Command) -> bool {
-        State::run_command(self, command)
+    fn run_command(&mut self, command: Command, tx: &mut rune::Tx) -> bool {
+        State::run_command(self, command, tx)
     }
 }
 
 fn on_key(s: &mut State, event: &rune::KeyEvent, tx: &mut Tx) -> bool {
     // An open overlay owns the keyboard: nothing behind a dialog runs on a keystroke.
     if s.panel.open || s.palette.open {
-        return overlay_key(s, event);
+        return overlay_key(s, event, tx);
     }
     let surface = match s.screen {
         Screen::Library => Surface::Library,
@@ -1946,14 +1950,14 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     match typr::keymap::command_for(surface, event) {
-        Some(command) => s.run_command(command),
+        Some(command) => s.run_command(command, tx),
         None => false,
     }
 }
 
 /// The keys an open overlay answers itself. Every other key is left to the focused field, so
 /// typing a filter never fires the command behind the dialog.
-fn overlay_key(s: &mut State, event: &rune::KeyEvent) -> bool {
+fn overlay_key(s: &mut State, event: &rune::KeyEvent, tx: &mut Tx) -> bool {
     if matches!(event.key, rune::Key::Escape) {
         if s.palette.open {
             s.palette.open = false;
@@ -1977,7 +1981,7 @@ fn overlay_key(s: &mut State, event: &rune::KeyEvent) -> bool {
             keymap::palette::move_down(&mut s.palette, surface);
             true
         }
-        rune::Key::Enter => keymap::palette::run(s),
+        rune::Key::Enter => keymap::palette::run(s, tx),
         _ => false,
     }
 }

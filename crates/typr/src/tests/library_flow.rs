@@ -1963,3 +1963,33 @@ fn moving_a_card_up_survives_a_restart() {
     let texts: Vec<&str> = order.iter().map(|(_, _, text)| text.as_str()).collect();
     assert_eq!(texts, ["two", "one", "three"], "the order was written down");
 }
+
+#[test]
+fn the_slash_focuses_the_search_field() {
+    let (dir, _view) = view_fixture();
+    let mut state = view_state(&dir);
+    state.library.select_deck(None);
+    let drawn = state;
+    let mut runtime = rune::Runtime::new(
+        drawn,
+        |s: &State, _: &mut rune::Cx<State>| crate::library::view::<State>(s),
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.on_key = Some(crate::on_key);
+    runtime.frame(0.0);
+    runtime.key(rune::KeyEvent {
+        key: rune::Key::Text("/".into()),
+        mods: rune::Mods::default(),
+    });
+    runtime.frame(0.0);
+    runtime.key(rune::KeyEvent {
+        key: rune::Key::Text("g".into()),
+        mods: rune::Mods::default(),
+    });
+    runtime.frame(0.0);
+    assert_eq!(
+        runtime.state.library.query.text, "g",
+        "the slash reached the field, and the next key went into it"
+    );
+}

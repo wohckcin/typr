@@ -292,6 +292,7 @@ points, and the action stays.
 | Library | `n` | Review the new cards |
 | Library | `c` | New card |
 | Library | `x` | Cram the cards the filter selects |
+| Library | `/` | Focus the search field |
 | Library | `,` | Open settings |
 | Library | `Down` / `j` | Select the next card |
 | Library | `Up` / `k` | Select the previous card |

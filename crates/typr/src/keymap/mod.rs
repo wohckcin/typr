@@ -75,8 +75,10 @@ pub trait Host: 'static {
     fn palette_mut(&mut self) -> &mut palette::Palette;
     /// Whether the window has room for a keycap beside a label.
     fn wide_enough(&self) -> bool;
-    /// Run a command on the current surface. Answers whether it was used.
-    fn run_command(&mut self, command: Command) -> bool;
+    /// Run a command on the current surface. Answers whether it was used. The `Tx` is here
+    /// because a few commands end in focus or a dialog rather than in state, and the palette must
+    /// reach them the same way a key does.
+    fn run_command(&mut self, command: Command, tx: &mut rune::Tx) -> bool;
 }
 
 /// The keycap a control should draw, or `None` when the window is too narrow for one.

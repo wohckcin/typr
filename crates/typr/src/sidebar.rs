@@ -191,11 +191,7 @@ pub fn row_tx<S: 'static>(item: &Row, on_press: impl Fn(&mut S, &mut rune::Tx) +
         .radius(5.0)
         .center_y()
         .gap(GAP_AFTER_ICON)
-        .fill(if selected {
-            tok::accent(0, true)
-        } else {
-            t.control_off.alpha(0.0)
-        })
+        .fill(row_fill(selected, false))
         .hover(if selected {
             tok::accent(0, true)
         } else {
@@ -206,13 +202,7 @@ pub fn row_tx<S: 'static>(item: &Row, on_press: impl Fn(&mut S, &mut rune::Tx) +
             text(item.label.clone())
                 .key(format!("{}-label", item.key))
                 .font(type_::LABEL)
-                .color(if selected {
-                    rune::Color::WHITE
-                } else if disabled {
-                    t.text_secondary
-                } else {
-                    t.text
-                }),
+                .color(label_color(selected, disabled)),
         )
         .on_press_tx(move |s: &mut S, tx: &mut rune::Tx| {
             if !disabled {
@@ -225,6 +215,32 @@ pub fn row_tx<S: 'static>(item: &Row, on_press: impl Fn(&mut S, &mut rune::Tx) +
 /// rather than by position, so a deck keeps its colour when another deck is added above it.
 pub fn tint(name: &str) -> rune::Color {
     tok::accent(hash(name), true)
+}
+
+/// The fill behind a row: the selection surface when it is the one in force, the move-target
+/// tint while a move is in flight, and nothing at all otherwise.
+pub fn row_fill(selected: bool, moving: bool) -> rune::Color {
+    let t = tok::theme(true);
+    if moving {
+        tok::accent(1, true).alpha(0.35)
+    } else if selected {
+        tok::accent(0, true)
+    } else {
+        t.control_off.alpha(0.0)
+    }
+}
+
+/// A row's label: full contrast when selected, quieter when the row cannot be pressed yet, and
+/// the ordinary text colour otherwise.
+pub fn label_color(selected: bool, disabled: bool) -> rune::Color {
+    let t = tok::theme(true);
+    if selected {
+        rune::Color::WHITE
+    } else if disabled {
+        t.text_secondary
+    } else {
+        t.text
+    }
 }
 
 /// The count a row carries at its right edge: 18 by 16 points, 8-point radius, a 12-point

@@ -54,6 +54,7 @@ pub enum Command {
     Settings,
     SelectionNext,
     SelectionPrevious,
+    FocusSearch,
     EditCard,
     PreviewCard,
     DeleteCard,
@@ -89,6 +90,7 @@ impl Command {
             Command::Settings => "Settings",
             Command::SelectionNext => "Select the next card",
             Command::SelectionPrevious => "Select the previous card",
+            Command::FocusSearch => "Focus the search field",
             Command::EditCard => "Edit the selected card",
             Command::PreviewCard => "Preview the selected card",
             Command::DeleteCard => "Move the selected card to the trash",
@@ -373,6 +375,11 @@ const TABLE: &[Binding] = &[
         Surface::Library,
         Command::CramSession,
         Chord::key(Key::Char('x')),
+    ),
+    row(
+        Surface::Library,
+        Command::FocusSearch,
+        Chord::key(Key::Char('/')),
     ),
     row(
         Surface::Library,

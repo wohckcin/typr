@@ -145,7 +145,7 @@ impl Host for Overlays {
         self.wide
     }
 
-    fn run_command(&mut self, command: Command) -> bool {
+    fn run_command(&mut self, command: Command, _tx: &mut rune::Tx) -> bool {
         self.ran.push(command);
         true
     }
@@ -201,7 +201,7 @@ fn typing_narrows_and_enter_runs() {
     host.palette.filter.replace_text("command");
     let rows = palette::visible(Surface::Library, &host.palette.filter.text);
     assert_eq!(rows, [Command::ShowPalette]);
-    assert!(palette::run(&mut host));
+    assert!(palette::run(&mut host, &mut rune::Tx::default()));
     assert_eq!(host.ran, [Command::ShowPalette]);
     assert!(!host.palette.open);
 }

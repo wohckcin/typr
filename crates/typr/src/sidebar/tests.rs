@@ -243,3 +243,23 @@ fn a_card_whose_deck_is_missing_is_not_counted() {
     };
     assert!(deck_due_counts(&snapshot, 200).is_empty());
 }
+
+#[test]
+fn the_selected_row_differs_from_its_sibling_in_fill_and_in_label() {
+    assert_ne!(
+        row_fill(true, false),
+        row_fill(false, false),
+        "the selected row draws the selection surface"
+    );
+    assert_ne!(
+        label_color(true, false),
+        label_color(false, false),
+        "the selected row's label is full contrast"
+    );
+    assert_eq!(label_color(true, false), rune::Color::WHITE);
+    assert_ne!(
+        row_fill(false, true),
+        row_fill(false, false),
+        "a move target keeps its own tint"
+    );
+}

@@ -1443,3 +1443,84 @@ fn a_fold_survives_a_new_snapshot() {
         "the parent still offers the fold"
     );
 }
+
+#[test]
+fn the_selected_deck_row_carries_a_mark_no_other_row_has() {
+    let mut library = Library::seeded_nested();
+    library.select_deck(Some(1));
+    let runtime = draw(library);
+    let keys = keys_of(&runtime);
+    assert!(
+        keys.iter().any(|key| key == "deck-marker-1"),
+        "the selected deck is marked: {keys:?}"
+    );
+    assert!(
+        !keys.iter().any(|key| key == "deck-marker-2"),
+        "a sibling carries no mark"
+    );
+}
+
+#[test]
+fn a_press_two_points_into_a_row_still_selects_its_deck() {
+    let mut runtime = draw(Library::seeded_nested());
+    let rect = runtime
+        .elements()
+        .iter()
+        .find(|element| element.key.as_deref() == Some("deck-2"))
+        .map(|element| element.rect)
+        .expect("the child deck's row");
+    let x = rect[0] + 2.0;
+    let y = rect[1] + rect[3] / 2.0;
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+    assert_eq!(
+        runtime.state.selected_deck,
+        Some(2),
+        "the row is one target from its left edge inwards"
+    );
+}
+
+#[test]
+fn the_search_row_draws_the_chord_the_table_binds() {
+    let runtime = draw(Library::seeded_nested());
+    let chord = crate::keymap::chord(
+        typr_core::keymap::Surface::Library,
+        typr_core::keymap::Command::FocusSearch,
+    )
+    .expect("the table binds the search field")
+    .to_string();
+    let drawn = runtime
+        .elements()
+        .iter()
+        .find(|element| element.key.as_deref() == Some("sidebar-search-chord"))
+        .and_then(|element| element.text.clone());
+    assert_eq!(
+        drawn.as_deref(),
+        Some(chord.as_str()),
+        "the row draws what the table binds, so rebinding the key moves the row"
+    );
+}
+
+#[test]
+fn pressing_the_search_row_focuses_the_search_field() {
+    let mut runtime = draw(Library::seeded_nested());
+    let rect = runtime
+        .elements()
+        .iter()
+        .find(|element| element.key.as_deref() == Some("sidebar-search"))
+        .map(|element| element.rect)
+        .expect("the search row");
+    runtime.pointer_down(rect[0] + 4.0, rect[1] + rect[3] / 2.0);
+    runtime.pointer_up(rect[0] + 4.0, rect[1] + rect[3] / 2.0);
+    runtime.frame(0.0);
+    runtime.key(rune::KeyEvent {
+        key: rune::Key::Text("g".into()),
+        mods: rune::Mods::default(),
+    });
+    runtime.frame(0.0);
+    assert_eq!(
+        runtime.state.query.text, "g",
+        "the keystroke reached the field the row focused"
+    );
+}

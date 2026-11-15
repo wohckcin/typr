@@ -1297,21 +1297,27 @@ fn deck_row<S: Host>(state: &DeckRow<'_>, name: &TextEdit) -> El {
         .px(inset)
         .radius(6.0)
         .center_y()
-        .fill(if moving {
-            tok::accent(1, true).alpha(0.35)
-        } else if selected {
-            tok::accent(0, true).alpha(0.85)
-        } else {
-            t.control_off.alpha(0.0)
-        })
+        .fill(crate::sidebar::row_fill(selected, moving))
         .child(
             row().grow(1.0).child(
                 text(deck.name.clone())
                     .font(type_::BODY)
-                    .color(if selected { rune::Color::WHITE } else { t.text }),
+                    .color(crate::sidebar::label_color(selected, false)),
             ),
         );
     let id = deck.id;
+    if selected {
+        // Selection is a fill and a mark, not a fill alone: a reader who cannot separate two
+        // greys still sees the bar, and it sits at the row's end so no label moves.
+        line = line.child(
+            col()
+                .key(format!("deck-marker-{}", deck.id))
+                .w(3.0)
+                .h(14.0)
+                .radius(2.0)
+                .fill(rune::Color::WHITE.alpha(0.85)),
+        );
+    }
     if has_children {
         let fold = move |s: &mut S| s.library_mut().toggle_collapsed(id);
         line = line.child(
@@ -1360,7 +1366,11 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         .fill(t.card);
 
     // Navigation: the whole library, and the saved views under it.
-    let navigation = vec![all_cards_row::<S>(), views_section::<S>(s)];
+    let navigation = vec![
+        search_row::<S>(s),
+        all_cards_row::<S>(),
+        views_section::<S>(s),
+    ];
     // Decks: the tree, and the button that starts another.
     let mut decks = Vec::with_capacity(library.snapshot.decks.len() + 1);
     let renaming = library.renaming;
@@ -1454,6 +1464,37 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         column = column.child(actions);
     }
     column
+}
+
+/// The way into the search field, which lives in the filter bar so it stays beside the list it
+/// narrows. The chord is read from the table: the row cannot promise a key the table does not bind.
+fn search_row<S: Host>(s: &S) -> El {
+    let t = tok::theme(true);
+    let mut search = row()
+        .key("sidebar-search")
+        .w_full()
+        .h(28.0)
+        .radius(5.0)
+        .pl(crate::sidebar::LABEL_X)
+        .pr(10.0)
+        .center_y()
+        .fill(t.control_off.alpha(0.35))
+        .child(
+            text("Search")
+                .font(type_::BODY)
+                .color(t.text_secondary)
+                .grow(1.0),
+        );
+    if let Some(chord) = crate::keymap::chord(Surface::Library, Command::FocusSearch) {
+        search = search.child(
+            text(chord.to_string())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary)
+                .key("sidebar-search-chord"),
+        );
+    }
+    let _ = s;
+    search.on_press_tx(|_: &mut S, tx: &mut rune::Tx| tx.focus("search", true))
 }
 
 /// What the app can do from anywhere: import a file, open the settings screen, or look in the

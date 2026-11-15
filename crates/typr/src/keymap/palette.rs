@@ -57,7 +57,7 @@ pub fn move_up(palette: &mut Palette) {
 }
 
 /// Run the highlighted command, then close.
-pub fn run<S: Host>(s: &mut S) -> bool {
+pub fn run<S: Host>(s: &mut S, tx: &mut rune::Tx) -> bool {
     let surface = s.surface();
     let palette = s.palette();
     let rows = visible(surface, &palette.filter.text);
@@ -68,7 +68,7 @@ pub fn run<S: Host>(s: &mut S) -> bool {
     palette.open = false;
     palette.filter = TextEdit::default();
     palette.index = 0;
-    s.run_command(command)
+    s.run_command(command, tx)
 }
 
 /// Open the palette on a clean filter.
@@ -110,8 +110,8 @@ pub fn build<S: Host>(s: &S, layer: &mut Vec<El>) {
         }
         body = body.child(
             button
-                .on_press(move |s: &mut S| {
-                    s.run_command(command);
+                .on_press_tx(move |s: &mut S, tx: &mut rune::Tx| {
+                    s.run_command(command, tx);
                     let palette = s.palette_mut();
                     palette.open = false;
                     palette.filter = TextEdit::default();

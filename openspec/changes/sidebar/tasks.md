@@ -51,7 +51,7 @@
 
 ## 3. Search, chord and state
 
-- [ ] 3.1 Draw the search row full-bleed at 28 points with the chord as a keycap read from
+- [x] 3.1 Draw the search row full-bleed at 28 points with the chord as a keycap read from
       the keymap table, and fail a test if the drawn chord and the binding disagree.
       *Verification*: changing the binding in the table changes what the row draws, and
       the test fails when the row is given a constant instead.
