@@ -63,7 +63,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Scenes `sidebar-decks`, `sidebar-collapsed`, `sidebar-closed`; snapshot each and
+- [x] 4.1 Scenes `sidebar-decks`, `sidebar-collapsed`, `sidebar-closed`; snapshot each and
       compare the row geometry with the measured numbers above.
       *Verification*: `cargo run -p typr -- --scene sidebar-decks --snap` writes a
       non-empty file, and the tree lists rows 25 points tall with equal label offsets.
