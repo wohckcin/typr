@@ -6,6 +6,8 @@
 //! `tests/tokens.rs` looks for.
 
 pub mod button;
+pub mod choice;
+pub mod overlay;
 pub mod input;
 pub mod status;
 pub mod surface;
