@@ -13,6 +13,7 @@ set -uo pipefail
 screens=(
   crates/typr/src/shell.rs
   crates/typr/src/screens/sidebar.rs
+  crates/typr/src/screens/grid.rs
 )
 
 if [ "$#" -gt 0 ]; then
