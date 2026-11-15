@@ -27,7 +27,8 @@ running the record command cannot overwrite the pictures the runner checks.
   Written by the local record command, which is why the folder is the platform name.
 - `ubuntu-26.04/` — GitHub Actions image `ubuntu-26.04` build `20261111.196.1`, recorded at
   `fb3905e` by the `Record this runner's baselines` step (dispatch run `43672594363`) and committed from
-  its artifact. `image.txt` holds the image and build that drew it.
+  its artifact. `image.txt` holds what the runner reports it is — `ImageOS` `ImageVersion`, i.e.
+  `ubuntu26 20261111.196.1`, which is not the `runs-on` label.
 
 `ci.yml` pins `runs-on: ubuntu-26.04` because `ubuntu-latest` is an alias GitHub moves between
 images — the run's annotation says it starts moving to Ubuntu 26 on 2026-10-19 — and a moved image
