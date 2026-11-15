@@ -218,6 +218,27 @@ pinned-only flag are written back.
 A view remembers its deck by id. If that deck is deleted, the view says so on its row and shows the
 whole library rather than nothing.
 
+## Deck views
+
+The view switcher above the list reads the selected deck in one of four ways, and the deck remembers
+which one it was left in:
+
+| View | What it draws | What it is for |
+|---|---|---|
+| `Grid` | the tile grid | skimming a deck of short cards |
+| `List` | one row a card: its name, a preview line and its state | finding a card in a long deck |
+| `Notebook` | every card's whole text, one after another | a deck of prose, read top to bottom |
+| `Column` | one card, the selected one, across the window | reading closely, with a find |
+
+The notebook draws the cards in the deck's own order, which is the order `Alt+Up` and `Alt+Down`
+change and `o`/`O` insert into; the grid and the list keep the order the views section describes.
+
+In the column view `find` searches the card on screen, folding case and accents, and the count beside
+it says which match is showing. `Next` and `Previous` step through the matches and wrap; a search with
+no match says so.
+
+The whole library — no deck selected — reads as the grid, since a view belongs to a deck.
+
 ## Cramming
 
 `x` in the library studies exactly the cards the filter selects — the deck, the search, the tag and

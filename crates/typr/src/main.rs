@@ -2081,6 +2081,31 @@ fn main() {
             state.library = Library::seeded_nested();
             state.seeded = true;
         }),
+        ("deck-list", |state: &mut State| {
+            state.library = Library::seeded_tiles();
+            state.library.selected_deck = Some(1);
+            state
+                .library
+                .set_view(1, typr_core::library_view::ViewMode::List);
+            state.seeded = true;
+        }),
+        ("deck-notebook", |state: &mut State| {
+            state.library = Library::seeded_tiles();
+            state.library.selected_deck = Some(1);
+            state
+                .library
+                .set_view(1, typr_core::library_view::ViewMode::Notebook);
+            state.seeded = true;
+        }),
+        ("deck-column", |state: &mut State| {
+            state.library = Library::seeded_tiles();
+            state.library.selected_deck = Some(1);
+            state
+                .library
+                .set_view(1, typr_core::library_view::ViewMode::Column);
+            state.library.selected_card = Some(2);
+            state.seeded = true;
+        }),
         ("library-views", |state: &mut State| {
             state.library = Library::seeded_nested();
             state.library.seed_views(vec![
