@@ -100,3 +100,15 @@ pub fn row_fill(selected: bool) -> AdaptiveColor {
 pub fn tile_estimate() -> Points {
     px(96.0)
 }
+
+/// The narrowest a card tile may be, in points: a line of tiles wraps before a tile gets narrower.
+pub const TILE_MIN_WIDTH: f32 = 240.0;
+
+/// How many tiles fit across a window `width` points wide, one gap apart, inside the page's padding.
+/// Never fewer than one: a narrow window shows one tile per line rather than none.
+pub fn grid_columns(width: f32) -> u32 {
+    let gap = 8.0;
+    let padding = 32.0;
+    let usable = (width - padding).max(0.0);
+    ((usable + gap) / (TILE_MIN_WIDTH + gap)).floor().max(1.0) as u32
+}

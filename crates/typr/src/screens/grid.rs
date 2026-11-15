@@ -35,6 +35,7 @@ pub fn grid(tiles: Signal<Vec<Tile>>, on_new: impl Fn() + Clone + 'static) -> im
                 .into_element();
         }
         virtual_list(move || tiles.with(Vec::len), move |at| tile_cell(tiles, at))
+            .columns(move || tokens::grid_columns(window().width.0))
             .keys(move || tiles.with(|t| t.iter().map(|t| t.id).collect::<Vec<_>>()))
             .estimated_item_size(tokens::tile_estimate())
             .flex_1()

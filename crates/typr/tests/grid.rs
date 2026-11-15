@@ -57,3 +57,12 @@ fn a_recycled_cell_shows_the_row_it_is_given() -> Result<(), String> {
     assert!(!app.screen().shows("card 0"), "the first row is still on screen after scrolling away");
     Ok(())
 }
+
+#[test]
+fn the_column_count_follows_the_window_width_and_never_drops_to_none() {
+    use typr::ui::tokens::grid_columns;
+    assert_eq!(grid_columns(0.0), 1);
+    assert_eq!(grid_columns(260.0), 1);
+    assert!(grid_columns(1200.0) > grid_columns(600.0));
+    assert!(grid_columns(600.0) >= grid_columns(300.0));
+}
