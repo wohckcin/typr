@@ -1395,7 +1395,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         .gap(crate::sidebar::GROUP_GAP)
         .fill(t.card);
 
-    // Navigation: the whole library, and the saved views under it.
+    // Navigation: the way back to the whole library.
     let navigation = vec![
         search_row::<S>(
             s,
@@ -1403,8 +1403,9 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
                 .map(|found| found.to_string()),
         ),
         all_cards_row::<S>(),
-        views_section::<S>(s),
     ];
+    // Views: every saved view, and the way to make another, even when there are none.
+    let views = vec![views_rows::<S>(s)];
     // Decks: the tree, and the button that starts another.
     let mut decks = Vec::with_capacity(library.snapshot.decks.len() + 1);
     let renaming = library.renaming;
@@ -1443,15 +1444,18 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
 
     let utilities = utility_rows::<S>(s);
 
-    for group in [
-        (crate::sidebar::Group::Navigation, navigation),
-        (crate::sidebar::Group::Decks, decks),
-        (crate::sidebar::Group::Tags, tags),
-        (crate::sidebar::Group::Utilities, utilities),
+    // A group's count is what it lists: the decks, the saved views, the tags the library holds.
+    let deck_count = u32::try_from(library.visible_decks().len()).unwrap_or(u32::MAX);
+    let view_count = u32::try_from(library.views().len()).unwrap_or(u32::MAX);
+    let tag_count = u32::try_from(library.tags.len()).unwrap_or(u32::MAX);
+    for (group, count, rows) in [
+        (crate::sidebar::Group::Navigation, 1, navigation),
+        (crate::sidebar::Group::Decks, deck_count, decks),
+        (crate::sidebar::Group::Views, view_count, views),
+        (crate::sidebar::Group::Tags, tag_count, tags),
+        (crate::sidebar::Group::Utilities, 3, utilities),
     ] {
-        if let Some(section) = crate::sidebar::group(group.0, group.1) {
-            column = column.child(section);
-        }
+        column = column.child(crate::sidebar::group(group, count, rows));
     }
 
     if library.selected_deck.is_some() {
@@ -1600,16 +1604,12 @@ fn tag_rows<S: Host>(s: &S) -> Vec<El> {
 }
 
 /// The saved views, under the decks: one row each, and the field that names one.
-fn views_section<S: Host>(s: &S) -> El {
+/// The saved views as rows, and the way to make another. The group's heading and count come from
+/// `sidebar::group`, so every heading in the column is drawn the same way.
+fn views_rows<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
-    let mut section = col().key("views").w_full().gap(design::TIGHT);
-    section = section.child(
-        text("Views")
-            .key("views-title")
-            .font(type_::LABEL)
-            .color(t.text_secondary),
-    );
+    let mut section = col().key("view-rows").w_full().gap(design::TIGHT);
     for view in library.views() {
         section = section.child(view_row::<S>(s, view));
     }

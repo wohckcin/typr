@@ -1278,15 +1278,65 @@ fn rect_of(runtime: &rune::Runtime<Library>, key: &str) -> Option<[f32; 4]> {
         .map(|each| each.rect)
 }
 
-#[test]
-fn a_library_without_tags_draws_no_tag_group() {
-    let runtime = draw(Library::seeded(3));
-    let tags = runtime
-        .elements()
+fn text_of(elements: &[rune::ElementInfo], key: &str) -> String {
+    elements
         .iter()
-        .filter(|element| element.key.as_deref() == Some("tags"))
-        .count();
-    assert_eq!(tags, 0, "a library with no tag draws no tag group");
+        .find(|element| !element.exiting && element.key.as_deref() == Some(key))
+        .and_then(|element| element.text.clone())
+        .unwrap_or_else(|| panic!("{key} is drawn"))
+}
+
+#[test]
+fn the_sidebar_groups_and_counts() {
+    let mut library = Library::seeded_nested();
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        snapshot.cards[0].tags = vec!["animals".to_string()];
+        snapshot.cards[1].tags = vec!["verbs".to_string()];
+        snapshot.views = vec![
+            typr_core::store::SavedView {
+                id: 1,
+                name: "Exam week".to_string(),
+                spec: typr_core::store::ViewSpec::default(),
+            },
+            typr_core::store::SavedView {
+                id: 2,
+                name: "Verbs".to_string(),
+                spec: typr_core::store::ViewSpec::default(),
+            },
+        ];
+    }
+    library.refresh();
+    let runtime = draw(library);
+    let elements = runtime.elements();
+    for (group, label, count) in [
+        ("sidebar-decks", "DECKS", 3),
+        ("tags", "TAGS", 2),
+        ("views", "VIEWS", 2),
+    ] {
+        assert_eq!(text_of(&elements, &format!("{group}-name")), label);
+        assert_eq!(
+            text_of(&elements, &format!("{group}-count")),
+            count.to_string()
+        );
+    }
+}
+
+#[test]
+fn an_empty_group_is_still_named() {
+    // The seeded library holds no view and no tag.
+    let runtime = draw(Library::seeded(3));
+    let elements = runtime.elements();
+    assert_eq!(text_of(&elements, "views-name"), "VIEWS");
+    assert_eq!(text_of(&elements, "views-count"), "0");
+    assert!(
+        elements
+            .iter()
+            .any(|element| element.key.as_deref() == Some("new-view")),
+        "an empty views group still offers the way to make one"
+    );
+    assert_eq!(text_of(&elements, "tags-name"), "TAGS");
+    assert_eq!(text_of(&elements, "tags-count"), "0");
 }
 
 #[test]
@@ -1331,9 +1381,9 @@ fn the_utilities_sit_last_with_one_group_gap_before_them() {
             .find(|element| element.key.as_deref() == Some(key))
             .map(|element| element.rect)
     };
-    let decks = rect_of("sidebar-decks").expect("the deck group");
+    let tags = rect_of("tags").expect("the tag group");
     let utilities = rect_of("sidebar-utilities").expect("the utilities group");
-    let gap = utilities[1] - (decks[1] + decks[3]);
+    let gap = utilities[1] - (tags[1] + tags[3]);
     assert!(
         (gap - crate::sidebar::GROUP_GAP).abs() < 1.0,
         "the gap before the utilities is {gap}, not {}",

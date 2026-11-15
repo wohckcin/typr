@@ -4,6 +4,7 @@
 //! with no divider, rows 211 points wide at a 7-point inset, 25 points tall, a 5-point radius,
 //! and a label that starts where the icon's slot ends plus a 14-point gap.
 
+use crate::design;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -38,10 +39,12 @@ pub const LABEL_X: f32 = ICON + GAP_AFTER_ICON;
 /// The groups of rows, drawn in this order. A group with nothing in it draws nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
-    /// The way out of a deck: the whole library and saved views.
+    /// The way out of a deck: the whole library.
     Navigation,
     /// The decks, each with its count.
     Decks,
+    /// The saved views, each a saved set of filters and an order.
+    Views,
     /// The tags the library holds, which filter the list.
     Tags,
     /// Import, settings and the trash.
@@ -50,9 +53,10 @@ pub enum Group {
 
 impl Group {
     /// Every group, in drawing order.
-    pub const ALL: [Group; 4] = [
+    pub const ALL: [Group; 5] = [
         Group::Navigation,
         Group::Decks,
+        Group::Views,
         Group::Tags,
         Group::Utilities,
     ];
@@ -62,6 +66,7 @@ impl Group {
         match self {
             Group::Navigation => "sidebar-navigation",
             Group::Decks => "sidebar-decks",
+            Group::Views => "views",
             Group::Tags => "tags",
             Group::Utilities => "sidebar-utilities",
         }
@@ -72,6 +77,7 @@ impl Group {
         match self {
             Group::Navigation => "Navigation",
             Group::Decks => "Decks",
+            Group::Views => "Views",
             Group::Tags => "Tags",
             Group::Utilities => "Utilities",
         }
@@ -145,32 +151,41 @@ impl Row {
 }
 
 /// A group's heading: small, uppercase, quiet, in a 27-point band.
-pub fn heading(group: Group) -> El {
+/// The heading a group draws above its rows, with how many the group holds beside it. A group
+/// with nothing in it still draws its heading and a count of zero: the reader learns what the
+/// library could hold, and the group's own action is drawn under it.
+pub fn heading(group: Group, count: u32) -> El {
     let t = tok::theme(true);
-    col()
+    rune::row()
         .key(format!("{}-title", group.key()))
         .w_full()
-        .h(27.0)
-        .px(14.0)
+        .h(design::size(7))
+        .px(design::space(4))
         .center_y()
+        .gap(design::space(2))
         .child(
             text(group.label().to_uppercase())
+                .key(format!("{}-name", group.key()))
+                .font(type_::MONO_CAPTION)
+                .grow(1.0)
+                .color(t.text_secondary),
+        )
+        .child(
+            text(count.to_string())
+                .key(format!("{}-count", group.key()))
                 .font(type_::MONO_CAPTION)
                 .color(t.text_secondary),
         )
 }
 
-/// A group of rows under its heading, or nothing at all when it holds no row: an empty group
-/// leaves no heading and no gap behind.
-pub fn group(group: Group, rows: Vec<El>) -> Option<El> {
-    if rows.is_empty() {
-        return None;
-    }
-    let mut section = col().key(group.key()).w_full().child(heading(group));
+/// A group of rows under its heading and count. Every group is drawn, even with no rows: an empty
+/// group says how much the library holds and offers the way to fill it.
+pub fn group(group: Group, count: u32, rows: Vec<El>) -> El {
+    let mut section = col().key(group.key()).w_full().child(heading(group, count));
     for item in rows {
         section = section.child(item);
     }
-    Some(section)
+    section
 }
 
 /// One row: a filled, rounded body, an icon slot, and a label at [`LABEL_X`].
