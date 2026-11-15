@@ -17,7 +17,9 @@ A missing baseline fails the test rather than passing quietly, naming the file i
 
 ## Which machine
 
-These pictures were recorded on macOS (darwin), with the fonts that machine has. Font rasterisation
+These pictures were recorded on macOS (darwin 27.2.0, arm64), with the fonts that machine has, at
+commit `884a2f8`. No CI image has recorded a set yet, so the `Compare every scene with its baseline`
+step will report differences on its first run — that is the step telling you to record one there. Font rasterisation
 and hinting differ between platforms, so a Linux CI image will report every scene differing until it
 records its own set:
 
