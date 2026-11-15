@@ -38,9 +38,6 @@ pub const WRAP_BELOW: f32 = 233.0;
 /// tags and footer.
 pub const TILE_HEIGHT: f32 = 120.0;
 
-/// The sidebar's fixed width, which the grid's share of the window is measured against.
-pub const SIDEBAR_WIDTH: f32 = 200.0;
-
 /// The width the grid assumes before it has been laid out: a three-column window.
 pub const FALLBACK_GRID_WIDTH: f32 = 767.0;
 
@@ -1270,7 +1267,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     let mut sidebar = col()
         .key("decks")
-        .w(SIDEBAR_WIDTH)
+        .w(crate::sidebar::WIDTH)
         .h_full()
         .padding(8.0)
         .gap(2.0)
@@ -1941,7 +1938,7 @@ pub fn view<S: Host>(s: &S) -> El {
         .on_layout(|s: &mut S, rect: [f32; 4]| {
             // The window, less the sidebar: measuring the grid's own parent would make the tiles
             // decide the width they are laid out in.
-            let width = (rect[2] - SIDEBAR_WIDTH).max(0.0);
+            let width = (rect[2] - crate::sidebar::WIDTH).max(0.0);
             if (s.library().grid_width - width).abs() > 0.5 {
                 s.library_mut().grid_width = width;
             }

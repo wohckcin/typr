@@ -2,7 +2,7 @@
 
 ## 1. Structure and rows
 
-- [ ] 1.1 Add `crates/typr/src/sidebar.rs` with `WIDTH = 225.0`, `ROW_HEIGHT = 25.0`,
+- [x] 1.1 Add `crates/typr/src/sidebar.rs` with `WIDTH = 225.0`, `ROW_HEIGHT = 25.0`,
       `INSET = 7.0`, `ICON = 20.0`, `GAP_AFTER_ICON = 14.0`, `GROUP_GAP = 20.0`,
       `pub enum Group { Navigation, Decks, Utilities }`, and `pub fn row<S: Host>(...)`
       producing one 25-point row with a filled, rounded body and a label at

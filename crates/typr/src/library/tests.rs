@@ -61,7 +61,11 @@ fn a_long_deck_builds_only_the_tile_rows_on_screen() {
     }
 
     let width = runtime.state.grid_width;
-    assert_eq!(width, 760.0, "the grid is the window less the sidebar");
+    assert_eq!(
+        width,
+        960.0 - crate::sidebar::WIDTH,
+        "the grid is the window less the sidebar"
+    );
     let columns = columns_for(width);
     // Six lines of 116 points fit in a 640-point viewport.
     let on_screen = 6;
@@ -296,20 +300,22 @@ fn the_grid_is_measured_from_the_window_not_from_its_own_tiles() {
         runtime.frame(0.1);
     }
     assert_eq!(
-        runtime.state.grid_width, 760.0,
+        runtime.state.grid_width,
+        960.0 - crate::sidebar::WIDTH,
         "the window less the sidebar, got {}",
         runtime.state.grid_width
     );
     let grid = columns_for(runtime.state.grid_width);
-    assert_eq!(grid, 3, "three columns of 242.67");
+    assert_eq!(grid, 3, "three columns");
+    let share = (runtime.state.grid_width - GAP * 2.0) / 3.0;
     let tile = runtime
         .elements()
         .into_iter()
         .find(|element| element.key.as_deref() == Some("tile-1"))
         .expect("the first tile");
     assert!(
-        (tile.rect[2] - 242.667).abs() < 1.0,
-        "the tile is 242.67 wide, got {}",
+        (tile.rect[2] - share).abs() < 1.0,
+        "the tile is one grid share ({share}) wide, got {}",
         tile.rect[2]
     );
 }
@@ -336,9 +342,10 @@ fn an_empty_deck_offers_a_tile_to_fill() {
         "an empty deck draws exactly one tile that starts a card"
     );
     let rect = placeholders[0].rect;
+    let share = (960.0 - crate::sidebar::WIDTH - GAP * 2.0) / 3.0;
     assert!(
-        (rect[2] - 242.667).abs() < 1.0,
-        "the placeholder is one grid share wide, got {rect:?}"
+        (rect[2] - share).abs() < 1.0,
+        "the placeholder is one grid share wide, expected {share}, got {rect:?}"
     );
     assert!(
         (rect[3] - 94.0).abs() < 1.0,
