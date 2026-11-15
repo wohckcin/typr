@@ -31,13 +31,10 @@ running the record command cannot overwrite the pictures the runner checks.
   `20261111.196.1`); the Record step writes it. The pixel comparison is the gate. When it fails, a
   final step says whether the runner's OS or build differs from the one recorded.
 
-`ci.yml` pins `runs-on: ubuntu-26.04` because `ubuntu-latest` is an alias GitHub moves between
-images — the run's annotation says it starts moving to Ubuntu 26 on 2026-10-19 — and a moved image
-rasterises its fonts differently. Pinning the label pins the image's name, not its build: GitHub
-rebuilds the image under the same label, and on a new build the comparison step fails with a message
-saying the image changed rather than reporting 33 unexplained scenes. When that happens, re-record
-from a dispatch run, download the artifact and commit it; the pictures the runner drew are the ones it
-should check.
+`ci.yml` pins `runs-on: ubuntu-26.04`, which selects GitHub's Ubuntu 26 image family. The label
+does not pick a build: the pool has served `20261111.196.1` and `20261111.82.6` under it, and both drew the
+committed pictures byte for byte. A build that changes the pictures fails the comparison; re-record from a
+dispatch run, download the artifact and commit it after checking the pictures.
 
 The zone cannot drift: `visual.rs` draws every scene with `TZ=UTC`, because the history scene prints its
 moments with the local offset.
