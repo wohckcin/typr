@@ -3551,6 +3551,7 @@ checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 name = "typr"
 version = "0.1.0"
 dependencies = [
+ "image",
  "log",
  "rune",
  "rune-kit",

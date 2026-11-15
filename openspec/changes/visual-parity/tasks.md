@@ -25,11 +25,11 @@ Depends on `settings-screen` (theme and scale tokens) and on every screen it res
 
 ## 4. Baselines
 
-- [ ] 4.1 `crates/typr/tests/visual.rs`: render each scene through the tooling path, compare with `tests/baselines/<scene>.png` with a per-channel tolerance of 2 and a differing-pixel share of 0.5%, and fail on a missing baseline.
+- [x] 4.1 `crates/typr/tests/visual.rs`: render each scene through the tooling path, compare with `tests/baselines/<scene>.png` with a per-channel tolerance of 2 and a differing-pixel share of 0.05%, and fail on a missing baseline.
   - **Verification**: `every_scene_matches_its_baseline` passes on the final tree; `a_changed_token_fails_a_baseline` is demonstrated by changing one space token in a scratch worktree and seeing the test name the scene.
 - [ ] 4.2 Baselines generated on the CI image and committed, with the machine and commit recorded in a README beside them.
   - **Verification**: the README names the image; the suite passes from a clean checkout.
-- [ ] 4.3 CI runs the visual test in the scene step it already has.
+- [x] 4.3 CI runs the visual test in the scene step it already has.
   - **Verification**: `ci.yml` parses and the step names the test.
 
 ## 5. Close out

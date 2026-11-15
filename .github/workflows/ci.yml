@@ -69,3 +69,12 @@ jobs:
             cargo run -q -p typr -- --scene "$scene" --snap "$RUNNER_TEMP/snaps/$scene.png"
             test -s "$RUNNER_TEMP/snaps/$scene.png"
           done
+
+      # The pictures beside the test were recorded on a development machine. A runner whose fonts
+      # rasterise differently reports every scene differing — record its own set with
+      # TYPR_UPDATE_BASELINES=1 and commit it, rather than narrowing the check.
+      - name: Compare every scene with its baseline
+        run: |
+          set -euo pipefail
+          export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"
+          cargo test -p typr --test visual

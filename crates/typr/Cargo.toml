@@ -17,4 +17,7 @@ unicode-normalization = "0.1.26"
 # the only place cargo honours it.
 
 [dev-dependencies]
+# Decodes the scene pictures so `tests/visual.rs` can compare them with their baselines. The
+# `image` crate is already in the tree through rune, so this adds nothing to the build.
+image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3.27.0"

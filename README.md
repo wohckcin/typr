@@ -369,6 +369,44 @@ cargo test -p typr-core
 The domain layer takes its time from a clock it is given (`typr_core::clock::Clock`), so "due in ten
 minutes" is an assertion rather than a sleep.
 
+### One design, one set of tokens
+
+Every screen is drawn from `crates/typr/src/design`, which names the spacing steps, the type styles,
+the radii and the card surface:
+
+| Token | Value | For |
+|---|---|---|
+| `space(1)`, `space(2)`, … | 4, 8, … points | every padding and gap |
+| `size(n)` | the same steps | every width and height |
+| `type_body()`, `type_title()`, `type_caption()` | the kit's body, title and caption | text |
+| `radius()`, `radius_small()`, `radius_large()` | 6, 4, 8 points | corners |
+| `surface_card(children, focused)` | fill, border, elevation, focus ring | anything that reads as a card |
+| `review_backdrop()` | the page dimmed one step | the study canvas |
+
+A dimension written as a number is refused:
+
+```sh
+bash scripts/check-tokens.sh          # every screen, or the files you name
+```
+
+`cargo test --test tokens` runs the same check, and CI runs it after `cargo fmt`.
+
+### The scene baselines
+
+Each scene has a picture in `crates/typr/tests/baselines`, and `cargo test --test visual` draws the
+scene again and compares it: a channel may move by 2 and at most 0.05% of the pixels may differ. A
+token or a padding step that changed fails the comparison and names the first pixel that moved.
+
+```sh
+TYPR_UPDATE_BASELINES=1 cargo test -p typr --test visual    # re-record after an intended change
+```
+
+A scene with no baseline fails rather than passing quietly. The pictures are recorded per machine —
+see `crates/typr/tests/baselines/README.md` before expecting a Linux runner to agree with a laptop.
+
+To add a scene, register it in the scene table in `crates/typr/src/main.rs` and record the baselines
+again; the test reads `--list-scenes`, so a scene is never silently unchecked.
+
 ## Working on it
 
 ```sh
