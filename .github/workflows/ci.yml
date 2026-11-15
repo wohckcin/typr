@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  # A runner's fonts rasterise their own way, so its baselines have to be drawn there. Dispatch with
+  # `record_baselines` on, download the artifact, and commit it as `tests/baselines/linux`.
+  workflow_dispatch:
+    inputs:
+      record_baselines:
+        description: Record this runner's baseline set
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -61,6 +69,20 @@ jobs:
         # The visual test compares against pictures recorded on a development machine; it runs as its
         # own step below so a platform whose fonts rasterise differently cannot stop the snapshot gate.
         run: cargo test --workspace --locked -- --skip every_scene_matches_its_baseline
+
+      - name: Record this runner's baselines
+        if: inputs.record_baselines
+        run: |
+          set -euo pipefail
+          export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"
+          TYPR_UPDATE_BASELINES=1 cargo test -p typr --test visual
+          test -s "crates/typr/tests/baselines/linux/history.png"
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.record_baselines
+        with:
+          name: baselines-linux
+          path: crates/typr/tests/baselines/linux
 
       - name: Snapshot every scene
         run: |

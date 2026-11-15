@@ -1,7 +1,7 @@
 # Scene baselines
 
-One picture per scene: the app draws the scene and `crates/typr/tests/visual.rs` compares the result
-with the file here. A channel may move by 2 and at most 0.05% of the pixels may differ (1229 of the
+One picture per scene, in the folder named for the platform that drew it (`macos/`, `linux/`): the app
+draws the scene and `crates/typr/tests/visual.rs` compares the result with the file for this platform. A channel may move by 2 and at most 0.05% of the pixels may differ (1229 of the
 1920×1280 picture), so a rasteriser that rounds differently passes while a spacing step, a radius or a
 colour that repainted a region fails. A change confined to fewer than about 1200 pixels passes: that
 is the price of not failing on rounding, and it is why a diff worth committing still gets looked at.
@@ -12,29 +12,24 @@ is the price of not failing on rounding, and it is why a diff worth committing s
 TYPR_UPDATE_BASELINES=1 cargo test -p typr --test visual
 ```
 
-That redraws every scene and overwrites its baseline. Record after an intended visual change, and
+That redraws every scene and overwrites this platform's baselines. Record after an intended visual change, and
 look at the diff before you commit it — the test cannot tell a fix from a regression.
 
 A missing baseline fails the test rather than passing quietly, naming the file it wanted.
 
 ## Which machine
 
-These pictures were recorded on macOS (darwin 27.2.0, arm64) at commit `884a2f8`, `history.png` again
-at `5cbece8`, with the fonts that machine has. Font rasterisation and hinting differ between platforms,
-so a Linux CI image reports every scene differing until it records its own set:
+Fonts are rasterised by the platform, so each platform keeps its own set and the test reads
+`std::env::consts::OS` to pick one. Neither set is the other's: a Mac drawing says nothing about a Linux
+runner.
 
-```
-TYPR_UPDATE_BASELINES=1 cargo test -p typr --test visual   # on the CI image
-```
-
-No CI image has recorded a set yet, so the comparison runs as the last step of the workflow, after the
-snapshot gate, and its first Linux run is expected to fail with that command in its output. Commit the
-set from the image, or leave the comparison out of the pipeline for that platform; what must not happen
-is a baseline recorded somewhere else and a check that always fails.
+- `macos/` — macOS 27.2.0, arm64, recorded at `884a2f8`, `history.png` again at `5cbece8`.
+- `linux/` — `ubuntu-latest` on GitHub Actions, recorded by the `Record this runner's baselines` step
+  (`workflow_dispatch` with `record_baselines` on) and committed from its `baselines-linux` artifact.
 
 The zone cannot drift: `visual.rs` draws every scene with `TZ=UTC`, because the history scene prints its
-moments with the local offset. Two differences — a platform that changes how a glyph is hinted, and a
-platform that has not recorded a set — are the only ones these pictures can show.
+moments with the local offset. A platform with no set fails on its first run with the command that
+records one; that is the step telling you to record it there.
 
 ## Adding a scene
 

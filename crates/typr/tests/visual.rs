@@ -21,8 +21,12 @@ const CHANNEL_TOLERANCE: u8 = 2;
 /// row, a glyph swap in one label — passes, and no threshold can both absorb rounding and catch those.
 const DIFFERING_SHARE: f64 = 0.0005;
 
+/// The set for this platform. Fonts are rasterised by the platform, so a picture recorded on one
+/// machine says nothing about another's: the Linux runner and the author's Mac each keep a set.
 fn baselines() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/baselines")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/baselines")
+        .join(std::env::consts::OS)
 }
 
 fn scenes() -> Vec<String> {
@@ -110,8 +114,9 @@ fn every_scene_matches_its_baseline() {
         }
         if !baseline.exists() {
             failures.push(format!(
-                "{scene}: no baseline at {}\n  record every baseline with TYPR_UPDATE_BASELINES=1 cargo test --test visual",
-                baseline.display()
+                "{scene}: no baseline at {}\n  record {}'s set with TYPR_UPDATE_BASELINES=1 cargo test --test visual",
+                baseline.display(),
+                std::env::consts::OS
             ));
             continue;
         }
