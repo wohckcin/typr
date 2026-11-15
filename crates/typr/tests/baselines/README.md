@@ -27,9 +27,9 @@ running the record command cannot overwrite the pictures the runner checks.
   Written by the local record command, which is why the folder is the platform name.
 - `ubuntu-26.04/` — GitHub Actions image `ubuntu-26.04` build `20261111.196.1`, recorded at
   `fb3905e` by the `Record this runner's baselines` step (dispatch run `43672594363`) and committed from
-  its artifact. `image.txt` holds the build that drew it (`ImageVersion`, `20261111.196.1`); the
-  Record step writes it, and a step before the comparison fails when the runner reports a different
-  build.
+  its artifact. `image.txt` holds the OS and build that drew it, one per line (`ubuntu26` and
+  `20261111.196.1`); the Record step writes it. The pixel comparison is the gate. When it fails, a
+  final step says whether the runner's OS or build differs from the one recorded.
 
 `ci.yml` pins `runs-on: ubuntu-26.04` because `ubuntu-latest` is an alias GitHub moves between
 images — the run's annotation says it starts moving to Ubuntu 26 on 2026-10-19 — and a moved image

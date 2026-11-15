@@ -119,9 +119,9 @@ jobs:
           TYPR_UPDATE_BASELINES=1 cargo test -p typr --test visual
           echo "recorded into $set_dir"
           test -s "$set_dir/history.png"
-          # Nothing else writes this down, and it is the only record of which build drew the set.
-          printf '%s\n' "${ImageVersion:?the runner reports no ImageVersion}" > "$set_dir/image.txt"
-          echo "image.txt now reads $(cat "$set_dir/image.txt")"
+          # Nothing else writes this down: the OS and the build that drew the set, one per line.
+          printf '%s\n%s\n' "${ImageOS:?the runner reports no ImageOS}" "${ImageVersion:?the runner reports no ImageVersion}" > "$set_dir/image.txt"
+          echo "image.txt now reads: $(tr '\n' ' ' < "$set_dir/image.txt")"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.record_baselines
@@ -142,23 +142,30 @@ jobs:
 
       # Each platform keeps its own set (`tests/baselines/<os>/`), recorded on that platform. The
       # Linux set was drawn on this image; a Mac's differs by up to 3% per scene.
-      - name: Check the runner image is the one that drew the baselines
-        run: |
-          set -euo pipefail
-          recorded=$(tr -d '[:space:]' < "crates/typr/tests/baselines/$TYPR_BASELINE_SET/image.txt")
-          echo "runner reports ImageOS=${ImageOS:-unset} ImageVersion=${ImageVersion:-unset}"
-          echo "baselines were drawn by build $recorded"
-          # The build, not the image name: a rebuilt image keeps its name and changes this.
-          if [ "$recorded" != "${ImageVersion:-unset}" ]; then
-            echo "The runner image was rebuilt, so every baseline can differ without a line of code changing." >&2
-            echo "Re-record from a dispatch run (record_baselines on), download baselines-$TYPR_BASELINE_SET and commit it." >&2
-            exit 1
-          fi
-
       - name: Compare every scene with its baseline
+        id: compare
         env:
           TYPR_BASELINE_SET: ubuntu-26.04
         run: |
           set -euo pipefail
           export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"
           cargo test -p typr --test visual
+
+      # Runs only when the comparison fails, to say whether a rebuilt runner image is the likely cause.
+      # The pixel comparison is the gate: a rebuild that leaves the pictures alone passes.
+      - name: Say whether the runner image changed
+        if: failure() && steps.compare.outcome == 'failure'
+        env:
+          TYPR_BASELINE_SET: ubuntu-26.04
+        run: |
+          set -uo pipefail
+          recorded="crates/typr/tests/baselines/$TYPR_BASELINE_SET/image.txt"
+          recorded_os=$(sed -n 1p "$recorded")
+          recorded_build=$(sed -n 2p "$recorded")
+          echo "runner reports ImageOS=${ImageOS:-unset} ImageVersion=${ImageVersion:-unset}"
+          echo "baselines were drawn by ImageOS=$recorded_os ImageVersion=$recorded_build"
+          if [ "$recorded_os" != "${ImageOS:-unset}" ] || [ "$recorded_build" != "${ImageVersion:-unset}" ]; then
+            echo "::error::The runner image differs from the one that drew the baselines. Re-record from a dispatch run (record_baselines on), check the artifact's pictures, then commit it as $TYPR_BASELINE_SET."
+          else
+            echo "::error::The runner image is the one that drew the baselines, so the differences are the rendering itself."
+          fi
