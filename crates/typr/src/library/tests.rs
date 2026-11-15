@@ -1377,3 +1377,51 @@ fn a_deck_with_a_due_prompt_carries_its_count_and_a_quiet_deck_carries_none() {
         .count();
     assert_eq!(badges, 1, "only the deck with a due prompt draws a count");
 }
+
+/// The nested fixture with one prompt due, folded or not.
+fn nested_with_one_due(folded: bool) -> Library {
+    let mut library = Library::seeded_nested();
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        let due = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock) - 1;
+        if let Some(card) = snapshot.cards.first_mut() {
+            card.due_at = Some(due);
+        }
+    }
+    if folded {
+        library.toggle_collapsed(1);
+    }
+    library.refresh();
+    library
+}
+
+fn keys_of(runtime: &rune::Runtime<Library>) -> Vec<String> {
+    runtime
+        .elements()
+        .iter()
+        .filter_map(|element| element.key.clone())
+        .collect()
+}
+
+#[test]
+fn folding_a_parent_hides_exactly_its_child_and_leaves_the_count_alone() {
+    let open = draw(nested_with_one_due(false));
+    let keys = keys_of(&open);
+    assert!(keys.iter().any(|key| key == "deck-2"), "the child is drawn");
+    assert!(
+        keys.iter().any(|key| key == "deck-toggle-1"),
+        "the parent offers a fold"
+    );
+
+    let shut = draw(nested_with_one_due(true));
+    let keys = keys_of(&shut);
+    assert!(keys.iter().any(|key| key == "deck-1"), "the parent stays");
+    assert!(
+        !keys.iter().any(|key| key == "deck-2" || key == "deck-3"),
+        "the subtree is folded away: {keys:?}"
+    );
+    assert!(
+        keys.iter().any(|key| key == "deck-count-1"),
+        "the parent keeps its own count"
+    );
+}

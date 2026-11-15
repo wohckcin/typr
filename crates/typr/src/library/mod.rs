@@ -400,6 +400,9 @@ pub struct Library {
     pub peek: Option<Id>,
     /// Where a card opened from the notebook belongs in its deck, once it is created.
     pub new_position: Option<u32>,
+    /// The decks whose children are folded away. A view state, not a stored one: the database
+    /// has no opinion about what is on screen.
+    pub collapsed: HashSet<Id>,
 }
 
 impl Default for Library {
@@ -439,6 +442,7 @@ impl Default for Library {
             find_at: 0,
             peek: None,
             new_position: None,
+            collapsed: HashSet::new(),
         }
     }
 }
@@ -1162,6 +1166,47 @@ fn empty_trash_button<S: Host>() -> El {
         .key("empty-trash")
 }
 
+impl Library {
+    /// Fold a deck's children away, or bring them back.
+    pub fn toggle_collapsed(&mut self, deck: Id) {
+        if !self.collapsed.remove(&deck) {
+            self.collapsed.insert(deck);
+        }
+    }
+
+    /// The decks the column draws: the tree, less anything under a folded deck.
+    pub fn visible_decks(&self) -> Vec<(&Deck, usize)> {
+        let decks = &self.snapshot.decks;
+        deck_tree(decks)
+            .into_iter()
+            .filter(|(deck, _)| !self.folded(deck))
+            .collect()
+    }
+
+    /// Whether any deck above this one is folded. Walks at most 64 hops, for the same reason
+    /// the count does: the snapshot is data, not an invariant.
+    fn folded(&self, deck: &Deck) -> bool {
+        let mut current = deck.parent;
+        let mut hops = 0;
+        while let Some(id) = current {
+            if hops > 64 {
+                return false;
+            }
+            if self.collapsed.contains(&id) {
+                return true;
+            }
+            current = self
+                .snapshot
+                .decks
+                .iter()
+                .find(|parent| parent.id == id)
+                .and_then(|parent| parent.parent);
+            hops += 1;
+        }
+        false
+    }
+}
+
 /// Decks in the order the sidebar draws them: every deck owns the rows below it, and each
 /// level is indented. A deck whose parent is missing counts as a root, and a cycle has no root
 /// at all, so the leftovers are appended rather than hidden.
@@ -1199,20 +1244,36 @@ fn push_branch<'a>(
     }
 }
 
-fn deck_row<S: Host>(
-    deck: &Deck,
+/// What one deck row is drawn from: the deck, how deep it sits, and the states the caller
+/// already worked out. A struct rather than eight arguments, because the call site reads as a
+/// list of what it knows.
+struct DeckRow<'a> {
+    deck: &'a Deck,
     depth: usize,
-    name: &TextEdit,
     selected: bool,
     renaming: bool,
     moving: bool,
     due: u32,
-) -> El {
+    has_children: bool,
+    folded: bool,
+}
+
+fn deck_row<S: Host>(state: &DeckRow<'_>, name: &TextEdit) -> El {
+    let DeckRow {
+        deck,
+        depth,
+        selected,
+        renaming,
+        moving,
+        due,
+        has_children,
+        folded,
+    } = *state;
     let t = tok::theme(true);
     let id = deck.id;
     let inset = 10.0 + depth as f32 * 12.0;
     if renaming {
-        return row()
+        return rune::row()
             .key(format!("deck-{}", deck.id))
             .h(30.0)
             .px(inset)
@@ -1230,7 +1291,7 @@ fn deck_row<S: Host>(
             )
             .on_press(move |s: &mut S| s.library_mut().start_rename(id));
     }
-    let mut line = row()
+    let mut line = rune::row()
         .key(format!("deck-{}", deck.id))
         .h(30.0)
         .px(inset)
@@ -1250,6 +1311,21 @@ fn deck_row<S: Host>(
                     .color(if selected { rune::Color::WHITE } else { t.text }),
             ),
         );
+    let id = deck.id;
+    if has_children {
+        let fold = move |s: &mut S| s.library_mut().toggle_collapsed(id);
+        line = line.child(
+            text(if folded { "▸" } else { "▾" })
+                .key(format!("deck-toggle-{}", deck.id))
+                .font(type_::MONO_CAPTION)
+                .color(if selected {
+                    rune::Color::WHITE
+                } else {
+                    t.text_secondary
+                })
+                .on_press(fold),
+        );
+    }
     if due > 0 {
         line = line.child(crate::sidebar::badge(due).key(format!("deck-count-{}", deck.id)));
     }
@@ -1290,15 +1366,25 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
     let renaming = library.renaming;
     let now = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock);
     let due = crate::sidebar::deck_due_counts(&library.snapshot, now);
-    for (deck, depth) in deck_tree(&library.snapshot.decks) {
+    let children: HashSet<Id> = library
+        .snapshot
+        .decks
+        .iter()
+        .filter_map(|deck| deck.parent)
+        .collect();
+    for (deck, depth) in library.visible_decks() {
         decks.push(deck_row::<S>(
-            deck,
-            depth,
+            &DeckRow {
+                deck,
+                depth,
+                selected: library.selected_deck == Some(deck.id),
+                renaming: renaming == Some(deck.id),
+                moving: library.moving.is_some() || library.moving_card.is_some(),
+                due: due.get(&deck.id).copied().unwrap_or(0),
+                has_children: children.contains(&deck.id),
+                folded: library.collapsed.contains(&deck.id),
+            },
             library.rename_text(),
-            library.selected_deck == Some(deck.id),
-            renaming == Some(deck.id),
-            library.moving.is_some() || library.moving_card.is_some(),
-            due.get(&deck.id).copied().unwrap_or(0),
         ));
     }
     decks.push(

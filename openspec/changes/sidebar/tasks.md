@@ -37,7 +37,7 @@
 - [x] 2.2 Draw each deck's count right-aligned, and draw nothing for a zero.
       *Verification*: a deck with one due prompt draws `1`; a quiet deck draws no badge.
 
-- [ ] 2.3 Indent nested decks with the existing `10.0 + depth * 12.0` step, and fold a
+- [x] 2.3 Indent nested decks with the existing `10.0 + depth * 12.0` step, and fold a
       parent's subtree away when it is collapsed, with the parent's own count unaffected.
       *Verification*: collapsing a parent with one child removes exactly the child row.
 
