@@ -810,3 +810,82 @@ fn the_notebook_view_draws_a_whole_card() {
         "the notebook shows the card's tags"
     );
 }
+
+/// Press a keyed control and settle the frame it queued.
+fn press(runtime: &mut rune::Runtime<Library>, key: &str) {
+    let (x, y) = runtime.find(key).expect("the control is drawn");
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.0);
+}
+
+#[test]
+fn the_column_view_finds_the_second_match() {
+    let mut library = in_view(2, ViewMode::Column);
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        snapshot.cards[0].markdown = "gato\n\nel gato duerme\n\nun gato mas\n---\ncat".to_string();
+    }
+    library.refresh();
+    library.selected_card = Some(1);
+    library.find.replace_text("GATO");
+    library.find_in_current();
+    assert_eq!(
+        library.find_hits,
+        vec![0, 2, 4],
+        "three lines hold the find"
+    );
+    assert_eq!(library.find_label(), "1 of 3");
+
+    let mut runtime = draw(library);
+    let keys: Vec<String> = runtime
+        .elements()
+        .iter()
+        .filter(|each| !each.exiting)
+        .filter_map(|each| each.key.clone())
+        .collect();
+    for wanted in [
+        "column-find",
+        "find",
+        "find-count",
+        "find-next",
+        "find-previous",
+    ] {
+        assert!(
+            keys.iter().any(|key| key == wanted),
+            "the column view has no {wanted}"
+        );
+    }
+
+    press(&mut runtime, "find-next");
+    assert_eq!(runtime.state.find_at, 1, "the next hit is the second one");
+    assert_eq!(runtime.state.find_label(), "2 of 3");
+    assert_eq!(runtime.state.find_line(), Some("el gato duerme"));
+
+    press(&mut runtime, "find-next");
+    press(&mut runtime, "find-next");
+    assert_eq!(runtime.state.find_at, 0, "the hits wrap");
+}
+
+#[test]
+fn a_find_that_finds_nothing_says_so() {
+    let mut library = in_view(1, ViewMode::Column);
+    library.find.replace_text("perro");
+    library.find_in_current();
+    assert!(library.find_hits.is_empty());
+    assert_eq!(library.find_label(), "No match");
+    library.find_next();
+    assert_eq!(library.find_at, 0, "a step with no hits changes nothing");
+
+    let runtime = draw(library);
+    let keys: Vec<String> = runtime
+        .elements()
+        .iter()
+        .filter(|each| !each.exiting)
+        .filter_map(|each| each.key.clone())
+        .collect();
+    assert!(
+        keys.iter().any(|key| key == "find-none"),
+        "the column view says there is no match, got {keys:?}"
+    );
+}

@@ -367,6 +367,12 @@ pub struct Library {
     pub new_view: bool,
     /// The view name being typed, kept apart from the store so a cancel costs nothing.
     pub view_buffer: TextEdit,
+    /// What the column view is looking for inside the card it reads.
+    pub find: TextEdit,
+    /// The line numbers that hold the find, in reading order.
+    pub find_hits: Vec<usize>,
+    /// Which hit is shown, counting from zero; only meaningful while `find_hits` is not empty.
+    pub find_at: usize,
 }
 
 impl Default for Library {
@@ -400,6 +406,9 @@ impl Default for Library {
             naming_view: None,
             new_view: false,
             view_buffer: TextEdit::default(),
+            find: TextEdit::default(),
+            find_hits: Vec::new(),
+            find_at: 0,
         }
     }
 }
@@ -412,6 +421,80 @@ impl Library {
     }
 
     /// The cards on screen, in the order they are drawn.
+    /// Reread the find against the card the column view shows. Called whenever the text or the
+    /// card changes, so the count never describes a card that is no longer on screen.
+    pub fn find_in_current(&mut self) {
+        let Some(markdown) = self.column_card().map(|card| card.markdown.clone()) else {
+            self.find_hits.clear();
+            self.find_at = 0;
+            return;
+        };
+        self.find_in_text(&markdown);
+    }
+
+    /// The line numbers of `card` that hold the find, folded so case and accents do not matter.
+    pub fn find_in(&mut self, card: &CardSummary) {
+        self.find_in_text(&card.markdown);
+    }
+
+    /// The same reading over a card's text, which is what the borrow allows when the card comes
+    /// from this list.
+    pub fn find_in_text(&mut self, markdown: &str) {
+        let wanted = typr_core::store::folded(&self.find.text);
+        self.find_hits = if wanted.is_empty() {
+            Vec::new()
+        } else {
+            markdown
+                .lines()
+                .enumerate()
+                .filter(|(_, line)| typr_core::store::folded(line).contains(&wanted))
+                .map(|(index, _)| index)
+                .collect()
+        };
+        self.find_at = 0;
+    }
+
+    /// The card the column view reads: the selected one when it is in the list, else the first.
+    pub fn column_card(&self) -> Option<&CardSummary> {
+        self.selected_card
+            .and_then(|id| self.visible.iter().find(|card| card.id == id))
+            .or_else(|| self.visible.first())
+    }
+
+    /// Step to the next find hit, wrapping, and say nothing when there is none.
+    pub fn find_next(&mut self) {
+        if !self.find_hits.is_empty() {
+            self.find_at = (self.find_at + 1) % self.find_hits.len();
+        }
+    }
+
+    /// Step to the previous find hit, wrapping.
+    pub fn find_previous(&mut self) {
+        if !self.find_hits.is_empty() {
+            self.find_at = (self.find_at + self.find_hits.len() - 1) % self.find_hits.len();
+        }
+    }
+
+    /// What the find bar says: how many hits there are and which one is shown, or that there is
+    /// none.
+    pub fn find_label(&self) -> String {
+        if self.find.text.trim().is_empty() {
+            return String::new();
+        }
+        match self.find_hits.len() {
+            0 => "No match".to_string(),
+            total => format!("{} of {total}", self.find_at.min(total - 1) + 1),
+        }
+    }
+
+    /// The line the find is showing, so the reader can see what was found even where the card's
+    /// own rendering puts it out of view.
+    pub fn find_line(&self) -> Option<&str> {
+        let card = self.column_card()?;
+        let line = *self.find_hits.get(self.find_at)?;
+        card.markdown.lines().nth(line)
+    }
+
     /// How the selected deck is read. The whole library has no view of its own, so it reads as the
     /// grid, which is what every deck looked like before views existed.
     pub fn view_mode(&self) -> ViewMode {
@@ -1815,44 +1898,107 @@ fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
     body.on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
 }
 
-/// One card's contents at reading width: the layout for working through a long card.
+/// One card's contents at reading width, with a find over it: the layout for working through a
+/// long card.
 fn column_view<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
-    let shown = library
-        .selected_card
-        .and_then(|id| library.visible.iter().find(|card| card.id == id))
-        .or_else(|| library.visible.first());
-    let Some(card) = shown else {
+    let Some(card) = library.column_card() else {
         return col().key("cards").grow(1.0).h_full().child(
             text("No card to read")
                 .color(t.text_secondary)
                 .key("column-empty"),
         );
     };
-    let side = self::tile::first_side(card);
-    col()
+    // The find bar sits outside the scroll view: a scrolled child is laid out unbounded across, so
+    // its `w_full` would be its own content and the buttons would land off the window.
+    let mut body = col()
         .key("cards")
         .grow(1.0)
         .h_full()
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
+        .child(column_find::<S>(s))
         .child(
             col()
-                .key("column-card")
-                .w_full()
-                .max_w(COLUMN_WIDTH)
-                .gap(10.0)
-                .padding(24.0)
+                .grow(1.0)
+                .h_full()
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
                 .child(
-                    text(card.name.clone())
-                        .key("column-name")
-                        .font(type_::TITLE)
-                        .color(t.text),
-                )
-                .child(Markdown::new(side).render(&MarkdownStyle::neutral(true))),
+                    col()
+                        .key("column-card")
+                        .w_full()
+                        .max_w(COLUMN_WIDTH)
+                        .gap(10.0)
+                        .padding(24.0)
+                        .child(
+                            text(card.name.clone())
+                                .key("column-name")
+                                .font(type_::TITLE)
+                                .color(t.text),
+                        )
+                        .child(Markdown::new(&card.markdown).render(&MarkdownStyle::neutral(true))),
+                ),
+        );
+    if let Some(line) = library.find_line() {
+        body = body.child(
+            text(line.to_string())
+                .key("column-hit")
+                .font(type_::BODY)
+                .color(t.text_secondary)
+                .w_full()
+                .max_w(COLUMN_WIDTH),
+        );
+    }
+    body
+}
+
+/// The find bar the column view reads with: a field, the count, and the two ways through the hits.
+fn column_find<S: Host>(s: &S) -> El {
+    let t = tok::theme(true);
+    let library = s.library();
+    let mut bar = row()
+        .key("column-find")
+        .w_full()
+        .h(44.0)
+        .px(24.0)
+        .center_y()
+        .gap(8.0)
+        .child(
+            // A fixed width, not `grow`: the bar is measured by its content, and a growing field
+            // in a row with no bound pushed the two buttons past the window's edge.
+            text_input(&library.find, type_::BODY.lh(20.0))
+                .key("find")
+                .single_line()
+                .w(240.0)
+                .placeholder("Find in this card", t.text_secondary)
+                .on_edit(|s: &mut S| &mut s.library_mut().find)
+                .on_input_change(|s: &mut S, _| s.library_mut().find_in_current()),
         )
+        .child(
+            text(library.find_label())
+                .key("find-count")
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary),
+        )
+        .child(
+            Button::new("Previous")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| s.library_mut().find_previous())
+                .build(&KIT)
+                .key("find-previous"),
+        )
+        .child(
+            Button::new("Next")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| s.library_mut().find_next())
+                .build(&KIT)
+                .key("find-next"),
+        );
+    if library.find_hits.is_empty() && !library.find.text.trim().is_empty() {
+        bar = bar.child(text("No match").key("find-none").color(t.text_secondary));
+    }
+    bar
 }
 
 /// The question shown before a deck that holds cards would disappear with them.
