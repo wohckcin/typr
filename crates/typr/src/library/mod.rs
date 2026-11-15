@@ -38,6 +38,10 @@ pub const WRAP_BELOW: f32 = 233.0;
 /// tags and footer.
 pub const TILE_HEIGHT: f32 = 120.0;
 
+/// How many tag rows the sidebar draws before it stops: enough to reach the usual few, few
+/// enough that a library with two hundred tags still opens.
+const TAG_ROWS_LIMIT: usize = 12;
+
 /// The width the grid assumes before it has been laid out: a three-column window.
 pub const FALLBACK_GRID_WIDTH: f32 = 767.0;
 
@@ -1265,41 +1269,21 @@ fn deck_row<S: Host>(
 fn deck_sidebar<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
-    let mut sidebar = col()
+    let mut column = col()
         .key("decks")
         .w(crate::sidebar::WIDTH)
         .h_full()
-        .padding(8.0)
-        .gap(2.0)
+        .px(crate::sidebar::INSET)
+        .gap(crate::sidebar::GROUP_GAP)
         .fill(t.card);
-    let all = row()
-        .key("deck-all")
-        .h(30.0)
-        .px(10.0)
-        .radius(6.0)
-        .center_y()
-        .fill(if library.selected_deck.is_none() {
-            tok::accent(0, true)
-        } else {
-            t.control_off.alpha(0.0)
-        })
-        .child(text("All cards").font(type_::BODY).color(t.text))
-        .on_press(|s: &mut S| {
-            if s.library().moving_card.is_some() {
-                s.library_mut().moving_card = None;
-                return;
-            }
-            if let Some(moving) = s.library().moving {
-                s.library_mut().moving = None;
-                s.move_deck(moving, None);
-                return;
-            }
-            s.library_mut().select_deck(None);
-        });
-    sidebar = sidebar.child(all);
+
+    // Navigation: the whole library, and the saved views under it.
+    let navigation = vec![all_cards_row::<S>(), views_section::<S>(s)];
+    // Decks: the tree, and the button that starts another.
+    let mut decks = Vec::with_capacity(library.snapshot.decks.len() + 1);
     let renaming = library.renaming;
     for (deck, depth) in deck_tree(&library.snapshot.decks) {
-        sidebar = sidebar.child(deck_row::<S>(
+        decks.push(deck_row::<S>(
             deck,
             depth,
             library.rename_text(),
@@ -1308,29 +1292,43 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
             library.moving.is_some() || library.moving_card.is_some(),
         ));
     }
-    sidebar = sidebar.child(
+    decks.push(
         Button::new("New deck")
             .variant(ButtonVariant::Ghost)
             .on_press(|s: &mut S| s.new_deck())
             .build(&KIT)
             .key("new-deck"),
     );
-    sidebar = sidebar.child(views_section::<S>(s));
+    // Tags: only when the library holds one, and only the ones it holds.
+    let tags = tag_rows::<S>(s);
+
+    for group in [
+        (crate::sidebar::Group::Navigation, navigation),
+        (crate::sidebar::Group::Decks, decks),
+        (crate::sidebar::Group::Tags, tags),
+    ] {
+        if let Some(section) = crate::sidebar::group(group.0, group.1) {
+            column = column.child(section);
+        }
+    }
+
     if library.selected_deck.is_some() {
-        sidebar = sidebar
-            .child(
-                Button::new("Rename")
-                    .variant(ButtonVariant::Ghost)
-                    // The field only exists once `renaming` is set, and `Tx::focus` resolves the
-                    // key once the change that set it is on screen, so the rename can be typed
-                    // straight after the press without reaching for the mouse.
-                    .on_press_tx(|s: &mut S, tx: &mut rune::Tx| {
-                        s.begin_rename();
+        let mut actions = col().key("deck-actions").w_full().gap(2.0).child(
+            Button::new("Rename")
+                .variant(ButtonVariant::Ghost)
+                // The field only exists once `renaming` is set, and `Tx::focus` resolves the
+                // key once the change that set it is on screen, so the rename can be typed
+                // straight after the press without reaching for the mouse.
+                .on_press_tx(|s: &mut S, tx: &mut rune::Tx| {
+                    if let Some(deck) = s.library().selected_deck {
+                        s.library_mut().start_rename(deck);
                         tx.focus("deck-name", true);
-                    })
-                    .build(&KIT)
-                    .key("rename-deck"),
-            )
+                    }
+                })
+                .build(&KIT)
+                .key("rename-deck"),
+        );
+        actions = actions
             .child(
                 Button::new("Move")
                     .variant(ButtonVariant::Ghost)
@@ -1353,10 +1351,58 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
                     .key("edit-template"),
             );
         if let Some(deck) = library.templating {
-            sidebar = sidebar.child(template_panel::<S>(s, deck));
+            actions = actions.child(template_panel::<S>(s, deck));
         }
+        column = column.child(actions);
     }
-    sidebar
+    column
+}
+
+/// The whole library's row, which is a way out of any deck or view.
+fn all_cards_row<S: Host>() -> El {
+    let item = crate::sidebar::Row::new("deck-all", "All cards").kind(crate::sidebar::Kind::All);
+    crate::sidebar::row::<S>(&item, |s: &mut S| {
+        if s.library().moving_card.is_some() {
+            s.library_mut().moving_card = None;
+            return;
+        }
+        if let Some(moving) = s.library().moving {
+            s.library_mut().moving = None;
+            s.move_deck(moving, None);
+            return;
+        }
+        s.library_mut().select_deck(None);
+    })
+}
+
+/// The tags the library holds, each a filter, ordered so the list does not move under the
+/// pointer when a card is edited.
+fn tag_rows<S: Host>(s: &S) -> Vec<El> {
+    let library = s.library();
+    let mut names: Vec<&str> = library
+        .snapshot
+        .cards
+        .iter()
+        .flat_map(|card| card.tags.iter().map(String::as_str))
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    names.truncate(TAG_ROWS_LIMIT);
+    names
+        .into_iter()
+        .map(|name| {
+            let mut item = crate::sidebar::Row::new(format!("tag-{name}"), name)
+                .kind(crate::sidebar::Kind::Tag);
+            if library.tag.as_deref() == Some(name) {
+                item = item.selected();
+            }
+            let chosen = name.to_string();
+            crate::sidebar::row::<S>(&item, move |s: &mut S| {
+                s.library_mut().tag = Some(chosen.clone());
+                s.library_mut().refresh();
+            })
+        })
+        .collect()
 }
 
 /// The saved views, under the decks: one row each, and the field that names one.

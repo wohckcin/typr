@@ -37,19 +37,27 @@ pub enum Group {
     Navigation,
     /// The decks, each with its count.
     Decks,
+    /// The tags the library holds, which filter the list.
+    Tags,
     /// Import, settings and the trash.
     Utilities,
 }
 
 impl Group {
     /// Every group, in drawing order.
-    pub const ALL: [Group; 3] = [Group::Navigation, Group::Decks, Group::Utilities];
+    pub const ALL: [Group; 4] = [
+        Group::Navigation,
+        Group::Decks,
+        Group::Tags,
+        Group::Utilities,
+    ];
 
     /// The element key of the group's container.
     pub fn key(self) -> &'static str {
         match self {
             Group::Navigation => "sidebar-navigation",
             Group::Decks => "sidebar-decks",
+            Group::Tags => "tags",
             Group::Utilities => "sidebar-utilities",
         }
     }
@@ -59,6 +67,7 @@ impl Group {
         match self {
             Group::Navigation => "Navigation",
             Group::Decks => "Decks",
+            Group::Tags => "Tags",
             Group::Utilities => "Utilities",
         }
     }
@@ -128,6 +137,35 @@ impl Row {
         self.disabled = true;
         self
     }
+}
+
+/// A group's heading: small, uppercase, quiet, in a 27-point band.
+pub fn heading(group: Group) -> El {
+    let t = tok::theme(true);
+    col()
+        .key(format!("{}-title", group.key()))
+        .w_full()
+        .h(27.0)
+        .px(14.0)
+        .center_y()
+        .child(
+            text(group.label().to_uppercase())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary),
+        )
+}
+
+/// A group of rows under its heading, or nothing at all when it holds no row: an empty group
+/// leaves no heading and no gap behind.
+pub fn group(group: Group, rows: Vec<El>) -> Option<El> {
+    if rows.is_empty() {
+        return None;
+    }
+    let mut section = col().key(group.key()).w_full().child(heading(group));
+    for item in rows {
+        section = section.child(item);
+    }
+    Some(section)
 }
 
 /// One row: a filled, rounded body, an icon slot, and a label at [`LABEL_X`].

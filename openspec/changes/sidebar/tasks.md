@@ -15,7 +15,7 @@
       *Verification*: two decks with different names draw different tints; the label
       offset is unchanged by the icon.
 
-- [ ] 1.3 Render groups in order and skip an empty group, with the tag group drawn only
+- [x] 1.3 Render groups in order and skip an empty group, with the tag group drawn only
       when tags exist.
       *Verification*: a library with no tags draws no `tags` element, and one with tags
       draws it after the deck group.

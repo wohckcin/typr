@@ -1276,3 +1276,46 @@ fn rect_of(runtime: &rune::Runtime<Library>, key: &str) -> Option<[f32; 4]> {
         .find(|each| !each.exiting && each.key.as_deref() == Some(key))
         .map(|each| each.rect)
 }
+
+#[test]
+fn a_library_without_tags_draws_no_tag_group() {
+    let runtime = draw(Library::seeded(3));
+    let tags = runtime
+        .elements()
+        .iter()
+        .filter(|element| element.key.as_deref() == Some("tags"))
+        .count();
+    assert_eq!(tags, 0, "a library with no tag draws no tag group");
+}
+
+#[test]
+fn the_tag_group_follows_the_decks_and_holds_each_tag_once() {
+    let mut library = Library::seeded(3);
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        snapshot.cards[0].tags = vec!["animals".to_string(), "verbs".to_string()];
+        snapshot.cards[1].tags = vec!["animals".to_string()];
+    }
+    library.refresh();
+    let runtime = draw(library);
+    let elements = runtime.elements();
+    let rect_of = |key: &str| {
+        elements
+            .iter()
+            .find(|element| element.key.as_deref() == Some(key))
+            .map(|element| element.rect)
+    };
+    let decks = rect_of("sidebar-decks").expect("the deck group");
+    let tags = rect_of("tags").expect("the tag group");
+    assert!(
+        tags[1] > decks[1],
+        "the tag group sits below the decks: {tags:?} against {decks:?}"
+    );
+    assert!(rect_of("tag-animals").is_some(), "animals is the first tag");
+    assert!(rect_of("tag-verbs").is_some(), "verbs is the second");
+    let drawn = elements
+        .iter()
+        .filter(|element| element.key.as_deref() == Some("tag-animals"))
+        .count();
+    assert_eq!(drawn, 1, "a tag two cards hold draws one row");
+}
