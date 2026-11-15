@@ -98,6 +98,12 @@ the library opened, so the row states that and takes the danger tone when it did
 - Collapse is lost on quit; a user who folded a large tree rediscovers it once per launch.
 - 225 points is 25 wider than today, which narrows the card area by that much.
 
+- The search row's keycap must be read from the table, and a command that ends in focus or a
+  dialog needs a `Tx` where it is dispatched. `keymap::Host::run_command` and `palette::run`
+  therefore take one now (task 5.1): the palette reaches focus the same way a key does, and a
+  binding added to the table cannot reach a command the palette cannot run. `keymap-panel` has
+  already been archived, so the seam is recorded here rather than in that change.
+
 ## Migration Plan
 
 No schema change. Ships as `crates/typr/src/sidebar.rs` plus the query, behind the same

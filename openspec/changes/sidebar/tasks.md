@@ -74,6 +74,6 @@
 
 ## Workflow follow-up
 
-- [ ] 5.1 Record how the column now behaves in `openspec/changes/keymap-panel` if the chord
+- [x] 5.1 Record how the column now behaves in `openspec/changes/keymap-panel` if the chord
       lookup forces a different seam, then archive with
       `openspec archive sidebar --yes`.
