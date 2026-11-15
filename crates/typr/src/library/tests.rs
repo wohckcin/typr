@@ -744,7 +744,10 @@ fn the_notebook_reads_in_the_order_the_deck_holds() {
         .elements()
         .iter()
         .filter_map(|element| element.key.clone())
-        .filter(|key| key.starts_with("notebook-") && !key.starts_with("notebook-name-"))
+        .filter(|key| {
+            key.strip_prefix("notebook-")
+                .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()))
+        })
         .collect();
     let mut positions: Vec<(String, f32)> = names
         .into_iter()
@@ -763,5 +766,47 @@ fn the_notebook_reads_in_the_order_the_deck_holds() {
         order,
         vec!["notebook-2", "notebook-3", "notebook-1"],
         "the notebook stacks the deck's order, not the ids"
+    );
+}
+
+#[test]
+fn the_notebook_view_draws_a_whole_card() {
+    let mut library = in_view(2, ViewMode::Notebook);
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        snapshot.cards[0].markdown = "gato\n---\ncat".to_string();
+        snapshot.cards[0].preview = "gato".to_string();
+        snapshot.cards[0].name = "gato".to_string();
+        snapshot.cards[0].tags = vec!["animals".to_string()];
+    }
+    library.refresh();
+    let runtime = draw(library);
+    let keys: Vec<String> = runtime
+        .elements()
+        .iter()
+        .filter(|each| !each.exiting)
+        .filter_map(|each| each.key.clone())
+        .collect();
+    assert!(
+        keys.iter().any(|key| key == "notebook-1"),
+        "the card is drawn"
+    );
+    assert!(
+        keys.iter().any(|key| key == "notebook-edit-1"),
+        "the notebook offers a way into the editor, got {keys:?}"
+    );
+    let elements = runtime.elements();
+    let drawn: Vec<&str> = elements
+        .iter()
+        .filter(|each| !each.exiting)
+        .filter_map(|each| each.text.as_deref())
+        .collect();
+    assert!(
+        drawn.iter().any(|line| line.contains("cat")),
+        "the notebook shows the back of the card, drew {drawn:?}"
+    );
+    assert!(
+        drawn.iter().any(|line| line.contains("animals")),
+        "the notebook shows the card's tags"
     );
 }

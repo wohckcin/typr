@@ -1759,17 +1759,18 @@ fn in_deck_order(library: &Library) -> Vec<&CardSummary> {
     cards
 }
 
-/// One card in the notebook: its name and its contents, read at a comfortable width.
+/// One card in the notebook: its name, every side it holds, and the way into its editor.
 fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
     let t = tok::theme(true);
     let id = card.id;
-    let side = self::tile::first_side(card);
-    col()
+    let now = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock);
+    let (word, _) = self::tile::words(self::tile::state(card, now));
+    let mut body = col()
         .key(format!("notebook-{id}"))
         .w_full()
         .max_w(NOTEBOOK_WIDTH)
-        .gap(6.0)
-        .padding(12.0)
+        .gap(8.0)
+        .padding(14.0)
         .radius(6.0)
         .fill(if s.library().selected_card == Some(id) {
             t.control_off
@@ -1777,13 +1778,41 @@ fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
             t.card
         })
         .child(
-            text(card.name.clone())
-                .key(format!("notebook-name-{id}"))
-                .font(type_::LABEL)
-                .color(t.text),
+            row()
+                .key(format!("notebook-head-{id}"))
+                .w_full()
+                .center_y()
+                .gap(8.0)
+                .child(
+                    text(card.name.clone())
+                        .key(format!("notebook-name-{id}"))
+                        .font(type_::LABEL)
+                        .grow(1.0)
+                        .color(t.text),
+                )
+                .child(text(word).font(type_::MONO_CAPTION).color(t.text_secondary))
+                .child(
+                    Button::new("Edit")
+                        .variant(ButtonVariant::Ghost)
+                        .on_press(move |s: &mut S| {
+                            s.library_mut().selected_card = Some(id);
+                            s.open_card(id);
+                        })
+                        .build(&KIT)
+                        .key(format!("notebook-edit-{id}")),
+                ),
         )
-        .child(Markdown::new(side).render(&MarkdownStyle::neutral(true)))
-        .on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
+        // A card with no separator holds one side, and the notebook shows what is there rather
+        // than inventing a back.
+        .child(Markdown::new(&card.markdown).render(&MarkdownStyle::neutral(true)));
+    if !card.tags.is_empty() {
+        body = body.child(
+            text(card.tags.join(" \u{b7} "))
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary),
+        );
+    }
+    body.on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
 }
 
 /// One card's contents at reading width: the layout for working through a long card.
