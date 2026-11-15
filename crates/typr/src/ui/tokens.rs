@@ -95,3 +95,8 @@ pub fn row_fill(selected: bool) -> AdaptiveColor {
     if selected { hover() } else { background() }
 }
 
+
+/// The height a card tile is estimated at before it is measured: the list's scroll bar uses it.
+pub fn tile_estimate() -> Points {
+    px(96.0)
+}
