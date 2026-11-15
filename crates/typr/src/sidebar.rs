@@ -4,10 +4,12 @@
 //! with no divider, rows 211 points wide at a 7-point inset, 25 points tall, a 5-point radius,
 //! and a label that starts where the icon's slot ends plus a 14-point gap.
 
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use rune::tok::{self, type_};
 use rune::{El, col, text};
+use typr_core::store::{Id, Snapshot};
 
 /// The width of the whole column, in points.
 pub const WIDTH: f32 = 225.0;
@@ -223,6 +225,48 @@ pub fn row_tx<S: 'static>(item: &Row, on_press: impl Fn(&mut S, &mut rune::Tx) +
 /// rather than by position, so a deck keeps its colour when another deck is added above it.
 pub fn tint(name: &str) -> rune::Color {
     tok::accent(hash(name), true)
+}
+
+/// How many prompts are due in each deck's subtree, keyed by deck: a card's due prompt counts
+/// for its own deck and for every deck above it. Archived decks, archived cards and cards in the
+/// trash count for nothing, because a review cannot reach them.
+pub fn deck_due_counts(snapshot: &Snapshot, now_ms: i64) -> HashMap<Id, u32> {
+    let parents: HashMap<Id, Option<Id>> = snapshot
+        .decks
+        .iter()
+        .map(|deck| (deck.id, deck.parent))
+        .collect();
+    let archived: HashSet<Id> = snapshot
+        .decks
+        .iter()
+        .filter(|deck| deck.archived)
+        .map(|deck| deck.id)
+        .collect();
+    let mut counts: HashMap<Id, u32> = HashMap::new();
+    for card in &snapshot.cards {
+        let Some(due_at) = card.due_at else {
+            continue;
+        };
+        if due_at > now_ms || card.archived || card.trashed_at.is_some() {
+            continue;
+        }
+        let mut current = Some(card.deck);
+        // A deck whose parent chain loops would otherwise be walked forever; a library cannot
+        // hold one, but a snapshot is data and a snapshot is not trusted with the frame.
+        let mut hops = 0;
+        while let Some(id) = current {
+            if hops > 64 || archived.contains(&id) {
+                break;
+            }
+            let Some(parent) = parents.get(&id).copied() else {
+                break;
+            };
+            *counts.entry(id).or_insert(0) += 1;
+            current = parent;
+            hops += 1;
+        }
+    }
+    counts
 }
 
 /// A 20-point icon box: a monogram letter on a tinted ground.

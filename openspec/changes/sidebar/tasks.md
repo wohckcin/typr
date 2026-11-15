@@ -27,7 +27,7 @@
 
 ## 2. Deck rows
 
-- [ ] 2.1 Add `fn deck_due_counts(snapshot: &Snapshot, now_ms: i64) -> HashMap<Id, u32>` reading the
+- [x] 2.1 Add `fn deck_due_counts(snapshot: &Snapshot, now_ms: i64) -> HashMap<Id, u32>` reading the
       `due_at` field `card-grid` adds to `CardSummary`, skipping archived and trashed cards and
       crediting every ancestor deck.
       *Verification*: a snapshot with one due card under `Spanish` and one not due counts exactly

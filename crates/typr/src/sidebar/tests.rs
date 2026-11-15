@@ -167,3 +167,79 @@ fn a_disabled_row_swallows_the_press() {
     runtime.frame(0.0);
     assert_eq!(runtime.state.pressed, 1, "a live row answers its press");
 }
+
+/// A deck with just enough filled in for the counts.
+fn deck(id: Id, parent: Option<Id>, archived: bool) -> typr_core::store::Deck {
+    typr_core::store::Deck {
+        id,
+        parent,
+        name: format!("deck {id}"),
+        archived,
+        reverse: None,
+        template: None,
+        view: typr_core::library_view::ViewMode::Grid,
+    }
+}
+
+/// A card with a due time, or without one.
+fn card(id: Id, deck: Id, due_at: Option<i64>) -> typr_core::store::CardSummary {
+    typr_core::store::CardSummary {
+        id,
+        deck,
+        due_at,
+        ..typr_core::store::CardSummary::default()
+    }
+}
+
+#[test]
+fn a_count_credits_the_deck_and_every_deck_above_it() {
+    let snapshot = Snapshot {
+        decks: vec![deck(1, None, false), deck(2, Some(1), false)],
+        cards: vec![card(10, 2, Some(100)), card(11, 2, Some(500))],
+        ..Snapshot::default()
+    };
+    let counts = deck_due_counts(&snapshot, 200);
+    assert_eq!(counts.get(&2), Some(&1), "the card's own deck");
+    assert_eq!(counts.get(&1), Some(&1), "its parent");
+    assert_eq!(counts.len(), 2);
+}
+
+#[test]
+fn an_archived_deck_and_a_card_in_the_trash_count_for_nothing() {
+    let mut trashed = card(12, 2, Some(100));
+    trashed.trashed_at = Some(1);
+    let mut archived_card = card(13, 2, Some(100));
+    archived_card.archived = true;
+    let snapshot = Snapshot {
+        decks: vec![
+            deck(1, None, false),
+            deck(2, Some(1), false),
+            deck(3, Some(1), true),
+        ],
+        cards: vec![
+            card(10, 2, Some(100)),
+            trashed,
+            archived_card,
+            card(14, 3, Some(100)),
+        ],
+        ..Snapshot::default()
+    };
+    let counts = deck_due_counts(&snapshot, 200);
+    assert_eq!(counts.get(&2), Some(&1));
+    assert_eq!(
+        counts.get(&1),
+        Some(&1),
+        "only the card that counts is credited"
+    );
+    assert_eq!(counts.get(&3), None, "an archived deck counts for nothing");
+}
+
+#[test]
+fn a_card_whose_deck_is_missing_is_not_counted() {
+    let snapshot = Snapshot {
+        decks: vec![deck(1, None, false)],
+        cards: vec![card(10, 404, Some(100))],
+        ..Snapshot::default()
+    };
+    assert!(deck_due_counts(&snapshot, 200).is_empty());
+}
