@@ -98,6 +98,12 @@ pub fn elevation() -> Vec<Shadow> {
     KIT.elevation.raised.clone()
 }
 
+/// The canvas a review is read on: the page dimmed a step, so the card sits above it and the eye
+/// goes to the card rather than to the screen.
+pub fn review_backdrop() -> rune::Color {
+    tok::theme(true).bg.mix(rune::Color::BLACK, 0.35)
+}
+
 /// The fill a card surface is painted in.
 pub fn surface_fill() -> rune::Color {
     tok::theme(true).card

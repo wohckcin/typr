@@ -18,6 +18,8 @@ struct App {
     shuffles: u32,
     /// The size the picture pane reads as laid out, which places a diagram face's covers.
     pane: (f32, f32),
+    /// The height the review canvas reserves for an answer.
+    slot: f32,
     /// The name the summary would save a cram run's filter under.
     cram_name: TextEdit,
     /// Whether the summary gave that filter to a view.
@@ -38,6 +40,7 @@ impl App {
             left: false,
             shuffles: 0,
             pane: (400.0, 300.0),
+            slot: 0.0,
             cram_name: TextEdit::default(),
             saved: false,
         }
@@ -75,6 +78,14 @@ impl Host for App {
 
     fn set_picture_pane(&mut self, width: f32, height: f32) {
         self.pane = (width, height);
+    }
+
+    fn answer_slot(&self) -> f32 {
+        self.slot
+    }
+
+    fn set_answer_slot(&mut self, height: f32) {
+        self.slot = height;
     }
 
     fn due_now(&self) -> usize {
@@ -425,5 +436,82 @@ fn a_cram_summary_reports_its_answers_without_a_schedule() {
     assert!(
         drawn.iter().any(|line| line == "Save as view"),
         "the summary offers to keep the filter: {drawn:?}"
+    );
+}
+
+fn card_rect(runtime: &Runtime<App>) -> [f32; 4] {
+    runtime
+        .elements()
+        .iter()
+        .find(|element| !element.exiting && element.key.as_deref() == Some("session-card"))
+        .map(|element| element.rect)
+        .expect("the review card is drawn")
+}
+
+/// The review card's bounds, and the bounds of the keys drawn under it.
+fn study_rects(app: App) -> (rune::Runtime<App>, [f32; 4], Option<[f32; 4]>) {
+    fn draw(s: &App, _: &mut rune::Cx<App>) -> rune::El {
+        view(s)
+    }
+    let mut runtime = Runtime::new(app, draw, (900.0, 700.0), Env::new(true, 1.0));
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    let card = card_rect(&runtime);
+    let hints = runtime
+        .elements()
+        .iter()
+        .find(|element| element.key.as_deref() == Some("bindings"))
+        .map(|element| element.rect);
+    (runtime, card, hints)
+}
+
+#[test]
+fn revealing_does_not_move_the_card() {
+    // While a card is hidden its revealed height is not known, so the canvas reserves the height
+    // the last fully revealed card measured: from the second card on, a reveal fits the card
+    // instead of growing it.
+    let app = App::with(Queue::Due, &[(1, &["gato", "cat"]), (2, &["perro", "dog"])]);
+    let (mut runtime, first_hidden, _) = study_rects(app);
+    runtime.state.session.reveal();
+    runtime.settle_all();
+    runtime.frame(0.2);
+    runtime.frame(0.3);
+    let revealed = card_rect(&runtime);
+    let slot = runtime.state.slot;
+    assert!(slot > 0.0, "the revealed height was not recorded");
+    assert!(revealed[3] >= first_hidden[3], "revealing shrank the card");
+
+    // Answer the first card, which lands the next one hidden, and compare that card with itself.
+    runtime.state.acknowledge();
+    runtime
+        .state
+        .session
+        .grade(typr_core::store::Grade::Remembered);
+    runtime.state.session.reveal();
+    runtime.state.acknowledge();
+    runtime.settle_all();
+    runtime.frame(0.4);
+    runtime.frame(0.5);
+    let next_hidden = card_rect(&runtime);
+    assert!(
+        (next_hidden[3] - slot).abs() < 1.0,
+        "the hidden card reserved the recorded height: {} against {slot}",
+        next_hidden[3]
+    );
+    runtime.state.session.reveal();
+    runtime.settle_all();
+    runtime.frame(0.6);
+    runtime.frame(0.7);
+    assert_eq!(card_rect(&runtime), next_hidden, "revealing moved the card");
+}
+
+#[test]
+fn the_hints_sit_under_the_card() {
+    let app = App::with(Queue::Due, &[(1, &["gato", "cat"])]);
+    let (_, card, hints) = study_rects(app);
+    let hints = hints.expect("the keys are drawn");
+    assert!(
+        hints[1] >= card[1] + card[3],
+        "the keys sit below the card: {hints:?} under {card:?}"
     );
 }

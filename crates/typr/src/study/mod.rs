@@ -58,6 +58,15 @@ pub trait Host: 'static {
     /// Record the size the picture pane was laid out at.
     fn set_picture_pane(&mut self, _width: f32, _height: f32) {}
 
+    /// The height the card's content was when it was last fully revealed. The review canvas
+    /// reserves it, so revealing the next answer does not move the card.
+    fn answer_slot(&self) -> f32 {
+        0.0
+    }
+
+    /// Record that height once the content is fully shown.
+    fn set_answer_slot(&mut self, _height: f32) {}
+
     /// The name the summary offers for the cram run's filter.
     fn cram_name(&self) -> &TextEdit;
 
@@ -256,28 +265,38 @@ pub fn view<S: Host>(s: &S) -> El {
             .render(&MarkdownStyle::neutral(true))
     });
 
-    let mut card = col()
-        .key("session-card")
-        .grow(1.0)
-        .w_full()
-        .gap(design::space(4))
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        });
+    let mut content = col().key("session-content").w_full().gap(design::space(4));
     for el in body {
-        card = card.child(el);
+        content = content.child(el);
     }
     if let Some(picture) = session.asking().and_then(|face| picture_face(s, face)) {
-        card = card.child(picture);
+        content = content.child(picture);
     }
     if session.hidden() > 0 {
-        card = card.child(
+        content = content.child(
             text(format!("{} face(s) still hidden", session.hidden()))
                 .key("hidden")
                 .color(t.text_secondary)
                 .font(type_::LABEL),
         );
     }
+    let slot = s.answer_slot();
+    // The card's own height once an answer is shown is what the slot reserves — the card's height,
+    // not its content's, because the surface's padding is part of what a reveal adds. Measuring
+    // the card against its own reservation is monotone, so it settles.
+    let card = design::surface_card(vec![content], false)
+        .key("session-card")
+        .w_full()
+        .max_w(design::size(160))
+        .min_h(slot)
+        .on_layout(|s: &mut S, rect| {
+            if s.session().hidden() == 0 && rect[3] > s.answer_slot() {
+                s.set_answer_slot(rect[3]);
+            }
+        })
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        });
 
     let mut answers = row()
         .key("answers")
@@ -317,12 +336,16 @@ pub fn view<S: Host>(s: &S) -> El {
             );
     }
 
+    // The review canvas: a dimmed page with one card centred on it, the actions under the card and
+    // the keys under those.
     let mut body = col()
+        .key("review-canvas")
         .w_full()
         .h_full()
-        .fill(t.bg)
+        .fill(design::review_backdrop())
         .padding(design::space(6))
-        .gap(design::space(4))
+        .gap(design::space(3))
+        .items_center()
         .child(
             text(side_heading::<S>(s))
                 .font(type_::LABEL)

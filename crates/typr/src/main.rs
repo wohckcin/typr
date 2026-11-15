@@ -99,6 +99,8 @@ struct State {
     session_deck: Option<Id>,
     /// The size the picture pane was laid out at, which places a diagram face's covers.
     picture_pane: (f32, f32),
+    /// The height the review canvas reserves for an answer, so a reveal does not move the card.
+    answer_slot: f32,
     /// The history request in flight, with the card it was made for.
     history_request: Option<(u64, Id)>,
     /// The create-card request in flight, whose answer carries the new id.
@@ -169,6 +171,7 @@ impl Default for State {
             failure: None,
             seeded: false,
             picture_pane: (0.0, 0.0),
+            answer_slot: 0.0,
             seed: 1,
             pending_new_card: None,
             pending_new_diagram: None,
@@ -901,6 +904,14 @@ impl study::Host for State {
 
     fn set_picture_pane(&mut self, width: f32, height: f32) {
         self.picture_pane = (width, height);
+    }
+
+    fn answer_slot(&self) -> f32 {
+        self.answer_slot
+    }
+
+    fn set_answer_slot(&mut self, height: f32) {
+        self.answer_slot = height;
     }
 
     fn submit_grade(&mut self, card: Id, key: &str, grade: Grade) -> Result<u64, StoreError> {
