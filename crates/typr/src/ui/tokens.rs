@@ -88,3 +88,23 @@ pub fn radius() -> Points {
 pub fn sidebar_width() -> Points {
     px(220.0)
 }
+
+/// The fill a row takes when it is the one in force: the hover wash, which is visibly a fill and
+/// never transparent. An unselected row takes the page's background, so the two always differ.
+pub fn row_fill(selected: bool) -> AdaptiveColor {
+    if selected { hover() } else { background() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_selected_row_takes_a_fill_its_sibling_does_not() {
+        let selected = row_fill(true);
+        let plain = row_fill(false);
+        assert_ne!(selected, plain);
+        assert_ne!(selected.light.a, 0.0);
+        assert_ne!(selected.dark.a, 0.0);
+    }
+}

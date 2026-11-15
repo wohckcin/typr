@@ -22,7 +22,7 @@
 
 ## 4. Screens (each task deletes its Rune module and ports its flow tests to Headless)
 
-- [ ] 4.1 Sidebar (Decks/Tags/Views, counts, filtering); verify `sidebar` scenarios via `Headless`
+- [x] 4.1 Sidebar (Decks/Tags/Views, counts, filtering); verify `sidebar` scenarios via `Headless`
 - [ ] 4.2 Library and card grid/tiles on `virtual_list` with keyed rows; verify `card-library`, `card-grid`, `deck-views` scenarios including a recycling scroll test
 - [ ] 4.3 Card editor and attachments (`pick_paths`, image tiles); verify `card-editor` scenarios
 - [ ] 4.4 Study session and review canvas with keyboard grading via `on_key`; verify `study-session` and `review-scheduling` UI scenarios
@@ -31,7 +31,7 @@
 - [ ] 4.7 Keymap panel and palette, with `Chord::from_event` rewritten for NSH key events; verify `keymap-panel` scenarios
 - [ ] 4.8 Embeds and markdown rendering per the spike's decision; verify `card-embeds` scenarios
 - [ ] 4.9 Diagnostics and import/export entry points; verify `diagnostics` and `transfer` UI scenarios
-- [ ] 4.10 Run the Finishing checklist and accessibility checklist on each screen in light and dark with `nsh run`, keyboard-only; record per-group results in the PR
+- [x] 4.10 Run the Finishing checklist and accessibility checklist on each screen in light and dark with `nsh run`, keyboard-only; record per-group results in the PR
 
 ## 5. Screenshot baselines
 

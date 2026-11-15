@@ -49,6 +49,6 @@ pub fn choose(options: &'static [(&'static str, &'static str)], chosen: Signal<O
 pub fn list_row(title: impl IntoReactive<SharedString>, selected: impl Fn() -> bool + 'static, on_press: impl Fn() + 'static) -> impl IntoElement {
     view()
         .w_full()
-        .bg(move || if selected() { tokens::hover() } else { tokens::background() })
+        .bg(move || tokens::row_fill(selected()))
         .child(button(Variant::Ghost, title, || false, on_press))
 }

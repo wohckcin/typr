@@ -93,3 +93,7 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 
 - `scripts/check-tokens.sh` checks NSH screens only, starting with `src/shell.rs`. The Rune screen modules are not checked because they are deleted as each screen is ported (tasks 4.x); each port adds its file to the list.
 - The `ui` layer is exempt, since it is where the values are named.
+
+## Sidebar selected fill
+
+- `ui::tokens::row_fill(selected)` decides the fill; a unit test checks that the selected and unselected fills differ and that the selected one is not transparent. Pixel confirmation is a 5.1 fixture: a sidebar capture with a selected deck, light and dark.
