@@ -62,16 +62,18 @@ fn updating() -> bool {
     std::env::var("TYPR_UPDATE_BASELINES").is_ok_and(|value| !value.is_empty() && value != "0")
 }
 
+/// The first pixel that differs: where it is, and its colour on each side.
+type Spot = ([u32; 2], [u8; 3], [u8; 3]);
+
 /// How many pixels differ by more than the tolerance, and the first one that does, so a failure
 /// says where to look.
-fn difference(want: &RgbImage, got: &RgbImage) -> (usize, Option<([u32; 2], [u8; 3], [u8; 3])>) {
+fn difference(want: &RgbImage, got: &RgbImage) -> (usize, Option<Spot>) {
     let mut differing = 0usize;
     let mut first = None;
     for (x, y, pixel) in got.enumerate_pixels() {
         let other = want.get_pixel(x, y);
-        let apart = (0..3).any(|channel| {
-            other.0[channel].abs_diff(pixel.0[channel]) > CHANNEL_TOLERANCE
-        });
+        let apart =
+            (0..3).any(|channel| other.0[channel].abs_diff(pixel.0[channel]) > CHANNEL_TOLERANCE);
         if apart {
             differing += 1;
             if first.is_none() {
@@ -107,7 +109,9 @@ fn every_scene_matches_its_baseline() {
             ));
             continue;
         }
-        let want = image::open(&baseline).expect("the baseline reads").to_rgb8();
+        let want = image::open(&baseline)
+            .expect("the baseline reads")
+            .to_rgb8();
         let got = image::open(&shot).expect("the scene reads").to_rgb8();
         if want.dimensions() != got.dimensions() {
             failures.push(format!(
