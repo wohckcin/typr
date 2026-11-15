@@ -13,17 +13,38 @@ on:
         type: boolean
         default: false
 
+# A newer push answers the same question as the one in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The job reads the repository and uploads one artifact. Anything wider is a credential a step
+# could spend.
+permissions:
+  contents: read
+
+env:
+  # Logs are read in a terminal with colour, and a cached target is only correct if nothing in it is
+  # incremental.
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: 1
+
 jobs:
   test:
-    # Rune draws through wgpu, so the runner needs Vulkan and the X11/wayland client libraries
-    # even for headless snapshots: the tooling path still creates a surface for the frames it
-    # renders. Development packages build and link, runtime packages load when a window opens.
     # Pinned to the image whose baselines are committed: `ubuntu-latest` moves, and a moved image
     # rasterises its fonts differently, which would repaint every baseline without a code change.
     runs-on: ubuntu-26.04
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to a commit, not a tag: a tag is a moving pointer its owner can repoint.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
+      # Rune draws through wgpu, so the runner needs Vulkan and the X11/wayland client libraries
+      # even for headless snapshots: the tooling path still creates a surface for the frames it
+      # renders. Development packages build and link, runtime packages load when a window opens.
       - name: Install Rune's Linux dependencies
         run: |
           sudo apt-get update
@@ -35,17 +56,30 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup show
 
-      - uses: Swatinem/rust-cache@v2
+      # The registry, the git checkouts of the pinned crates and the build itself. The key carries the
+      # lockfile and the toolchain channel, so a dependency bump or a compiler bump misses this cache
+      # rather than restoring objects the current build cannot use.
+      - name: Cache the registry and the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Format
-        run: cargo fmt --check
+        run: cargo fmt --all --check
 
       # A screen that writes .px(24.0) has left the visual language: every dimension is a token.
       - name: Refuse a dimension literal in a screen
         run: bash scripts/check-tokens.sh
 
       - name: Lint
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings -W clippy::cast_possible_truncation
 
       # The backend is the half that must not drag a graphics stack behind it.
       - name: Check the backend stays toolkit free
@@ -68,8 +102,8 @@ jobs:
         run: cargo build --workspace --locked
 
       - name: Test
-        # The visual test compares against pictures recorded on a development machine; it runs as its
-        # own step below so a platform whose fonts rasterise differently cannot stop the snapshot gate.
+        # The visual test compares against pictures recorded per platform; it runs as its own step
+        # below so a platform whose fonts rasterise differently cannot stop the snapshot gate.
         run: cargo test --workspace --locked -- --skip every_scene_matches_its_baseline
 
       - name: Record this runner's baselines
@@ -80,11 +114,12 @@ jobs:
           TYPR_UPDATE_BASELINES=1 cargo test -p typr --test visual
           test -s "crates/typr/tests/baselines/linux/history.png"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.record_baselines
         with:
           name: baselines-linux
           path: crates/typr/tests/baselines/linux
+          if-no-files-found: error
 
       - name: Snapshot every scene
         run: |
@@ -96,9 +131,8 @@ jobs:
             test -s "$RUNNER_TEMP/snaps/$scene.png"
           done
 
-      # The pictures beside the test were recorded on a development machine. A runner whose fonts
-      # rasterise differently reports every scene differing — record its own set with
-      # TYPR_UPDATE_BASELINES=1 and commit it, rather than narrowing the check.
+      # Each platform keeps its own set (`tests/baselines/<os>/`), recorded on that platform. The
+      # Linux set was drawn on this image; a Mac's differs by up to 3% per scene.
       - name: Compare every scene with its baseline
         run: |
           set -euo pipefail
