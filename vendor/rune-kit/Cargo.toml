@@ -29,3 +29,11 @@ markdown = ["dep:pulldown-cmark"]
 mermaid = ["markdown", "dep:rune-mermaid"]
 # Phase timings for the headless benches (`markdown_resize`).
 frame-profile = ["rune/frame-profile"]
+
+# Standalone builds (`cargo test --manifest-path vendor/rune-kit/Cargo.toml`) need the patches the typr
+# workspace root carries. As a dependency these entries are ignored.
+[patch.crates-io]
+winit = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }

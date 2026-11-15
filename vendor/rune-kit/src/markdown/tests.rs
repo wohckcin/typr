@@ -139,8 +139,8 @@ fn rebuilding_a_view_runs_the_highlighter_once_per_block() {
 /// or not, as in the plain block and in the block mid-stream.
 #[test]
 fn highlighting_never_moves_a_glyph() {
-    const INTER: &[u8] = include_bytes!("../../../../themes/opencode/assets/fonts/InterVariable.ttf");
-    const PLEX: &[u8] = include_bytes!("../../../../themes/opencode/assets/fonts/IBMPlexMono-Regular.ttf");
+    const INTER: &[u8] = include_bytes!("../../assets/fonts/InterVariable.ttf");
+    const PLEX: &[u8] = include_bytes!("../../assets/fonts/IBMPlexMono-Regular.ttf");
     let mut ts = TextSystem::new(&[INTER, PLEX], ("Inter", "IBM Plex Mono"));
     let style = MarkdownStyle::neutral(true);
     let font = style.code_block;
@@ -378,4 +378,26 @@ fn link_help_gives_each_link_its_own_tooltip() {
         (Some("https://example.com/docs".into()), Some("example.com/docs".into())),
         (Some("notes".into()), None),
     ]);
+}
+
+/// The inline runs of a document's paragraphs, in order, as the parser built them.
+fn parsed_paragraphs(src: &str) -> Vec<Inline> {
+    // `Markdown::new` rewrites the highlight markers before parsing; the helper does the same.
+    let src = super::mark::rewrite_owned(src.to_string());
+    let (blocks, ..) = doc_cached(&src);
+    blocks
+        .iter()
+        .filter_map(|block| match block {
+            Block::Para(inline) => Some(inline.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_highlighted_run_is_drawn_with_the_highlight_style() {
+    let inline = parsed_paragraphs("a ==b== c").remove(0);
+    assert!(!inline.text.contains("=="), "no marker reaches the text: {:?}", inline.text);
+    let mark = inline.spans.iter().find(|span| span.2 == Style::Mark).expect("a mark run");
+    assert_eq!(&inline.text[mark.0..mark.1], "b");
 }
