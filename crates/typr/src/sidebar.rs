@@ -64,6 +64,26 @@ impl Group {
     }
 }
 
+/// What a row is, which decides the letter its icon draws.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Kind {
+    /// The whole library.
+    All,
+    /// A deck.
+    #[default]
+    Deck,
+    /// A saved view.
+    View,
+    /// A tag.
+    Tag,
+    /// Importing a file.
+    Import,
+    /// The settings screen.
+    Settings,
+    /// The trash.
+    Trash,
+}
+
 /// What one row shows.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Row {
@@ -71,6 +91,8 @@ pub struct Row {
     pub key: String,
     /// The words on the row.
     pub label: String,
+    /// What the row is, which its icon draws.
+    pub kind: Kind,
     /// Whether the row is the one in force.
     pub selected: bool,
     /// A row whose change has not landed yet: it draws, and pressing it does nothing.
@@ -83,9 +105,16 @@ impl Row {
         Self {
             key: key.into(),
             label: label.into(),
+            kind: Kind::default(),
             selected: false,
             disabled: false,
         }
+    }
+
+    /// What the row is.
+    pub fn kind(mut self, kind: Kind) -> Self {
+        self.kind = kind;
+        self
     }
 
     /// The row in force.
@@ -127,7 +156,7 @@ pub fn row<S: 'static>(item: &Row, on_press: impl Fn(&mut S) + 'static) -> El {
         } else {
             t.text.alpha(0.06)
         })
-        .child(col().w(ICON).h(ICON))
+        .child(icon(item.kind, &item.label))
         .child(
             text(item.label.clone())
                 .key(format!("{}-label", item.key))
@@ -145,6 +174,51 @@ pub fn row<S: 'static>(item: &Row, on_press: impl Fn(&mut S) + 'static) -> El {
                 press(s);
             }
         })
+}
+
+/// The colour an icon of this name is tinted with: one of the six accents, chosen by the name
+/// rather than by position, so a deck keeps its colour when another deck is added above it.
+pub fn tint(name: &str) -> rune::Color {
+    tok::accent(hash(name), true)
+}
+
+/// A 20-point icon box: a monogram letter on a tinted ground.
+pub fn icon(kind: Kind, name: &str) -> El {
+    let tint = tint(name);
+    col()
+        .key(format!("icon-{name}"))
+        .w(ICON)
+        .h(ICON)
+        .radius(5.0)
+        .fill(tint.alpha(0.18))
+        .center()
+        .child(
+            text(monogram(kind, name))
+                .font(type_::MONO_CAPTION)
+                .color(tint),
+        )
+}
+
+/// The one letter an icon draws: the first thing in the row's words that is a letter or a
+/// digit, uppercased, except for a tag, which draws its own mark.
+fn monogram(kind: Kind, name: &str) -> String {
+    if kind == Kind::Tag || name.trim_start().starts_with('#') {
+        return "#".to_string();
+    }
+    name.chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().to_string())
+        .unwrap_or_else(|| "?".to_string())
+}
+
+/// FNV-1a over the name's bytes, folded into the palette's six slots.
+fn hash(name: &str) -> usize {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in name.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    usize::try_from(hash % 6).unwrap_or(0)
 }
 
 #[cfg(test)]

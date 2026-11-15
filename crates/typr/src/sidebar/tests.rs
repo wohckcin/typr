@@ -71,3 +71,46 @@ fn every_row_starts_at_the_same_inset() {
         "rows start at {offsets:?}"
     );
 }
+
+#[test]
+fn two_decks_take_two_tints_and_one_deck_keeps_its_own() {
+    assert_eq!(tint("Spanish"), tint("Spanish"));
+    assert_ne!(
+        tint("Spanish"),
+        tint("Japanese"),
+        "the tint is chosen by name, not by position"
+    );
+}
+
+#[test]
+fn an_icon_draws_one_letter() {
+    assert_eq!(monogram(Kind::Deck, "spanish"), "S");
+    assert_eq!(monogram(Kind::All, "All cards"), "A");
+    assert_eq!(monogram(Kind::Tag, "animals"), "#");
+    assert_eq!(monogram(Kind::Tag, "#animals"), "#");
+    assert_eq!(monogram(Kind::Deck, "  "), "?");
+}
+
+#[test]
+fn the_icon_slot_is_the_same_width_whatever_the_letter() {
+    let mut runtime = rune::Runtime::new(
+        Row::new("row-deck", "Spanish"),
+        |item: &Row, _: &mut rune::Cx<Row>| {
+            col()
+                .px(INSET)
+                .w(WIDTH)
+                .child(row::<Row>(item, |_: &mut Row| {}))
+        },
+        (WIDTH + 40.0, 120.0),
+        Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.0);
+    let elements = runtime.elements();
+    let icon = elements
+        .iter()
+        .find(|element| element.key.as_deref() == Some("icon-Spanish"))
+        .expect("the icon");
+    assert!((icon.rect[2] - ICON).abs() < 0.5, "the icon is {icon:?}");
+    assert!((icon.rect[3] - ICON).abs() < 0.5, "the icon is {icon:?}");
+}

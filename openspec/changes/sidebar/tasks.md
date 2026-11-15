@@ -10,7 +10,7 @@
       *Verification*: a scene draws three rows of two kinds; their label x offsets are
       equal and their heights are 25.
 
-- [ ] 1.2 Add `pub fn icon(kind: Kind, name: &str) -> El` drawing a 20-point box with
+- [x] 1.2 Add `pub fn icon(kind: Kind, name: &str) -> El` drawing a 20-point box with
       either a monogram or a glyph, tinted from a hash of `name`.
       *Verification*: two decks with different names draw different tints; the label
       offset is unchanged by the icon.
