@@ -794,6 +794,23 @@ fn a_long_deck_builds_only_the_notebook_rows_on_screen() {
 }
 
 #[test]
+fn the_text_views_draw_a_diagram_cards_caption() {
+    let mut library = in_view(1, ViewMode::Notebook);
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        snapshot.cards[0].kind = typr_core::store::CardKind::Diagram;
+        snapshot.cards[0].markdown = String::new();
+        snapshot.cards[0].caption = Some("The plate: name the shaded regions".to_string());
+    }
+    library.refresh();
+    let runtime = draw(library);
+    assert!(
+        all_text(&runtime).contains("name the shaded regions"),
+        "the notebook drew a diagram as a bare name"
+    );
+}
+
+#[test]
 fn the_notebook_and_the_column_keep_a_hidden_answer_hidden() {
     for view in [ViewMode::Notebook, ViewMode::Column] {
         let mut library = in_view(1, view);

@@ -2151,6 +2151,21 @@ impl Library {
     }
 }
 
+/// What a card reads as in the notebook and the column: its text with every answer masked, or —
+/// for a diagram, whose text is empty — its caption.
+fn body_text(card: &CardSummary) -> El {
+    match card.kind {
+        typr_core::store::CardKind::Diagram => text(card.caption.clone().unwrap_or_default())
+            .key(format!("notebook-caption-{}", card.id))
+            .font(type_::BODY)
+            .color(tok::theme(true).text),
+        typr_core::store::CardKind::Text => {
+            Markdown::new(crate::editor::preview_body(&card.markdown))
+                .render(&MarkdownStyle::neutral(true))
+        }
+    }
+}
+
 /// How tall a notebook card is guessed to be before it has been laid out once.
 const NOTEBOOK_ESTIMATE: f32 = 220.0;
 
@@ -2199,10 +2214,7 @@ fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
         )
         // A card with no separator holds one side, and the notebook shows what is there rather
         // than inventing a back.
-        .child(
-            Markdown::new(crate::editor::preview_body(&card.markdown))
-                .render(&MarkdownStyle::neutral(true)),
-        );
+        .child(body_text(card));
     if !card.tags.is_empty() {
         body = body.child(
             text(card.tags.join(" \u{b7} "))
@@ -2252,10 +2264,7 @@ fn column_view<S: Host>(s: &S) -> El {
                                 .font(type_::TITLE)
                                 .color(t.text),
                         )
-                        .child(
-                            Markdown::new(crate::editor::preview_body(&card.markdown))
-                                .render(&MarkdownStyle::neutral(true)),
-                        ),
+                        .child(body_text(card)),
                 ),
         );
     if let Some(line) = library.find_line() {
