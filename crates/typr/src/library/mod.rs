@@ -1206,6 +1206,7 @@ fn deck_row<S: Host>(
     selected: bool,
     renaming: bool,
     moving: bool,
+    due: u32,
 ) -> El {
     let t = tok::theme(true);
     let id = deck.id;
@@ -1229,7 +1230,7 @@ fn deck_row<S: Host>(
             )
             .on_press(move |s: &mut S| s.library_mut().start_rename(id));
     }
-    row()
+    let mut line = row()
         .key(format!("deck-{}", deck.id))
         .h(30.0)
         .px(inset)
@@ -1243,27 +1244,32 @@ fn deck_row<S: Host>(
             t.control_off.alpha(0.0)
         })
         .child(
-            text(deck.name.clone())
-                .font(type_::BODY)
-                .color(if selected { rune::Color::WHITE } else { t.text }),
-        )
-        .on_press(move |s: &mut S| {
-            // While a deck is being moved, every deck is a possible new parent; while a card is,
-            // every deck is a possible new home.
-            if let Some(card) = s.library().moving_card {
-                s.library_mut().moving_card = None;
-                s.move_card(card, id);
-                return;
+            row().grow(1.0).child(
+                text(deck.name.clone())
+                    .font(type_::BODY)
+                    .color(if selected { rune::Color::WHITE } else { t.text }),
+            ),
+        );
+    if due > 0 {
+        line = line.child(crate::sidebar::badge(due).key(format!("deck-count-{}", deck.id)));
+    }
+    line.on_press(move |s: &mut S| {
+        // While a deck is being moved, every deck is a possible new parent; while a card is,
+        // every deck is a possible new home.
+        if let Some(card) = s.library().moving_card {
+            s.library_mut().moving_card = None;
+            s.move_card(card, id);
+            return;
+        }
+        if let Some(moving) = s.library().moving {
+            s.library_mut().moving = None;
+            if moving != id {
+                s.move_deck(moving, Some(id));
             }
-            if let Some(moving) = s.library().moving {
-                s.library_mut().moving = None;
-                if moving != id {
-                    s.move_deck(moving, Some(id));
-                }
-                return;
-            }
-            s.library_mut().select_deck(Some(id));
-        })
+            return;
+        }
+        s.library_mut().select_deck(Some(id));
+    })
 }
 
 fn deck_sidebar<S: Host>(s: &S) -> El {
@@ -1282,6 +1288,8 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
     // Decks: the tree, and the button that starts another.
     let mut decks = Vec::with_capacity(library.snapshot.decks.len() + 1);
     let renaming = library.renaming;
+    let now = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock);
+    let due = crate::sidebar::deck_due_counts(&library.snapshot, now);
     for (deck, depth) in deck_tree(&library.snapshot.decks) {
         decks.push(deck_row::<S>(
             deck,
@@ -1290,6 +1298,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
             library.selected_deck == Some(deck.id),
             renaming == Some(deck.id),
             library.moving.is_some() || library.moving_card.is_some(),
+            due.get(&deck.id).copied().unwrap_or(0),
         ));
     }
     decks.push(

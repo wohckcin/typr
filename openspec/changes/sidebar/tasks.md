@@ -34,7 +34,7 @@
       `{spanish: 1, parent: 1}`; an archived deck's cards are absent. If `card-grid` has not landed,
       this task starts with the `CardSummary` widening and says so.
 
-- [ ] 2.2 Draw each deck's count right-aligned, and draw nothing for a zero.
+- [x] 2.2 Draw each deck's count right-aligned, and draw nothing for a zero.
       *Verification*: a deck with one due prompt draws `1`; a quiet deck draws no badge.
 
 - [ ] 2.3 Indent nested decks with the existing `10.0 + depth * 12.0` step, and fold a

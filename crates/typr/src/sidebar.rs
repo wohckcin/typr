@@ -227,6 +227,23 @@ pub fn tint(name: &str) -> rune::Color {
     tok::accent(hash(name), true)
 }
 
+/// The count a row carries at its right edge: 18 by 16 points, 8-point radius, a 12-point
+/// numeral on a light ground. Nothing at zero, so a quiet deck draws no badge at all.
+pub fn badge(count: u32) -> El {
+    let t = tok::theme(true);
+    col()
+        .w(18.0)
+        .h(16.0)
+        .radius(8.0)
+        .fill(t.text.alpha(0.14))
+        .center()
+        .child(
+            text(count.to_string())
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary),
+        )
+}
+
 /// How many prompts are due in each deck's subtree, keyed by deck: a card's due prompt counts
 /// for its own deck and for every deck above it. Archived decks, archived cards and cards in the
 /// trash count for nothing, because a review cannot reach them.

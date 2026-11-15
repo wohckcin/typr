@@ -1342,3 +1342,38 @@ fn the_utilities_sit_last_with_one_group_gap_before_them() {
         assert!(rect_of(key).is_some(), "{key} is drawn");
     }
 }
+
+#[test]
+fn a_deck_with_a_due_prompt_carries_its_count_and_a_quiet_deck_carries_none() {
+    let mut library = Library::seeded(3);
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        let due = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock) - 1;
+        snapshot.cards[0].due_at = Some(due);
+        for card in snapshot.cards.iter_mut().skip(1) {
+            card.due_at = None;
+        }
+    }
+    library.refresh();
+    let runtime = draw(library);
+    let elements = runtime.elements();
+    let count = elements
+        .iter()
+        .find(|element| element.key.as_deref() == Some("deck-count-1"))
+        .expect("the deck's count");
+    assert!(
+        (count.rect[2] - 18.0).abs() < 1.0 && (count.rect[3] - 16.0).abs() < 1.0,
+        "the badge is 18 by 16, got {:?}",
+        count.rect
+    );
+    let badges = elements
+        .iter()
+        .filter(|element| {
+            element
+                .key
+                .as_deref()
+                .is_some_and(|key| key.starts_with("deck-count-"))
+        })
+        .count();
+    assert_eq!(badges, 1, "only the deck with a due prompt draws a count");
+}
