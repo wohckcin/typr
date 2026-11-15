@@ -23,14 +23,16 @@ fn tiles(count: i64) -> Vec<Tile> {
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let data = signal(tiles(200));
-    view().flex_1().child(grid(data, || {}))
+    let memo = computed(move || data.get());
+    view().flex_1().child(grid(memo, || {}))
 }
 
 #[component]
 fn Empty() -> impl IntoElement {
     typr::ui::tokens::install();
     let data = signal(Vec::<Tile>::new());
-    view().flex_1().child(grid(data, || {}))
+    let memo = computed(move || data.get());
+    view().flex_1().child(grid(memo, || {}))
 }
 
 #[test]
@@ -78,4 +80,19 @@ fn a_new_card_is_new_and_a_studied_card_states_its_interval() {
     assert_eq!(schedule_of(0, None, 1000), Schedule::New);
     assert_eq!(schedule_of(1, Some(1000 + 10 * day), 1000), Schedule::Interval(10));
     assert_eq!(schedule_of(1, Some(500), 1000), Schedule::Due);
+}
+
+#[test]
+fn a_tile_never_shows_a_hidden_answer() {
+    use typr::screens::grid::first_side;
+    let shown = first_side("The {{hormone}} is made by the {{pancreas}}.");
+    assert!(!shown.contains("hormone"), "{shown}");
+    assert!(!shown.contains("pancreas"), "{shown}");
+    assert!(shown.contains("…"), "{shown}");
+}
+
+#[test]
+fn the_empty_deck_shows_the_binding_that_starts_a_card() {
+    let chord = typr_core::keymap::chord_of(typr_core::keymap::Surface::Library, typr_core::keymap::Command::NewCard);
+    assert!(chord.is_some(), "the library binds no key to a new card");
 }

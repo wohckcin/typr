@@ -51,11 +51,25 @@ pub fn schedule_of(reviews: u32, due_at: Option<i64>, now_ms: i64) -> Schedule {
     }
 }
 
+/// The first side of a card as a tile shows it. A tile shows the question, so every hidden span is
+/// masked and labelled by its group; a split side loses its trailing line break, which would read as
+/// an empty line. Masking only the first group would leave the other answers readable in the grid.
+pub fn first_side(markdown: &str) -> String {
+    let shape = typr_core::hidden::shape(markdown);
+    match &shape {
+        typr_core::hidden::Shape::Hidden { .. } => typr_core::hidden::masked_all(markdown, &shape),
+        typr_core::hidden::Shape::Sides(_) => typr_core::sides::split(markdown)
+            .first()
+            .map(|side| side.trim_end().to_string())
+            .unwrap_or_default(),
+    }
+}
+
 /// The tile a card draws, from its snapshot row.
 pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
     Tile {
         id: card.id,
-        preview: card.preview.clone().into(),
+        preview: first_side(&card.markdown).into(),
         hidden_sides: (card.sides as usize).saturating_sub(1),
         tags: card.tags.iter().map(|t| SharedString::from(t.clone())).collect(),
         schedule: schedule_of(card.reviews, card.due_at, now_ms),
@@ -64,14 +78,18 @@ pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
 }
 
 /// The grid over `tiles`. An empty deck offers the tile that starts a card.
-pub fn grid(tiles: Signal<Vec<Tile>>, on_new: impl Fn() + Clone + 'static) -> impl IntoElement {
+pub fn grid(tiles: Memo<Vec<Tile>>, on_new: impl Fn() + Clone + 'static) -> impl IntoElement {
     let empty_new = on_new.clone();
     view().flex_1().child(dynamic(move || {
         if tiles.with(Vec::is_empty) {
             let on_new = empty_new.clone();
+            let chord = typr_core::keymap::chord_of(typr_core::keymap::Surface::Library, typr_core::keymap::Command::NewCard)
+                .map(|c| c.to_string())
+                .unwrap_or_default();
             return view()
                 .p_4()
                 .child(badge("New card"))
+                .child(text(chord).text_xs().text_color(move || tokens::muted_foreground()))
                 .child(text("This deck has no cards yet").text_sm().text_color(move || tokens::muted_foreground()))
                 .child(button_new(on_new))
                 .into_element();
@@ -90,7 +108,7 @@ fn button_new(on_new: impl Fn() + 'static) -> impl IntoElement {
 }
 
 /// A cell of the list. It keeps no state: every binding reads the tile at its current index.
-fn tile_cell(tiles: Signal<Vec<Tile>>, at: Position) -> impl IntoElement {
+fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position) -> impl IntoElement {
     let tile = computed(move || tiles.with(|t| t.get(at.index()).cloned()));
     let preview = move || tile.with(|t| t.as_ref().map(|t| t.preview.clone()).unwrap_or_default());
     let hidden = move || tile.with(|t| t.as_ref().map_or(0, |t| t.hidden_sides));

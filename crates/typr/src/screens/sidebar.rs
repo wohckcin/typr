@@ -107,6 +107,11 @@ impl Sidebar {
         });
     }
 
+    /// The key of the row in force, if any.
+    pub fn selected_key(&self) -> Option<SharedString> {
+        self.selected.with(|s| s.clone())
+    }
+
     /// The key of the row in force, or `none`.
     pub fn selected_text(&self) -> String {
         self.selected.with(|s| s.as_ref().map(|k| k.to_string()).unwrap_or_else(|| "none".into()))
