@@ -768,6 +768,16 @@ impl library::Host for State {
         self.track("set_pinned", sent);
     }
 
+    fn set_view(&mut self, deck: Id, view: typr_core::library_view::ViewMode) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.set_deck_view(deck, view),
+            None => Err(StoreError::Closed),
+        };
+        // The list keeps drawing the old view until the store publishes the new one, so the screen
+        // never shows a view the library has not accepted.
+        self.track("set_view", sent);
+    }
+
     fn move_deck(&mut self, deck: Id, parent: Option<Id>) {
         let sent = match self.store.as_ref() {
             Some(store) => store.move_deck(deck, parent),

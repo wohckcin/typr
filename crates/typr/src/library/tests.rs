@@ -889,3 +889,49 @@ fn a_find_that_finds_nothing_says_so() {
         "the column view says there is no match, got {keys:?}"
     );
 }
+
+#[test]
+fn switching_views_keeps_the_selection() {
+    let mut library = in_view(3, ViewMode::Grid);
+    library.selected_card = Some(2);
+    library.refresh();
+    let mut runtime = draw(library);
+    assert_eq!(runtime.state.view_mode(), ViewMode::Grid);
+    assert!(
+        runtime.find("tile-2").is_some(),
+        "the grid draws the selected card"
+    );
+
+    press(&mut runtime, "view-list");
+
+    assert_eq!(
+        runtime.state.view_mode(),
+        ViewMode::List,
+        "the switcher changes the deck's view"
+    );
+    assert_eq!(
+        runtime.state.selected_card,
+        Some(2),
+        "the reader stays on the card they were reading"
+    );
+    assert!(
+        runtime.find("list-row-2").is_some(),
+        "the list draws the same card"
+    );
+    assert!(
+        runtime.find("tile-2").is_none(),
+        "the grid is gone, not stacked under the list"
+    );
+}
+
+#[test]
+fn the_whole_library_has_no_view_to_choose() {
+    let mut library = in_view(2, ViewMode::Grid);
+    library.selected_deck = None;
+    library.refresh();
+    let runtime = draw(library);
+    assert!(
+        runtime.find("view-grid").is_none(),
+        "there is no deck to choose a view for"
+    );
+}

@@ -288,6 +288,10 @@ pub trait Host: 'static {
     /// Whether a card is pinned.
     fn set_pinned(&mut self, _card: Id, _pinned: bool) {}
 
+    /// Choose how a deck is read. The store answers by republishing, so a surface that has no
+    /// store leaves it alone.
+    fn set_view(&mut self, _deck: Id, _view: ViewMode) {}
+
     /// Replace a saved view's filter. A host with no store cannot.
     fn update_view(&mut self, _id: Id, _spec: &ViewSpec) {}
 
@@ -306,6 +310,12 @@ pub trait Host: 'static {
 impl Host for Library {
     fn library(&self) -> &Library {
         self
+    }
+
+    /// A fixture host has no store to ask, so it applies the choice to its own snapshot, which is
+    /// what the store's republish would have done.
+    fn set_view(&mut self, deck: Id, view: ViewMode) {
+        Library::set_view(self, deck, view)
     }
 
     fn library_mut(&mut self) -> &mut Library {
@@ -421,6 +431,16 @@ impl Library {
     }
 
     /// The cards on screen, in the order they are drawn.
+    /// Read `deck` in `view` from now on. The whole library has no deck to ask, so it keeps the
+    /// grid.
+    pub fn set_view(&mut self, deck: Id, view: ViewMode) {
+        let snapshot = Arc::make_mut(&mut self.snapshot);
+        if let Some(found) = snapshot.decks.iter_mut().find(|each| each.id == deck) {
+            found.view = view;
+        }
+        self.refresh();
+    }
+
     /// Reread the find against the card the column view shows. Called whenever the text or the
     /// card changes, so the count never describes a card that is no longer on screen.
     pub fn find_in_current(&mut self) {
@@ -1511,6 +1531,41 @@ fn sort_controls<S: Host>(s: &S) -> El {
     )
 }
 
+/// The four ways a deck can be read, with the one in force marked. The whole library has no deck
+/// to choose for, so it draws nothing.
+fn view_switcher<S: Host>(s: &S) -> El {
+    let t = tok::theme(true);
+    let library = s.library();
+    let Some(deck) = library.selected_deck else {
+        return row().key("view-switcher").h(ROW_HEIGHT);
+    };
+    let current = library.view_mode();
+    let mut row_ = row()
+        .key("view-switcher")
+        .h(ROW_HEIGHT)
+        .px(12.0)
+        .center_y()
+        .gap(4.0)
+        .child(
+            text("View")
+                .font(type_::MONO_CAPTION)
+                .color(t.text_secondary),
+        );
+    for view in ViewMode::ALL {
+        let mut button = Button::new(view.label()).variant(ButtonVariant::Ghost);
+        if view == current {
+            button = button.variant(ButtonVariant::Submit);
+        }
+        row_ = row_.child(
+            button
+                .on_press(move |s: &mut S| s.set_view(deck, view))
+                .build(&KIT)
+                .key(format!("view-{}", view.as_str())),
+        );
+    }
+    row_
+}
+
 fn filter_bar<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
@@ -1667,6 +1722,7 @@ pub fn view<S: Host>(s: &S) -> El {
                 .grow(1.0)
                 .h_full()
                 .child(filter_bar::<S>(s))
+                .child(view_switcher::<S>(s))
                 .child(list),
         );
     let mut layer = Vec::new();
