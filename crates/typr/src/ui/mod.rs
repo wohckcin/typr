@@ -9,6 +9,7 @@ pub mod button;
 pub mod choice;
 pub mod overlay;
 pub mod prose;
+pub mod source;
 pub mod input;
 pub mod status;
 pub mod surface;
