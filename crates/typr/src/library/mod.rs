@@ -10,7 +10,7 @@ use rune::tok::{self, type_};
 use rune::{
     El, FileDialogOptions, GrowthSpec, ScrollSpec, TextEdit, Tx, col, row, text, text_input,
 };
-use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root};
+use rune_kit::{Button, ButtonVariant, Dialog, Kit, root};
 
 use typr_core::keymap::{Command, Surface};
 use typr_core::library_view::ViewMode;
@@ -1817,10 +1817,7 @@ fn template_panel<S: Host>(s: &S, deck: Id) -> El {
                 .padding(design::space(2))
                 .radius(design::radius_small())
                 .fill(t.card)
-                .child(
-                    Markdown::new(crate::editor::preview_body(&shown))
-                        .render(&MarkdownStyle::neutral(true)),
-                ),
+                .child(crate::markdown::body(&crate::editor::preview_body(&shown))),
             None => text("No cards in this deck yet.")
                 .key("template-preview-empty")
                 .font(type_::LABEL)
@@ -2454,8 +2451,7 @@ fn body_text(card: &CardSummary) -> El {
             .font(type_::BODY)
             .color(tok::theme(true).text),
         typr_core::store::CardKind::Text => {
-            Markdown::new(crate::editor::preview_body(&card.markdown))
-                .render(&MarkdownStyle::neutral(true))
+            crate::markdown::body(&crate::editor::preview_body(&card.markdown))
         }
     }
 }
@@ -2674,10 +2670,9 @@ fn peek_panel<S: Host>(s: &S, layer: &mut Vec<El>) {
                 .font(type_::TITLE)
                 .max_w(design::size(140)),
         )
-        .child(
-            Markdown::new(crate::editor::preview_body(&card.markdown))
-                .render(&MarkdownStyle::neutral(true)),
-        );
+        .child(crate::markdown::body(&crate::editor::preview_body(
+            &card.markdown,
+        )));
     Dialog::new("peek", "Preview")
         .description("P puts this away.")
         .fit()

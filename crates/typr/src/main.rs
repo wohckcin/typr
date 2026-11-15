@@ -2133,6 +2133,15 @@ fn main() {
                 "What is **mitosis**?\n---\nCell division.".to_string(),
             );
         }),
+        ("markdown-kitchen-sink", |state: &mut State| {
+            state.screen = Screen::Editor;
+            let card = typr::markdown::CASES
+                .iter()
+                .map(|(_, written)| *written)
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            state.editor = Editor::new(None, card);
+        }),
         ("shortcut-panel", |state: &mut State| {
             state.library = Library::seeded(3);
             state.panel.open = true;

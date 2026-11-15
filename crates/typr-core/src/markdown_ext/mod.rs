@@ -9,6 +9,11 @@
 //! Stored text keeps `![[Name]]`. The pre-pass runs where a card is drawn, next to the reference
 //! pass, and answers a name with the card behind it, if any.
 
+pub mod preprocess;
+pub mod supported;
+
+pub use preprocess::rewrite;
+
 use crate::hidden;
 
 /// The info string of the fenced block a resolved embed is written as.

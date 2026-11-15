@@ -1,0 +1,95 @@
+use super::rewrite;
+
+/// The one card the tests read: every construct the parser cannot see, as a card writes it.
+const CARD: &str = "\
+==the Krebs cycle==
+20^th^ century
+H~2~0
+{漢字}(かんじ)
+the area is $\\pi r^2$
+$$
+\\int_0^1 x\\,dx
+$$
+Krebs cycle
+: in the matrix
+: of the mitochondria
+";
+
+#[test]
+fn equals_inside_code_are_left_alone() {
+    let source = "the `a == b` comparison";
+    assert_eq!(rewrite(source), source);
+}
+
+#[test]
+fn a_fence_is_left_alone() {
+    let source = "```\na == b\n20^th^ H~2~0 {x}(y)\n```";
+    assert_eq!(rewrite(source), source);
+}
+
+#[test]
+fn ruby_needs_braces_not_just_parentheses() {
+    let source = "mitosis (cell division)";
+    assert_eq!(rewrite(source), source);
+}
+
+#[test]
+fn preprocessing_twice_changes_nothing() {
+    let once = rewrite(CARD).into_owned();
+    let twice = rewrite(&once).into_owned();
+    assert_eq!(once, twice);
+}
+
+#[test]
+fn a_highlight_loses_its_markers() {
+    assert_eq!(rewrite("==the Krebs cycle=="), "**the Krebs cycle**");
+}
+
+#[test]
+fn an_ordinal_is_raised() {
+    assert_eq!(rewrite("20^th^ century"), "20ᵗʰ century");
+}
+
+#[test]
+fn a_formula_is_lowered() {
+    assert_eq!(rewrite("H~2~0"), "H₂0");
+}
+
+#[test]
+fn a_gloss_keeps_both_words() {
+    assert_eq!(rewrite("{漢字}(かんじ)"), "漢字 (かんじ)");
+}
+
+#[test]
+fn math_becomes_a_code_run_with_its_dollars() {
+    assert_eq!(
+        rewrite("the area is $\\pi r^2$"),
+        "the area is `$\\pi r^2$`"
+    );
+}
+
+#[test]
+fn display_math_becomes_its_own_block() {
+    let out = rewrite("$$\n\\int_0^1 x\\,dx\n$$").into_owned();
+    assert!(out.starts_with("```text\n$$"), "{out}");
+    assert!(out.ends_with("$$") || out.ends_with("```"), "{out}");
+}
+
+#[test]
+fn a_definition_list_keeps_its_term_and_definitions() {
+    let out = rewrite("Krebs cycle\n: in the matrix\n: of the mitochondria").into_owned();
+    assert_eq!(
+        out,
+        "**Krebs cycle**\n- in the matrix\n- of the mitochondria"
+    );
+}
+
+#[test]
+fn a_doubled_tilde_stays_strikethrough() {
+    assert_eq!(rewrite("~~gone~~"), "~~gone~~");
+}
+
+#[test]
+fn a_character_without_a_raised_form_is_left_as_written() {
+    assert_eq!(rewrite("20^週^"), "20^週^");
+}

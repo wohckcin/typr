@@ -263,7 +263,7 @@ pub fn view<S: Host>(s: &S) -> El {
     let body = session.lines().into_iter().map(|(line, _)| {
         let embeds = Rc::new(crate::embed::Embeds::of(line, |name| s.embed(name)));
         let drawn = crate::embed::expanded(line, &embeds);
-        Markdown::new(drawn)
+        Markdown::new(crate::markdown::text(&drawn))
             .code_frame(move |card, frame| crate::embed::frame(card, frame, &embeds))
             .render(&MarkdownStyle::neutral(true))
     });

@@ -5,7 +5,7 @@
 use crate::design;
 use rune::tok::{self, type_};
 use rune::{El, col, memo, row, text};
-use rune_kit::{Button, ButtonVariant, Markdown, MarkdownStyle};
+use rune_kit::{Button, ButtonVariant};
 
 use super::{Host, KIT, TILE_MAX_HEIGHT};
 use typr_core::store::{CardMode, CardSummary, Id};
@@ -135,7 +135,7 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
     body = body.child(col().key(format!("tile-preview-{id}")).w_full().child(memo(
         "tile-side",
         side_key(card),
-        || Markdown::new(side).render(&MarkdownStyle::neutral(true)),
+        || crate::markdown::body(&side),
     )));
     if sides > 0 {
         body = body.child(hidden_strip(sides));

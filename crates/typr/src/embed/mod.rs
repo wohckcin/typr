@@ -165,7 +165,7 @@ fn inset(index: usize, name: &str, body: &str, embeds: Rc<Embeds>) -> El {
         .fill(t.bg)
         .border(1.0, t.card_border)
         .child(
-            Markdown::new(drawn)
+            Markdown::new(crate::markdown::text(&drawn))
                 .code_frame(move |card, frame| nested_frame(card, frame, &nested))
                 .render(&MarkdownStyle::neutral(true)),
         )

@@ -831,7 +831,7 @@ fn markdown<S: Host>(
     let images = attachments.clone();
     memo("preview", key, move || {
         let drawn = Rc::clone(&embeds);
-        Markdown::new(text.to_string())
+        Markdown::new(crate::markdown::text(text))
             .images(move |src| images.picture(src))
             // The reference pass wrote this target: a card id, not a place on the web. Handled
             // here rather than on the built element so rune-kit draws it as the link it is.

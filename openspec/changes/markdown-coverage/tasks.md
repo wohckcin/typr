@@ -15,19 +15,19 @@
 
 ## 3. Preprocessing
 
-- [ ] 3.1 Add `crates/typr-core/src/markdown_ext.rs` with `preprocess(text) -> Cow<str>` rewriting `==` and ruby, tracking fences and code spans. Verification: `equals_inside_code_are_left_alone`, `a_fence_is_left_alone`, `ruby_needs_braces_not_just_parentheses`.
-- [ ] 3.2 Make the transform idempotent and assert it in a test. Verification: `preprocessing_twice_changes_nothing`.
-- [ ] 3.3 Call `preprocess` from the one place cards are rendered, so the editor preview, the review and the tile all see the same text. Verification: `the_preview_and_the_review_render_the_same_highlight`.
+- [x] 3.1 Add `crates/typr-core/src/markdown_ext.rs` with `preprocess(text) -> Cow<str>` rewriting `==` and ruby, tracking fences and code spans. Verification: `equals_inside_code_are_left_alone`, `a_fence_is_left_alone`, `ruby_needs_braces_not_just_parentheses`.
+- [x] 3.2 Make the transform idempotent and assert it in a test. Verification: `preprocessing_twice_changes_nothing`.
+- [x] 3.3 Call `preprocess` from the one place cards are rendered, so the editor preview, the review and the tile all see the same text. Verification: `the_preview_and_the_review_render_the_same_highlight`.
 
 ## 4. Degradation and inventory
 
-- [ ] 4.1 Add `crates/typr-core/src/markdown_ext/supported.rs`: `pub const SUPPORTED: &[(&str, Support)]` listing each construct as rendered, degraded or unsupported, and a test that every entry has a case in the renderer tests. Verification: `every_supported_construct_has_a_case`.
-- [ ] 4.2 Assert unknown constructs keep their literal text. Verification: `an_unknown_construct_is_shown_as_written`.
+- [x] 4.1 Add `crates/typr-core/src/markdown_ext/supported.rs`: `pub const SUPPORTED: &[(&str, Support)]` listing each construct as rendered, degraded or unsupported, and a test that every entry has a case in the renderer tests. Verification: `every_supported_construct_has_a_case`.
+- [x] 4.2 Assert unknown constructs keep their literal text. Verification: `an_unknown_construct_is_shown_as_written`.
 
 ## 5. Verification
 
-- [ ] 5.1 Add a scene `markdown-kitchen-sink` whose card uses every supported construct, and confirm it snaps non-empty and differs from `editor`. Verification: one `--snap` run plus a size comparison.
-- [ ] 5.2 Run the gate: fmt, clippy with `-D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene. Verification: all four report success.
+- [x] 5.1 Add a scene `markdown-kitchen-sink` whose card uses every supported construct, and confirm it snaps non-empty and differs from `editor`. Verification: one `--snap` run plus a size comparison.
+- [x] 5.2 Run the gate: fmt, clippy with `-D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene. Verification: all four report success.
 
 ## Workflow follow-up
 

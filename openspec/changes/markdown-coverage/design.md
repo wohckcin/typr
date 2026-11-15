@@ -64,6 +64,26 @@ touches the root `[patch.crates-io]` entries and both members together. If upstr
 fallback is stated in the task: render highlight as bold, ruby as `base (reading)`, and record the divergence —
 never drop the text.
 
+### Upstream has no write path, so the divergence is recorded here
+
+`anomalyco/rune` grants this account read-only access (`push: false`), and `rune-kit` offers no outside
+extension point: `MarkdownStyle`'s fields are `pub(super)`, `Markdown` exposes link and fence callbacks
+but no inline event hook, and the renderer draws inline runs inside a paragraph. No crate can therefore
+add a highlight background, a raised run or a gloss overlay without an upstream commit.
+
+This is the fallback the task anticipated, taken deliberately:
+
+| Construct | Rendered as | Why |
+|---|---|---|
+| `==text==` | bold | no inline background exists |
+| `{base}(reading)` | `base (reading)` | the renderer cannot stack two runs |
+| `20^th^`, `H~2~0` | Unicode supers/subscripts where every character maps, else literal | text preserved, shape approximated |
+| `$x$`, `$$x$$` | inline code run, fenced block | monospace sets it apart and keeps the source |
+| definition lines | bold term, then a list | the renderer has no definition list |
+
+Tasks 1.1, 1.2 and 2.1–2.5 stay unchecked because their behaviour is not in this tree. The inventory
+in `supported.rs` marks each of these `Degraded`, never `Rendered`, so nothing claims otherwise.
+
 ## Risks / Trade-offs
 
 - **Preprocessing rewrites user text.** Guarded by the code-span tracker and by tests over fences, nesting and
