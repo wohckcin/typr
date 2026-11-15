@@ -32,7 +32,7 @@ pub const SUPPORTED: &[(&str, Support)] = &[
     ("ruby", Support::Degraded),
     ("superscript", Support::Degraded),
     ("subscript", Support::Degraded),
-    ("definition-list", Support::Degraded),
+    ("definition-list", Support::Rendered),
     ("inline-math", Support::Degraded),
     ("display-math", Support::Degraded),
     ("raw-html", Support::Unsupported),

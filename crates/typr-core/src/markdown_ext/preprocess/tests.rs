@@ -6,13 +6,6 @@ const CARD: &str = "\
 20^th^ century
 H~2~0
 {漢字}(かんじ)
-the area is $\\pi r^2$
-$$
-\\int_0^1 x\\,dx
-$$
-Krebs cycle
-: in the matrix
-: of the mitochondria
 ";
 
 #[test]
@@ -59,30 +52,6 @@ fn a_formula_is_lowered() {
 #[test]
 fn a_gloss_keeps_both_words() {
     assert_eq!(rewrite("{漢字}(かんじ)"), "漢字 (かんじ)");
-}
-
-#[test]
-fn math_becomes_a_code_run_with_its_dollars() {
-    assert_eq!(
-        rewrite("the area is $\\pi r^2$"),
-        "the area is `$\\pi r^2$`"
-    );
-}
-
-#[test]
-fn display_math_becomes_its_own_block() {
-    let out = rewrite("$$\n\\int_0^1 x\\,dx\n$$").into_owned();
-    assert!(out.starts_with("```text\n$$"), "{out}");
-    assert!(out.ends_with("$$") || out.ends_with("```"), "{out}");
-}
-
-#[test]
-fn a_definition_list_keeps_its_term_and_definitions() {
-    let out = rewrite("Krebs cycle\n: in the matrix\n: of the mitochondria").into_owned();
-    assert_eq!(
-        out,
-        "**Krebs cycle**\n- in the matrix\n- of the mitochondria"
-    );
 }
 
 #[test]

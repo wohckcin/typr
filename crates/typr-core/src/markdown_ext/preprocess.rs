@@ -1,9 +1,9 @@
-//! The constructs the markdown parser cannot see, written into forms it can.
+//! Ruby glosses and raised or lowered text, written into forms the renderer does draw.
 //!
-//! A card written for Mochi uses syntax `rune-kit`'s parser has no event for: `==highlight==`,
-//! `{base}(reading)`, `$math$`, `20^th^`, `H~2~0` and definition lines. The renderer exposes no inline
-//! hook — its style fields are `pub(super)` and its events are drawn inside a paragraph — so the only
-//! way to keep those words on the page is to rewrite them into syntax it does render, before it looks.
+//! `{base}(reading)` becomes `base (reading)`; `20^th^` and `H~2~0` become Unicode raised and lowered
+//! characters where every character has one, and are left as written otherwise. The toolkit has no
+//! inline hook for stacked or shifted runs, so these are the only forms available here. Highlights,
+//! math and definition lists are drawn by the vendored renderer and are not rewritten.
 //!
 //! Nothing here invents text: a construct becomes the same characters in another shape, or it is left
 //! exactly as written. A rewrite that fired inside a code span or a fence would corrupt what the author
@@ -19,19 +19,16 @@ pub fn rewrite(text: &str) -> Cow<'_, str> {
     if !may_hold_a_construct(text) {
         return Cow::Borrowed(text);
     }
-    let lines: Vec<&str> = text.split('\n').collect();
-    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut out: Vec<String> = Vec::new();
     let mut fence: Option<(char, usize)> = None;
-    let mut definition_list = false;
-    let mut index = 0;
-
-    while index < lines.len() {
-        let line = lines[index];
-        index += 1;
+    for line in text.split('\n') {
         if let Some((marker, width)) = fence {
             out.push(line.to_string());
-            let trimmed = line.trim_start();
-            let run = trimmed.chars().take_while(|c| *c == marker).count();
+            let run = line
+                .trim_start()
+                .chars()
+                .take_while(|c| *c == marker)
+                .count();
             if run >= width {
                 fence = None;
             }
@@ -42,67 +39,19 @@ pub fn rewrite(text: &str) -> Cow<'_, str> {
             out.push(line.to_string());
             continue;
         }
-        // Display math is a block of its own: a fenced block keeps it on its own line, set apart, and
-        // the dollars on the page.
-        if starts_display_math(line) {
-            out.push("```text".to_string());
-            out.push(line.trim().to_string());
-            while index < lines.len() {
-                let part = lines[index];
-                index += 1;
-                out.push(part.to_string());
-                if part.trim_end().ends_with("$$") && part.trim() != "$$" {
-                    break;
-                }
-                if part.trim() == "$$" {
-                    break;
-                }
-            }
-            out.push("```".to_string());
-            continue;
-        }
-        // A definition line belongs to the term above it: `: text` after a plain line.
-        if let Some(definition) = definition_of(line) {
-            // Every definition line after the first belongs to the same term.
-            if definition_list {
-                out.push(format!("- {definition}"));
-                continue;
-            }
-            if let Some(term) = out.last_mut()
-                && is_definition_term(term)
-            {
-                *term = format!("**{}**", term.trim());
-                definition_list = true;
-                out.push(format!("- {definition}"));
-                continue;
-            }
-        }
-        definition_list = false;
         out.push(inline(line));
     }
-
-    if out.join("\n") == text {
+    let joined = out.join("\n");
+    if joined == text {
         Cow::Borrowed(text)
     } else {
-        Cow::Owned(out.join("\n"))
+        Cow::Owned(joined)
     }
-}
-
-/// A line that opens display math: `$$` alone, or `$$` with the formula after it.
-fn starts_display_math(line: &str) -> bool {
-    let trimmed = line.trim();
-    // `$$x$$` on one line closes itself, and the loop below takes that line as both halves.
-    trimmed.starts_with("$$")
 }
 
 /// Cheap answer to "could this text hold one of the constructs", so a card of plain prose is untouched.
 fn may_hold_a_construct(text: &str) -> bool {
-    text.contains('=')
-        || text.contains('{')
-        || text.contains('$')
-        || text.contains('^')
-        || text.contains('~')
-        || text.contains("\n: ")
+    text.contains('{') || text.contains('^') || text.contains('~')
 }
 
 /// The marker and its width when a line opens a fenced block.
@@ -115,28 +64,6 @@ fn fence_open(line: &str) -> Option<(char, usize)> {
         }
     }
     None
-}
-
-/// `: definition` on its own line, as a definition list writes it.
-fn definition_of(line: &str) -> Option<&str> {
-    let trimmed = line.trim_start();
-    let rest = trimmed.strip_prefix(": ")?;
-    (!rest.trim().is_empty()).then_some(rest)
-}
-
-/// A line a definition can attach to: text, not a list, heading, quote or another definition.
-fn is_definition_term(line: &str) -> bool {
-    let trimmed = line.trim();
-    !trimmed.is_empty()
-        && !trimmed.starts_with('#')
-        && !trimmed.starts_with('>')
-        && !trimmed.starts_with('-')
-        && !trimmed.starts_with('*')
-        && !trimmed.starts_with('+')
-        && !trimmed.starts_with("```")
-        && !trimmed.starts_with("~~~")
-        && !trimmed.starts_with('|')
-        && definition_of(trimmed).is_none()
 }
 
 /// Rewrite the constructs that live inside one line, leaving code spans alone.
@@ -185,7 +112,6 @@ fn code_end(chars: &[char], from: usize, width: usize) -> Option<usize> {
 /// One construct starting at `at`, as the text to write and how many characters it consumed.
 fn construct(chars: &[char], at: usize) -> Option<(String, usize)> {
     ruby(chars, at)
-        .or_else(|| math(chars, at))
         .or_else(|| superscript(chars, at))
         .or_else(|| subscript(chars, at))
 }
@@ -224,41 +150,6 @@ fn ruby(chars: &[char], at: usize) -> Option<(String, usize)> {
         format!("{} ({})", base.trim(), reading.trim()),
         end + 1 - at,
     ))
-}
-
-/// `$x$` becomes an inline code span: monospace, set apart, and the dollars stay on the page.
-fn math(chars: &[char], at: usize) -> Option<(String, usize)> {
-    if chars.get(at) != Some(&'$') {
-        return None;
-    }
-    // `$$x$$` written inside a sentence is one run, not two empty inline spans.
-    if chars.get(at + 1) == Some(&'$') {
-        let mut end = at + 2;
-        while end + 1 < chars.len() && !(chars[end] == '$' && chars[end + 1] == '$') {
-            end += 1;
-        }
-        if end + 1 >= chars.len() || end == at + 2 {
-            return None;
-        }
-        let body: String = chars[at..=end + 1].iter().collect();
-        if body.contains('`') {
-            return None;
-        }
-        return Some((format!("`{body}`"), end + 2 - at));
-    }
-    let mut end = at + 1;
-    while end < chars.len() && chars[end] != '$' {
-        end += 1;
-    }
-    if chars.get(end) != Some(&'$') || end == at + 1 {
-        return None;
-    }
-    let body: String = chars[at..=end].iter().collect();
-    // A span that already holds a backtick would break the one it is written into.
-    if body.contains('`') {
-        return None;
-    }
-    Some((format!("`{body}`"), end + 1 - at))
 }
 
 /// `20^th^` becomes `20ᵗʰ` when every character has a raised form, otherwise it is left as written.
