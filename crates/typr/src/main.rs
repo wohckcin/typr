@@ -581,6 +581,19 @@ impl library::Host for State {
         State::open_settings(self);
     }
 
+    fn library_state(&self) -> Option<String> {
+        let Some(store) = &self.store else {
+            // A scene brings its own library, so only a real window with nothing to open — or a
+            // scene that says what went wrong — reads as closed.
+            return match (&self.failure, self.seeded) {
+                (Some(reason), _) => Some(reason.clone()),
+                (None, false) => Some("no library is open".to_string()),
+                (None, true) => None,
+            };
+        };
+        store.status().ended().map(|error| error.to_string())
+    }
+
     fn keycaps(&self) -> bool {
         keymap::Host::wide_enough(self)
     }
@@ -2154,7 +2167,7 @@ fn main() {
         ("sidebar-closed", |state: &mut State| {
             state.library = Library::seeded_nested();
             state.library.select_deck(Some(2));
-            state.seeded = true;
+            state.failure = Some("the library is newer than this app".to_string());
         }),
         ("deck-list", |state: &mut State| {
             state.library = Library::seeded_tiles();

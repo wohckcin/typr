@@ -1993,3 +1993,44 @@ fn the_slash_focuses_the_search_field() {
         "the slash reached the field, and the next key went into it"
     );
 }
+
+#[test]
+fn a_library_that_did_not_open_says_so_in_the_sidebar() {
+    let state = State::default();
+    assert!(state.store.is_none(), "the fixture has no library");
+    let mut runtime = rune::Runtime::new(
+        state,
+        |s: &State, _: &mut rune::Cx<State>| crate::library::view::<State>(s),
+        (900.0, 600.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    let drawn: Vec<(String, Option<String>)> = runtime
+        .elements()
+        .iter()
+        .filter(|element| !element.exiting)
+        .filter(|element| {
+            element.key.as_deref() == Some("sidebar-state-line")
+                || element.key.as_deref() == Some("sidebar-state-reason")
+        })
+        .map(|element| {
+            (
+                element.key.clone().unwrap_or_default(),
+                element.text.clone(),
+            )
+        })
+        .collect();
+    assert!(
+        drawn.contains(&(
+            "sidebar-state-line".to_string(),
+            Some("Library closed".to_string())
+        )),
+        "a screen with no store draws the closed state, not the open one: {drawn:?}"
+    );
+    assert!(
+        drawn
+            .iter()
+            .any(|(_, text)| text.as_deref() == Some("no library is open")),
+        "and it names the reason: {drawn:?}"
+    );
+}
