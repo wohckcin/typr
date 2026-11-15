@@ -1425,3 +1425,21 @@ fn folding_a_parent_hides_exactly_its_child_and_leaves_the_count_alone() {
         "the parent keeps its own count"
     );
 }
+
+#[test]
+fn a_fold_survives_a_new_snapshot() {
+    let mut library = Library::seeded_nested();
+    library.toggle_collapsed(1);
+    let next = std::sync::Arc::new((*library.snapshot).clone());
+    library.set_snapshot(next);
+    let runtime = draw(library);
+    let keys = keys_of(&runtime);
+    assert!(
+        !keys.iter().any(|key| key == "deck-2"),
+        "the fold is view state and outlives the snapshot: {keys:?}"
+    );
+    assert!(
+        keys.iter().any(|key| key == "deck-toggle-1"),
+        "the parent still offers the fold"
+    );
+}
