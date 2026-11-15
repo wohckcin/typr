@@ -14,5 +14,6 @@ pub mod paths;
 pub mod screen;
 pub mod settings;
 pub mod sidebar;
+pub mod shell;
 pub mod study;
 pub mod ui;

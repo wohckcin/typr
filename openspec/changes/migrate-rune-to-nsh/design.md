@@ -82,3 +82,9 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - **Toast** is a plain view bound to a message signal (`ui::overlay::toast`), not `nsh_base`'s toast stack. Rune's equivalent was a single line, and the screens need one message at a time; the stack is revisited if a screen needs queued notifications.
 - **Spinner** is a text label (`ui::status::spinner_label`), not an animated control. Rune drew none either; a busy control shows its state through `busy_button`, which disables it and reads "Working…".
 - **Tooltip** renders through the element's `tooltip` hint and has no press test: a hint is not pressable. It is checked when the first screen that uses it is ported.
+
+## Task 3.3 layout
+
+- `src/shell.rs` holds the `App` root and the sidebar. The work area is a placeholder until the screens are ported.
+- `src/bin/typr_nsh.rs` is the NSH desktop runner. `default-run = "typr_nsh"` makes `cargo run -p typr` open it.
+- `src/main.rs` stays as the Rune binary until task 6.1 removes it.

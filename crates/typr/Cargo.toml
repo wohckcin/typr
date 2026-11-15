@@ -3,6 +3,8 @@ name = "typr"
 version = "0.1.0"
 edition = "2024"
 
+default-run = "typr_nsh"
+
 [dependencies]
 typr-core = { path = "../typr-core" }
 nsh-core.workspace = true
