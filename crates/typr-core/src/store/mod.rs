@@ -713,6 +713,16 @@ pub enum Command {
         deck: Id,
         reverse: Option<bool>,
     },
+    /// How this deck's cards are laid out. Nothing else about the deck or its cards changes.
+    SetDeckView {
+        deck: Id,
+        view: ViewMode,
+    },
+    /// Put a card at `position` in its deck, renumbering the deck around it in one transaction.
+    MoveCardTo {
+        card: Id,
+        position: u32,
+    },
     /// Save the current filter under a name.
     CreateView {
         spec: ViewSpec,
@@ -1022,6 +1032,8 @@ pub trait Store: Send + Sync {
     fn set_weights(&self, weights: &[f64]) -> Result<u64, StoreError>;
     fn set_card_reverse(&self, card: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
     fn set_deck_reverse(&self, deck: Id, reverse: Option<bool>) -> Result<u64, StoreError>;
+    fn set_deck_view(&self, deck: Id, view: ViewMode) -> Result<u64, StoreError>;
+    fn move_card_to(&self, card: Id, position: u32) -> Result<u64, StoreError>;
     fn create_diagram(&self, deck: Id, image: &str, caption: &str) -> Result<u64, StoreError>;
     fn set_diagram(&self, card: Id, image: &str, caption: &str) -> Result<u64, StoreError>;
     fn add_mask(&self, card: Id, group: u32, rect: MaskRect) -> Result<u64, StoreError>;

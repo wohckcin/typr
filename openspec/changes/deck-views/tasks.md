@@ -4,7 +4,7 @@
 
 - [x] 1.1 Migration V12 adds `deck.view TEXT NULL` and `card.position INTEGER NOT NULL DEFAULT 0` with a per-deck index. It follows `fsrs-scheduling`'s V11; a change applied out of the roadmap order must renumber and restate which version it follows. Verification: `a_library_rewound_from_v11_gains_both_columns` rewinds a fixture from V12 to V11 with `PRAGMA user_version = 11`, reopens it, and reads both.
 - [x] 1.2 Add `pub enum ViewMode { Grid, List, Notebook, Column }` to `crates/typr-core/src/library_view.rs` with `parse`/`as_str`, carried by `Deck` in `Snapshot`. Verification: `a_deck_without_a_view_reads_as_grid`.
-- [ ] 1.3 Add `Command::SetDeckView { deck, view }` and `Command::MoveCardTo { card, position }`, the first writing one column, the second renumbering a deck in one transaction. Verification: `setting_a_view_leaves_the_schedule_alone` and `moving_a_card_renumbers_its_deck`.
+- [x] 1.3 Add `Command::SetDeckView { deck, view }` and `Command::MoveCardTo { card, position }`, the first writing one column, the second renumbering a deck in one transaction. Verification: `setting_a_view_leaves_the_schedule_alone` and `moving_a_card_renumbers_its_deck`.
 
 ## 2. Views
 

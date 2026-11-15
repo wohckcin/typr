@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
 use crate::clock::Clock;
+use crate::library_view::ViewMode;
 
 use super::{
     Command, Db, Event, Grade, Id, MaskRect, Outcome, SchedulerKind, SettingKey, SettingValue,
@@ -302,6 +303,14 @@ impl Store for Handle {
 
     fn set_deck_reverse(&self, deck: Id, reverse: Option<bool>) -> Result<u64, StoreError> {
         self.submit(Command::SetDeckReverse { deck, reverse })
+    }
+
+    fn set_deck_view(&self, deck: Id, view: ViewMode) -> Result<u64, StoreError> {
+        self.submit(Command::SetDeckView { deck, view })
+    }
+
+    fn move_card_to(&self, card: Id, position: u32) -> Result<u64, StoreError> {
+        self.submit(Command::MoveCardTo { card, position })
     }
 
     fn create_diagram(&self, deck: Id, image: &str, caption: &str) -> Result<u64, StoreError> {

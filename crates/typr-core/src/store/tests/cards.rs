@@ -1954,3 +1954,148 @@ fn adding_an_embed_moves_no_prompt_or_due_date() {
         "an embed changed the card's side count"
     );
 }
+
+/// The order a deck holds, read from the column rather than through the snapshot, so a test can
+/// see the numbers the move wrote and not only the order they imply.
+fn positions(db: &Db, deck: Id) -> Vec<(Id, i64)> {
+    let mut statement = db
+        .connection_for_test()
+        .prepare("SELECT id, position FROM card WHERE deck_id = ?1 ORDER BY position, id")
+        .expect("prepare");
+    statement
+        .query_map([deck], |row| {
+            Ok((row.get::<_, Id>(0)?, row.get::<_, i64>(1)?))
+        })
+        .expect("query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("rows")
+}
+
+/// One prompt's schedule, as the columns hold it.
+type Schedule = (Id, String, String, Option<i64>, i64, i64, i64);
+
+/// Every prompt's schedule, for comparing a library before and after a command that must not
+/// touch it.
+fn schedules(db: &Db) -> Vec<Schedule> {
+    let mut statement = db
+        .connection_for_test()
+        .prepare(
+            "SELECT card_id, key, phase, due_at, interval_ms, reps, lapses
+             FROM prompt ORDER BY card_id, key",
+        )
+        .expect("prepare");
+    statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, Id>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })
+        .expect("query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("rows")
+}
+
+#[test]
+fn setting_a_view_leaves_the_schedule_alone() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let first = card(&mut db, deck, "gato\n---\ncat");
+    let second = card(&mut db, deck, "perro\n---\ndog");
+    db.apply(
+        &Command::Grade {
+            card: first,
+            key: "fwd".to_string(),
+            grade: Grade::Remembered,
+            duration_ms: Some(1_200),
+        },
+        NOON,
+    )
+    .expect("grade");
+    let before = schedules(&db);
+
+    db.apply(
+        &Command::SetDeckView {
+            deck,
+            view: crate::library_view::ViewMode::Notebook,
+        },
+        0,
+    )
+    .expect("set the view");
+
+    let snapshot = db.snapshot().expect("snapshot");
+    let found = snapshot
+        .decks
+        .iter()
+        .find(|each| each.id == deck)
+        .expect("the deck");
+    assert_eq!(found.view, crate::library_view::ViewMode::Notebook);
+    assert_eq!(
+        before,
+        schedules(&db),
+        "choosing a view read is not a schedule change"
+    );
+    let other = snapshot
+        .cards
+        .iter()
+        .find(|each| each.id == second)
+        .expect("the second card");
+    assert_eq!(other.due_at, None, "and an ungraded card stays unscheduled");
+}
+
+#[test]
+fn moving_a_card_renumbers_its_deck() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let spanish = deck(&mut db, "Spanish");
+    let first = card(&mut db, spanish, "uno\n---\none");
+    let second = card(&mut db, spanish, "dos\n---\ntwo");
+    let third = card(&mut db, spanish, "tres\n---\nthree");
+    let other_deck = deck(&mut db, "Biology");
+    let untouched = card(&mut db, other_deck, "cell\n---\nunit");
+    assert_eq!(
+        positions(&db, spanish),
+        vec![(first, 0), (second, 0), (third, 0)],
+        "a deck nobody has ordered keeps the order it arrived in"
+    );
+
+    db.apply(
+        &Command::MoveCardTo {
+            card: third,
+            position: 0,
+        },
+        0,
+    )
+    .expect("move the third card to the front");
+
+    assert_eq!(
+        positions(&db, spanish),
+        vec![(third, 0), (first, 1), (second, 2)],
+        "the deck is renumbered around the card that moved"
+    );
+    assert_eq!(
+        positions(&db, other_deck),
+        vec![(untouched, 0)],
+        "another deck's order is not this deck's business"
+    );
+
+    db.apply(
+        &Command::MoveCardTo {
+            card: third,
+            position: 9,
+        },
+        0,
+    )
+    .expect("a position past the end");
+    assert_eq!(
+        positions(&db, spanish),
+        vec![(first, 0), (second, 1), (third, 2)],
+        "a position past the end puts the card last rather than failing"
+    );
+}

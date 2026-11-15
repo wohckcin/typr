@@ -436,6 +436,20 @@ impl Db {
                 }
                 Ok(Outcome::Changed(changed))
             }
+            Command::SetDeckView { deck, view } => {
+                let changed = self.conn.execute(
+                    "UPDATE deck SET view = ?2 WHERE id = ?1",
+                    params![deck, view.as_str()],
+                )?;
+                if changed == 0 {
+                    return Err(StoreError::Missing {
+                        what: "deck",
+                        id: *deck,
+                    });
+                }
+                Ok(Outcome::Changed(changed))
+            }
+            Command::MoveCardTo { card, position } => self.move_card_to(*card, *position),
             Command::Grade {
                 card,
                 key,
@@ -1198,6 +1212,58 @@ impl Db {
             self.rerender(*card, now_ms)?;
         }
         Ok(Outcome::Changed(cards.len()))
+    }
+
+    /// Put a card at `position` in its deck, renumbering the whole deck around it.
+    ///
+    /// The order is the deck's, not a timestamp's, so every card of the deck is rewritten in one
+    /// pass: a card inserted at 3 pushes the ones after it down by one, and a card moved to the end
+    /// leaves no gap behind. A `position` past the end puts the card last rather than failing, so a
+    /// stale keypress cannot refuse the move the user can see.
+    ///
+    /// Only `card.position` changes. No prompt, no review record and no `updated_at` is touched:
+    /// reordering says where a card is read, not when it was last edited.
+    ///
+    /// The caller's transaction is `Db::apply`'s, so a failure halfway leaves the deck as it was.
+    fn move_card_to(&self, card: Id, position: u32) -> Result<Outcome, StoreError> {
+        let deck: Id = self
+            .conn
+            .query_row(
+                "SELECT deck_id FROM card WHERE id = ?1",
+                params![card],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or(StoreError::Missing {
+                what: "card",
+                id: card,
+            })?;
+        let mut order = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id FROM card WHERE deck_id = ?1 ORDER BY position, id")?;
+            let rows = stmt.query_map(params![deck], |row| row.get::<_, Id>(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        let from = order
+            .iter()
+            .position(|each| *each == card)
+            .expect("the card's own deck lists it");
+        order.remove(from);
+        let to = usize::try_from(position)
+            .unwrap_or(order.len())
+            .min(order.len());
+        order.insert(to, card);
+        {
+            let mut stmt = self
+                .conn
+                .prepare("UPDATE card SET position = ?2 WHERE id = ?1")?;
+            for (index, each) in order.iter().enumerate() {
+                let index = i64::try_from(index).unwrap_or(i64::MAX);
+                stmt.execute(params![each, index])?;
+            }
+        }
+        Ok(Outcome::Changed(order.len()))
     }
 
     /// Every card in a deck and the decks under it.
