@@ -1832,18 +1832,20 @@ fn a_card_added_below_is_placed_where_it_was_asked() {
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    let cards: Vec<Id> = state
+    // The snapshot lists by `updated_at`, so pick the card by its text rather than by position.
+    let second = state
         .library
         .snapshot()
         .cards
         .iter()
+        .find(|card| card.markdown == "two")
         .map(|card| card.id)
-        .collect();
+        .expect("the second card");
     state
         .library
         .set_view(deck, typr_core::library_view::ViewMode::Notebook);
     state.library.selected_deck = Some(deck);
-    state.library.selected_card = Some(cards[1]);
+    state.library.selected_card = Some(second);
 
     let mut tx = rune::Tx::default();
     assert!(typr::library::key(
@@ -1862,6 +1864,7 @@ fn a_card_added_below_is_placed_where_it_was_asked() {
     state.editor.refresh();
     assert!(state.persist());
 
+    let mut texts: Vec<String> = Vec::new();
     for _ in 0..400 {
         state.drain();
         let mut order: Vec<(String, i64, Id)> = state
@@ -1871,20 +1874,19 @@ fn a_card_added_below_is_placed_where_it_was_asked() {
             .iter()
             .map(|card| (card.markdown.clone(), card.position, card.id))
             .collect();
-        // The create publishes before the move does, so wait for the renumbering itself.
-        if order.len() == 4 && order.iter().any(|(_, position, _)| *position > 0) {
-            order.sort_by_key(|(_, position, id)| (*position, *id));
-            let texts: Vec<&str> = order.iter().map(|(text, _, _)| text.as_str()).collect();
-            assert_eq!(
-                texts,
-                ["one", "two", "two and a half", "three"],
-                "the new card sits right after the second"
-            );
+        order.sort_by_key(|(_, position, id)| (*position, *id));
+        texts = order.iter().map(|(text, _, _)| text.clone()).collect();
+        // The create publishes before the move does, so wait for the order itself rather than for
+        // a position to become non-zero: the deck already held cards above zero.
+        if texts == ["one", "two", "two and a half", "three"] {
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    panic!("the new card never arrived");
+    panic!(
+        "the new card never arrived in place: {texts:?} sent={:?} failure={:?}",
+        state.sent, state.failure
+    );
 }
 
 #[test]

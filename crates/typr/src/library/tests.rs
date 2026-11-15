@@ -771,6 +771,53 @@ fn the_notebook_reads_in_the_order_the_deck_holds() {
 }
 
 #[test]
+fn a_long_deck_builds_only_the_notebook_rows_on_screen() {
+    let mut library = in_view(5000, ViewMode::Notebook);
+    library.refresh();
+    let runtime = draw(library);
+    let built = runtime
+        .elements()
+        .iter()
+        .filter(|each| !each.exiting)
+        .filter(|each| {
+            each.key
+                .as_deref()
+                .is_some_and(|key| key.starts_with("notebook-") && key.contains('-'))
+        })
+        .count();
+    // A window is the viewport plus up to two viewports either side at the estimated height,
+    // which is a few dozen rows; the deck holds five thousand.
+    assert!(
+        built < 200,
+        "the notebook built {built} rows for a deck of 5000, so it is drawing the whole deck"
+    );
+}
+
+#[test]
+fn the_notebook_and_the_column_keep_a_hidden_answer_hidden() {
+    for view in [ViewMode::Notebook, ViewMode::Column] {
+        let mut library = in_view(1, view);
+        {
+            let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+            snapshot.cards[0].markdown =
+                "The hormone made by {{beta cells}} is insulin.".to_string();
+            snapshot.cards[0].preview = "The hormone made by".to_string();
+        }
+        library.refresh();
+        let runtime = draw(library);
+        let drawn = all_text(&runtime);
+        assert!(
+            !drawn.contains("beta cells"),
+            "{view:?} printed the answer: {drawn}"
+        );
+        assert!(
+            drawn.contains("insulin."),
+            "{view:?} lost the card: {drawn}"
+        );
+    }
+}
+
+#[test]
 fn the_notebook_view_draws_a_whole_card() {
     let mut library = in_view(2, ViewMode::Notebook);
     {
@@ -1178,6 +1225,17 @@ fn the_notebook_view_adds_a_card_below() {
 }
 
 /// The box a keyed element was laid out in, or `None` when it is not drawn.
+/// Every string the runtime drew, joined, so a test can ask what a reader would see.
+fn all_text(runtime: &rune::Runtime<Library>) -> String {
+    runtime
+        .elements()
+        .iter()
+        .filter(|each| !each.exiting)
+        .filter_map(|each| each.text.clone())
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
 fn rect_of(runtime: &rune::Runtime<Library>, key: &str) -> Option<[f32; 4]> {
     runtime
         .elements()

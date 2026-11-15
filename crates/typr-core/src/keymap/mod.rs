@@ -278,7 +278,7 @@ const TABLE: &[Binding] = &[
     row(
         Surface::Library,
         Command::AddCardAbove,
-        Chord::key(Key::Char('O')),
+        Chord::key(Key::Char('a')),
     ),
     row(Surface::Library, Command::MoveCardUp, Chord::alt(Key::Up)),
     row(

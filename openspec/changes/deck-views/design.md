@@ -59,6 +59,16 @@ was rejected as a second truth.
 `Command::MoveCardTo { card, position }` writes the card's `position` column and renumbers the deck's cards in
 one transaction. Sorting by `updated_at` was rejected: a deck's order is the user's, not a timestamp's.
 
+## What the text views draw
+
+The notebook and the column draw a card's stored text through `editor::preview_body`, the same
+function the grid's tiles and the editor's preview use, so a `{{hidden}}` span stays masked in every
+view: `card-grid` forbids a view printing an answer, and the notebook is a library view, not a
+review. Revealing a span is what the study screen and the editor's preview toggle are for.
+
+A diagram card has no text of its own beyond its caption; the notebook draws its name and caption
+and no picture, so a deck's diagrams are found by name there and read whole in the editor.
+
 ## Risks / Trade-offs
 
 - **Five surfaces to keep in step.** Mitigated by one builder per view behind one dispatch, and by a test that

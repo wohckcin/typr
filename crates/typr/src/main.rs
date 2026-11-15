@@ -1714,6 +1714,49 @@ impl State {
                 self.library.select_previous();
                 true
             }
+            // The palette reaches the same actions the library's own keys do, so ⌘K and the
+            // shortcuts cannot drift apart.
+            Command::EditCard => match self.library.selected_card {
+                Some(card) => {
+                    library::Host::open_card(self, card);
+                    true
+                }
+                None => false,
+            },
+            Command::PreviewCard => match self.library.selected_card {
+                Some(card) => {
+                    self.library.toggle_peek(card);
+                    true
+                }
+                None => false,
+            },
+            Command::DeleteCard => match self.library.selected_card {
+                Some(card) => {
+                    library::Host::trash_card(self, card);
+                    true
+                }
+                None => false,
+            },
+            Command::MoveCardUp | Command::MoveCardDown => {
+                let up = command == Command::MoveCardUp;
+                match self.library.move_target(up) {
+                    Some((card, position)) => {
+                        library::Host::reorder_card(self, card, position);
+                        true
+                    }
+                    None => false,
+                }
+            }
+            Command::AddCardBelow | Command::AddCardAbove => {
+                let below = command == Command::AddCardBelow;
+                match self.library.add_target(below) {
+                    Some((deck, position)) => {
+                        library::Host::new_card_at(self, deck, position);
+                        true
+                    }
+                    None => false,
+                }
+            }
             _ => false,
         }
     }

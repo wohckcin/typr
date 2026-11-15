@@ -298,7 +298,7 @@ points, and the action stays.
 | Library | `Enter` | Edit the selected card |
 | Library | `p` | Preview the selected card |
 | Library | `Backspace` | Move the selected card to the trash |
-| Library | `o` / `O` | Add a card below or above (notebook) |
+| Library | `o` / `a` | Add a card below or above (notebook) |
 | Library | `Alt+Up` / `Alt+Down` | Move the card up or down its deck |
 | Editor | `s` | Save the card |
 | Editor | `h` | Show the card's history |

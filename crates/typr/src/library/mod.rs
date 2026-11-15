@@ -391,6 +391,8 @@ pub struct Library {
     pub find: TextEdit,
     /// The line numbers that hold the find, in reading order.
     pub find_hits: Vec<usize>,
+    /// The cards the notebook draws, in the deck's own order: `(position, id)`.
+    pub notebook: Vec<Id>,
     /// Which hit is shown, counting from zero; only meaningful while `find_hits` is not empty.
     pub find_at: usize,
     /// The card whose whole text the preview draws, if one is open.
@@ -432,6 +434,7 @@ impl Default for Library {
             view_buffer: TextEdit::default(),
             find: TextEdit::default(),
             find_hits: Vec::new(),
+            notebook: Vec::new(),
             find_at: 0,
             peek: None,
             new_position: None,
@@ -458,6 +461,12 @@ impl Library {
     }
 
     /// Move the selection one card down the list it is showing, stopping at the last card.
+    /// Select `card`, keeping the find describing the card that is now on screen.
+    pub fn select_card(&mut self, card: Id) {
+        self.selected_card = Some(card);
+        self.find_in_current();
+    }
+
     pub fn select_next(&mut self) {
         let Some(at) = self
             .visible
@@ -465,11 +474,15 @@ impl Library {
             .position(|card| Some(card.id) == self.selected_card)
         else {
             // Nothing is selected yet, so the first movement lands on the first card.
-            self.selected_card = self.visible.first().map(|card| card.id);
+            if let Some(card) = self.visible.first().map(|card| card.id) {
+                self.select_card(card);
+            }
             return;
         };
         let next = (at + 1).min(self.visible.len().saturating_sub(1));
-        self.selected_card = self.visible.get(next).map(|card| card.id);
+        if let Some(card) = self.visible.get(next).map(|card| card.id) {
+            self.select_card(card);
+        }
     }
 
     /// Move the selection one card up the list it is showing, stopping at the first card.
@@ -479,11 +492,15 @@ impl Library {
             .iter()
             .position(|card| Some(card.id) == self.selected_card)
         else {
-            self.selected_card = self.visible.first().map(|card| card.id);
+            if let Some(card) = self.visible.first().map(|card| card.id) {
+                self.select_card(card);
+            }
             return;
         };
         let previous = at.saturating_sub(1);
-        self.selected_card = self.visible.get(previous).map(|card| card.id);
+        if let Some(card) = self.visible.get(previous).map(|card| card.id) {
+            self.select_card(card);
+        }
     }
 
     /// The key of the element that draws the selected card in the view in force, so the frame loop
@@ -496,10 +513,7 @@ impl Library {
         match self.view_mode() {
             // The grid and the list are drawn only where they are scrolled to, so the row that
             // holds the card has to be built before the card itself can be brought into view.
-            ViewMode::Grid => Some(format!(
-                "line-{}",
-                index / columns_for(self.grid_width).max(1)
-            )),
+            ViewMode::Grid => Some(format!("line-{}", index / self.grid_columns().max(1))),
             ViewMode::List => Some(format!("line-{index}")),
             ViewMode::Notebook => Some(format!("notebook-{}", self.visible[index].id)),
             ViewMode::Column => Some("column-card".to_string()),
@@ -527,10 +541,13 @@ impl Library {
             return None;
         }
         let card = self.selected_card?;
-        let index = self.visible.iter().position(|own| own.id == card)?;
+        // The place comes from the deck's own order, not from the list: the list may be filtered
+        // or sorted, and the notebook reads the deck.
+        let deck = self.snapshot.cards.iter().find(|own| own.id == card)?.deck;
+        let order = self.deck_order(deck);
+        let index = order.iter().position(|own| own.id == card)?;
         let place = if below { index + 1 } else { index };
-        let place = u32::try_from(place).ok()?;
-        Some((self.visible[index].deck, place))
+        Some((deck, u32::try_from(place).ok()?))
     }
 
     /// The cards of one deck, in the order the notebook reads them.
@@ -635,6 +652,17 @@ impl Library {
 
     /// How the selected deck is read. The whole library has no view of its own, so it reads as the
     /// grid, which is what every deck looked like before views existed.
+    /// How many tile columns the grid is drawing at, from the width the scroll viewport last
+    /// reported and the same fallback `grid_view` uses before the first layout.
+    pub fn grid_columns(&self) -> usize {
+        let width = if self.grid_width > 0.0 {
+            self.grid_width
+        } else {
+            FALLBACK_GRID_WIDTH
+        };
+        columns_for(width)
+    }
+
     pub fn view_mode(&self) -> ViewMode {
         self.selected_deck
             .and_then(|id| self.snapshot.decks.iter().find(|deck| deck.id == id))
@@ -657,6 +685,8 @@ impl Library {
 
     /// Choose which deck the list shows, redrawing it for that deck.
     pub fn select_deck(&mut self, deck: Option<Id>) {
+        self.find_hits.clear();
+        self.find_at = 0;
         self.selected_deck = deck;
         self.view_scope = deck;
         // A view is a filter, and choosing a deck is choosing another one.
@@ -854,6 +884,12 @@ impl Library {
             cards = typr_core::store::shuffled(cards, seed);
         }
         self.visible = cards.into_iter().cloned().collect();
+        // The notebook reads the deck's order, so it needs that order as cards move and leave.
+        self.notebook = if self.view_mode() == ViewMode::Notebook {
+            in_deck_order(self).iter().map(|card| card.id).collect()
+        } else {
+            Vec::new()
+        };
     }
 
     /// Order the list.
@@ -1604,6 +1640,19 @@ fn deck_reverse_button<S: Host>(label: &str, key: &str, deck: Id, reverse: Optio
 ///
 /// The shuffle is a separate button because it is not an order a view can keep: pressing an order
 /// ends the shuffle, and pressing the shuffle never writes anything.
+/// The order controls, or — for the views that read the deck's own order — a word saying so, so
+/// the bar never offers an order it does not apply.
+fn order_controls<S: Host>(s: &S) -> El {
+    match s.library().view_mode() {
+        ViewMode::Grid | ViewMode::List => sort_controls::<S>(s),
+        ViewMode::Notebook | ViewMode::Column => row().key("sorting").h(28.0).gap(8.0).child(
+            text("Deck order")
+                .font(type_::MONO_CAPTION)
+                .color(tok::theme(true).text_secondary),
+        ),
+    }
+}
+
 fn sort_controls<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
@@ -1704,7 +1753,7 @@ fn filter_bar<S: Host>(s: &S) -> El {
         .child(mode_tab::<S>("Archived", CardMode::Archived, library.mode))
         .child(mode_tab::<S>("Trash", CardMode::Trash, library.mode))
         .child(search)
-        .child(sort_controls::<S>(s))
+        .child(order_controls::<S>(s))
         .child(
             text(
                 match (library.visible.len(), library.snapshot.cards.len()) {
@@ -1933,7 +1982,7 @@ fn grid_view<S: Host>(s: &S) -> El {
     } else {
         FALLBACK_GRID_WIDTH
     };
-    let columns = columns_for(width);
+    let columns = library.grid_columns();
     let tile_width = tile_width(width, columns);
     // An empty deck still draws one line: that line holds the tile that starts the first card.
     let lines = if library.visible.is_empty() {
@@ -2044,7 +2093,7 @@ fn list_row<S: Host>(s: &S, index: usize, now: i64) -> El {
     // key is one level in: a key on the returned element would be replaced by `line-{index}`.
     col().w_full().h(ROW_HEIGHT).child(
         line.on_press(move |s: &mut S| {
-            s.library_mut().selected_card = Some(id);
+            s.library_mut().select_card(id);
             s.open_card(id);
         })
         // The key is set last because a press target wraps its element, and the wrapper is what the
@@ -2055,8 +2104,11 @@ fn list_row<S: Host>(s: &S, index: usize, now: i64) -> El {
 
 /// Every card's contents stacked, which is the view a deck of long cards is read in.
 fn notebook_view<S: Host>(s: &S) -> El {
-    let library = s.library();
-    let mut body = col()
+    // Only the cards in the window are built, so a five-thousand-card deck costs what the screen
+    // holds: a row's measured height is kept by key, and the estimate only places rows nobody has
+    // reached yet.
+    let count = s.library().notebook.len();
+    col()
         .key("cards")
         .grow(1.0)
         .h_full()
@@ -2065,11 +2117,23 @@ fn notebook_view<S: Host>(s: &S) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .child(col().key("rows").growth(GrowthSpec::default()));
-    for card in in_deck_order(library) {
-        body = body.child(notebook_card::<S>(s, card));
-    }
-    body
+        .child(
+            col()
+                .key("notebook-rows")
+                .growth(GrowthSpec::default())
+                .virtual_rows(
+                    count,
+                    NOTEBOOK_ESTIMATE,
+                    |s: &S, index: usize| match s.library().notebook.get(index) {
+                        Some(id) => Cow::Owned(format!("notebook-{id}")),
+                        None => Cow::Borrowed("notebook-gone"),
+                    },
+                    |s: &S, index: usize| match s.library().notebook_card_at(index) {
+                        Some(card) => notebook_card::<S>(s, card),
+                        None => col().key("notebook-gone"),
+                    },
+                ),
+        )
 }
 
 /// The cards of the shown deck in the order the deck holds them.
@@ -2078,6 +2142,17 @@ fn in_deck_order(library: &Library) -> Vec<&CardSummary> {
     cards.sort_by_key(|card| (card.position, card.id));
     cards
 }
+
+impl Library {
+    /// The notebook's card at `index` in the order the deck holds it.
+    pub fn notebook_card_at(&self, index: usize) -> Option<&CardSummary> {
+        let id = *self.notebook.get(index)?;
+        self.visible.iter().find(|card| card.id == id)
+    }
+}
+
+/// How tall a notebook card is guessed to be before it has been laid out once.
+const NOTEBOOK_ESTIMATE: f32 = 220.0;
 
 /// One card in the notebook: its name, every side it holds, and the way into its editor.
 fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
@@ -2115,7 +2190,7 @@ fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
                     Button::new("Edit")
                         .variant(ButtonVariant::Ghost)
                         .on_press(move |s: &mut S| {
-                            s.library_mut().selected_card = Some(id);
+                            s.library_mut().select_card(id);
                             s.open_card(id);
                         })
                         .build(&KIT)
@@ -2124,7 +2199,10 @@ fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
         )
         // A card with no separator holds one side, and the notebook shows what is there rather
         // than inventing a back.
-        .child(Markdown::new(&card.markdown).render(&MarkdownStyle::neutral(true)));
+        .child(
+            Markdown::new(crate::editor::preview_body(&card.markdown))
+                .render(&MarkdownStyle::neutral(true)),
+        );
     if !card.tags.is_empty() {
         body = body.child(
             text(card.tags.join(" \u{b7} "))
@@ -2132,7 +2210,7 @@ fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
                 .color(t.text_secondary),
         );
     }
-    body.on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
+    body.on_press(move |s: &mut S| s.library_mut().select_card(id))
 }
 
 /// One card's contents at reading width, with a find over it: the layout for working through a
@@ -2174,7 +2252,10 @@ fn column_view<S: Host>(s: &S) -> El {
                                 .font(type_::TITLE)
                                 .color(t.text),
                         )
-                        .child(Markdown::new(&card.markdown).render(&MarkdownStyle::neutral(true))),
+                        .child(
+                            Markdown::new(crate::editor::preview_body(&card.markdown))
+                                .render(&MarkdownStyle::neutral(true)),
+                        ),
                 ),
         );
     if let Some(line) = library.find_line() {
