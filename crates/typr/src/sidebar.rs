@@ -26,6 +26,8 @@ pub const ICON: f32 = 20.0;
 
 /// The gap between the icon slot and the label.
 pub const GAP_AFTER_ICON: f32 = 14.0;
+/// The row's own horizontal padding, after the column's inset.
+pub const ROW_PAD: f32 = 12.0;
 
 /// The gap between one group of rows and the next.
 pub const GROUP_GAP: f32 = 20.0;
@@ -189,6 +191,7 @@ pub fn row_tx<S: 'static>(item: &Row, on_press: impl Fn(&mut S, &mut rune::Tx) +
         .key(item.key.clone())
         .w_full()
         .h(ROW_HEIGHT)
+        .px(ROW_PAD)
         .radius(5.0)
         .center_y()
         .gap(GAP_AFTER_ICON)
@@ -198,7 +201,7 @@ pub fn row_tx<S: 'static>(item: &Row, on_press: impl Fn(&mut S, &mut rune::Tx) +
         } else {
             t.text.alpha(0.06)
         })
-        .child(icon(item.kind, &item.label))
+        .child(icon(item.kind, &item.label).key(format!("{}-icon", item.key)))
         .child(
             text(item.label.clone())
                 .key(format!("{}-label", item.key))
@@ -342,7 +345,7 @@ pub fn deck_due_counts(snapshot: &Snapshot, now_ms: i64) -> HashMap<Id, u32> {
 pub fn icon(kind: Kind, name: &str) -> El {
     let tint = tint(name);
     col()
-        .key(format!("icon-{name}"))
+        .key("icon")
         .w(ICON)
         .h(ICON)
         .radius(5.0)

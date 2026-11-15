@@ -1983,6 +1983,16 @@ fn the_slash_focuses_the_search_field() {
         mods: rune::Mods::default(),
     });
     runtime.frame(0.0);
+    let focused = runtime
+        .elements()
+        .iter()
+        .find(|element| element.key.as_deref() == Some("search"))
+        .map(|element| element.focused);
+    assert_eq!(
+        focused,
+        Some(true),
+        "the slash moves the caret into the search field, not merely somewhere"
+    );
     runtime.key(rune::KeyEvent {
         key: rune::Key::Text("g".into()),
         mods: rune::Mods::default(),

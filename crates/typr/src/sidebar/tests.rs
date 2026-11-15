@@ -53,9 +53,10 @@ fn rows_share_one_label_offset_and_height() {
             "{name} is {} points tall",
             row[3]
         );
+        let in_row = ROW_PAD + LABEL_X;
         assert!(
-            (label[0] - row[0] - LABEL_X).abs() < 0.5,
-            "{name} starts its label {} points in, not {LABEL_X}",
+            (label[0] - row[0] - in_row).abs() < 0.5,
+            "{name} starts its label {} points in, not {in_row}",
             label[0] - row[0]
         );
     }
@@ -109,7 +110,7 @@ fn the_icon_slot_is_the_same_width_whatever_the_letter() {
     let elements = runtime.elements();
     let icon = elements
         .iter()
-        .find(|element| element.key.as_deref() == Some("icon-Spanish"))
+        .find(|element| element.key.as_deref() == Some("row-deck-icon"))
         .expect("the icon");
     assert!((icon.rect[2] - ICON).abs() < 0.5, "the icon is {icon:?}");
     assert!((icon.rect[3] - ICON).abs() < 0.5, "the icon is {icon:?}");
@@ -319,4 +320,32 @@ fn text_of<S>(runtime: &rune::Runtime<S>, key: &str) -> Option<String> {
         .filter(|element| !element.exiting)
         .find(|element| element.key.as_deref() == Some(key))
         .and_then(|element| element.text.clone())
+}
+
+#[test]
+fn a_closed_library_is_stated_in_the_danger_tone() {
+    let runtime = draw_state(Some("the file is newer than this app"));
+    let elements = runtime.elements();
+    let line = elements
+        .iter()
+        .filter(|element| !element.exiting)
+        .find(|element| element.key.as_deref() == Some("sidebar-state-line"))
+        .expect("the line is drawn");
+    assert_eq!(
+        line.text_color,
+        Some(rune_kit::Kit::neutral(true).c.danger.fg),
+        "the closed state is not a neutral line"
+    );
+    let open = draw_state(None);
+    let elements = open.elements();
+    let line = elements
+        .iter()
+        .filter(|element| !element.exiting)
+        .find(|element| element.key.as_deref() == Some("sidebar-state-line"))
+        .expect("the line is drawn");
+    assert_ne!(
+        line.text_color,
+        Some(rune_kit::Kit::neutral(true).c.danger.fg),
+        "an open library is not painted as a problem"
+    );
 }

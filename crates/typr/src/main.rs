@@ -2406,6 +2406,7 @@ fn main() {
                     .or_default()
                     .replace_text(text);
             }
+            state.seeded = true;
         }),
         ("editor-leave", |state: &mut State| {
             state.screen = Screen::Editor;
@@ -2500,6 +2501,7 @@ fn main() {
                 id: 2,
                 name: "Mitosis".to_string(),
             }];
+            state.seeded = true;
         }),
     ];
     // Without this Rune ends a window close with `_exit`, so both the worker's flush and the quit

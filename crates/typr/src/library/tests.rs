@@ -342,7 +342,8 @@ fn an_empty_deck_offers_a_tile_to_fill() {
         "an empty deck draws exactly one tile that starts a card"
     );
     let rect = placeholders[0].rect;
-    let share = (960.0 - crate::sidebar::WIDTH - GAP * 2.0) / 3.0;
+    let columns = super::columns_for(960.0 - crate::sidebar::WIDTH);
+    let share = (960.0 - crate::sidebar::WIDTH - GAP * (columns - 1) as f32) / columns as f32;
     assert!(
         (rect[2] - share).abs() < 1.0,
         "the placeholder is one grid share wide, expected {share}, got {rect:?}"
@@ -1584,4 +1585,42 @@ fn every_kind_of_sidebar_row_lines_up() {
             drawn[0]
         );
     }
+}
+
+#[test]
+fn the_search_row_draws_the_chord_it_is_given() {
+    // The table's chord and this one differ, so a row that hard-codes a key fails here even
+    // while it draws the right thing for the real binding.
+    let library = Library::seeded_nested();
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| {
+            super::search_row::<Library>(s, Some("⌘⇧Z".to_string()))
+        },
+        (400.0, 120.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    let drawn = runtime
+        .elements()
+        .iter()
+        .find(|element| element.key.as_deref() == Some("sidebar-search-chord"))
+        .and_then(|element| element.text.clone());
+    assert_eq!(drawn.as_deref(), Some("⌘⇧Z"));
+}
+
+#[test]
+fn pressing_the_fold_chevron_hides_the_children() {
+    let runtime = draw(Library::seeded_nested());
+    // A fresh runtime: the press must come through the control, not through `toggle_collapsed`.
+    let mut runtime = runtime;
+    assert!(runtime.find("deck-2").is_some(), "the child starts visible");
+    press(&mut runtime, "deck-toggle-1");
+    assert!(
+        runtime.find("deck-2").is_none() && runtime.find("deck-3").is_none(),
+        "the chevron folds the subtree"
+    );
+    assert!(runtime.find("deck-1").is_some(), "the parent stays");
+    press(&mut runtime, "deck-toggle-1");
+    assert!(runtime.find("deck-2").is_some(), "and opens it again");
 }

@@ -409,6 +409,9 @@ pub struct Library {
     /// The decks whose children are folded away. A view state, not a stored one: the database
     /// has no opinion about what is on screen.
     pub collapsed: HashSet<Id>,
+    /// Every tag the library holds, sorted and de-duplicated, rebuilt from each snapshot so the
+    /// sidebar does not walk every card once per frame.
+    pub tags: Vec<String>,
 }
 
 impl Default for Library {
@@ -449,18 +452,17 @@ impl Default for Library {
             peek: None,
             new_position: None,
             collapsed: HashSet::new(),
+            tags: Vec::new(),
         }
     }
 }
 
 impl Library {
-    /// Replace the library the screen draws, and rebuild the rows the filters keep.
     /// The library this list shows.
     pub fn snapshot(&self) -> &Snapshot {
         &self.snapshot
     }
 
-    /// The cards on screen, in the order they are drawn.
     /// Read `deck` in `view` from now on. The whole library has no deck to ask, so it keeps the
     /// grid.
     pub fn set_view(&mut self, deck: Id, view: ViewMode) {
@@ -471,13 +473,13 @@ impl Library {
         self.refresh();
     }
 
-    /// Move the selection one card down the list it is showing, stopping at the last card.
     /// Select `card`, keeping the find describing the card that is now on screen.
     pub fn select_card(&mut self, card: Id) {
         self.selected_card = Some(card);
         self.find_in_current();
     }
 
+    /// Move the selection one card down the list it is showing, stopping at the last card.
     pub fn select_next(&mut self) {
         let Some(at) = self
             .visible
@@ -681,6 +683,7 @@ impl Library {
             .unwrap_or_default()
     }
 
+    /// The cards on screen, in the order they are drawn.
     pub fn cards(&self) -> &[CardSummary] {
         &self.visible
     }
@@ -895,6 +898,17 @@ impl Library {
             cards = typr_core::store::shuffled(cards, seed);
         }
         self.visible = cards.into_iter().cloned().collect();
+        // Sorted once per snapshot, not once per frame: a library of thousands of cards holds
+        // the same tag set however often the screen redraws.
+        let mut tags: Vec<String> = self
+            .snapshot
+            .cards
+            .iter()
+            .flat_map(|card| card.tags.iter().cloned())
+            .collect();
+        tags.sort_unstable();
+        tags.dedup();
+        self.tags = tags;
         // The notebook reads the deck's order, so it needs that order as cards move and leave.
         self.notebook = if self.view_mode() == ViewMode::Notebook {
             in_deck_order(self).iter().map(|card| card.id).collect()
@@ -1284,7 +1298,7 @@ fn deck_row<S: Host>(state: &DeckRow<'_>, name: &TextEdit) -> El {
         return rune::row()
             .key(format!("deck-{}", deck.id))
             .h(crate::sidebar::ROW_HEIGHT)
-            .px(inset)
+            .px(inset + crate::sidebar::ROW_PAD)
             .center_y()
             .fill(t.control_off)
             .child(
@@ -1302,12 +1316,16 @@ fn deck_row<S: Host>(state: &DeckRow<'_>, name: &TextEdit) -> El {
     let mut line = rune::row()
         .key(format!("deck-{}", deck.id))
         .h(crate::sidebar::ROW_HEIGHT)
-        .pl(inset)
+        .pl(inset + crate::sidebar::ROW_PAD)
+        .pr(crate::sidebar::ROW_PAD)
         .gap(crate::sidebar::GAP_AFTER_ICON)
         .radius(5.0)
         .center_y()
         .fill(crate::sidebar::row_fill(selected, moving))
-        .child(crate::sidebar::icon(crate::sidebar::Kind::Deck, &deck.name))
+        .child(
+            crate::sidebar::icon(crate::sidebar::Kind::Deck, &deck.name)
+                .key(format!("deck-icon-{}", deck.id)),
+        )
         .child(
             row().grow(1.0).child(
                 text(deck.name.clone())
@@ -1378,7 +1396,11 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
 
     // Navigation: the whole library, and the saved views under it.
     let navigation = vec![
-        search_row::<S>(s),
+        search_row::<S>(
+            s,
+            crate::keymap::chord(Surface::Library, Command::FocusSearch)
+                .map(|found| found.to_string()),
+        ),
         all_cards_row::<S>(),
         views_section::<S>(s),
     ];
@@ -1479,7 +1501,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
 
 /// The way into the search field, which lives in the filter bar so it stays beside the list it
 /// narrows. The chord is read from the table: the row cannot promise a key the table does not bind.
-fn search_row<S: Host>(s: &S) -> El {
+fn search_row<S: Host>(s: &S, chord: Option<String>) -> El {
     let t = tok::theme(true);
     let mut search = row()
         .key("sidebar-search")
@@ -1496,7 +1518,7 @@ fn search_row<S: Host>(s: &S) -> El {
                 .color(t.text_secondary)
                 .grow(1.0),
         );
-    if let Some(chord) = crate::keymap::chord(Surface::Library, Command::FocusSearch) {
+    if let Some(chord) = chord {
         search = search.child(
             text(chord.to_string())
                 .font(type_::MONO_CAPTION)
@@ -1556,17 +1578,10 @@ fn all_cards_row<S: Host>() -> El {
 /// pointer when a card is edited.
 fn tag_rows<S: Host>(s: &S) -> Vec<El> {
     let library = s.library();
-    let mut names: Vec<&str> = library
-        .snapshot
-        .cards
+    library
+        .tags
         .iter()
-        .flat_map(|card| card.tags.iter().map(String::as_str))
-        .collect();
-    names.sort_unstable();
-    names.dedup();
-    names.truncate(TAG_ROWS_LIMIT);
-    names
-        .into_iter()
+        .take(TAG_ROWS_LIMIT)
         .map(|name| {
             let mut item = crate::sidebar::Row::new(format!("tag-{name}"), name)
                 .kind(crate::sidebar::Kind::Tag);
@@ -1704,11 +1719,15 @@ fn view_row<S: Host>(s: &S, view: &SavedView) -> El {
     row()
         .key(format!("view-{}", view.id))
         .h(crate::sidebar::ROW_HEIGHT)
+        .px(crate::sidebar::ROW_PAD)
         .gap(crate::sidebar::GAP_AFTER_ICON)
         .radius(5.0)
         .center_y()
         .fill(crate::sidebar::row_fill(selected, false))
-        .child(crate::sidebar::icon(crate::sidebar::Kind::View, &view.name))
+        .child(
+            crate::sidebar::icon(crate::sidebar::Kind::View, &view.name)
+                .key(format!("view-icon-{}", view.id)),
+        )
         .child(label)
         .on_press(move |s: &mut S| s.library_mut().select_view(id))
 }
