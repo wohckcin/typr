@@ -2134,6 +2134,7 @@ fn main() {
         }),
         ("library-empty", |state: &mut State| {
             state.screen = Screen::Library;
+            state.seeded = true;
         }),
         ("library-grid", |state: &mut State| {
             state.library = Library::seeded(9);

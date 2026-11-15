@@ -1564,25 +1564,35 @@ fn every_kind_of_sidebar_row_lines_up() {
             .map(|(_, rect)| *rect)
             .unwrap_or_else(|| panic!("{key} is drawn"))
     };
-    let height = crate::sidebar::ROW_HEIGHT;
-    let labels = ["deck-all-label", "deck-label-1", "view-label-9"];
-    let rows = ["deck-all", "deck-1", "view-9"];
-    // The row's own offset is measured from its edge elsewhere (41 points: the inset, the icon
-    // slot and the gap); here the column's padding is on top of it, so what the column must keep
-    // is that every kind of row lands on the same column x.
-    let first = find(labels[0])[0];
-    for (row, label) in rows.iter().zip(labels) {
+    // Rows the column builds share a height; the search row is the one full-bleed exception the
+    // design names, at 28 points.
+    for row in ["deck-all", "deck-1", "view-9"] {
         let rect = find(row);
         assert!(
-            (rect[3] - height).abs() < 0.5,
-            "{row} is {height} points tall, not {}",
-            rect[3]
+            (rect[3] - crate::sidebar::ROW_HEIGHT).abs() < 0.5,
+            "{row} is {} points tall, not {}",
+            rect[3],
+            crate::sidebar::ROW_HEIGHT
         );
-        let drawn = find(label);
+    }
+    assert!(
+        (find("sidebar-search")[3] - 28.0).abs() < 0.5,
+        "the search row is full-bleed at 28 points"
+    );
+    // The row's own offset is measured from its edge (12 padding + 20 icon + 14 gap); here the
+    // column's inset is on top of it, so what the column must keep is one shared x for every
+    // kind of label, the search row included.
+    let first = find("deck-all-label")[0];
+    for label in [
+        "deck-label-1",
+        "view-label-9",
+        "sidebar-search-label",
+        "nav-import-label",
+    ] {
+        let drawn = find(label)[0];
         assert!(
-            (drawn[0] - first).abs() < 0.5,
-            "{label} starts at {first} points like the others, not {}",
-            drawn[0]
+            (drawn - first).abs() < 0.5,
+            "{label} starts at {first} points like the others, not {drawn}"
         );
     }
 }

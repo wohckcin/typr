@@ -1508,12 +1508,13 @@ fn search_row<S: Host>(s: &S, chord: Option<String>) -> El {
         .w_full()
         .h(28.0)
         .radius(5.0)
-        .pl(crate::sidebar::LABEL_X)
-        .pr(10.0)
+        .pl(crate::sidebar::ROW_PAD + crate::sidebar::LABEL_X)
+        .pr(crate::sidebar::ROW_PAD)
         .center_y()
         .fill(t.control_off.alpha(0.35))
         .child(
             text("Search")
+                .key("sidebar-search-label")
                 .font(type_::BODY)
                 .color(t.text_secondary)
                 .grow(1.0),
