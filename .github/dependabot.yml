@@ -1,0 +1,11 @@
+version: 2
+
+updates:
+  # The workflow pins each action to a commit, which is what makes a tag repoint harmless — and what
+  # makes a pin go stale. Dependabot reads the `# vX.Y.Z` comments and opens a PR with the new SHA.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
