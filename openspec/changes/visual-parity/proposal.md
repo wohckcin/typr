@@ -43,7 +43,7 @@ None.
   `page_header`, `empty_state`, `review_canvas`).
 - `crates/typr/src/{library,editor,study,history,settings}.rs`: rebuilt on those constructors; no
   behaviour changes.
-- New `crates/typr/tests/visual.rs` and `crates/typr/tests/baselines/*.png`: per-scene baselines compared
+- New `crates/typr/tests/visual.rs` and `crates/typr/tests/baselines/<os>/*.png`: per-scene baselines compared
   by pixel difference with a stated tolerance.
 - `.github/workflows/ci.yml`: the baseline comparison joins the scene loop.
 - No dependency changes; the kit already provides the tokens, radii and shadows.

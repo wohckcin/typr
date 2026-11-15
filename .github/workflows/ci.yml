@@ -117,8 +117,8 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.record_baselines
         with:
-          name: baselines-linux
-          path: crates/typr/tests/baselines/linux
+          name: baselines-ubuntu-26.04
+          path: crates/typr/tests/baselines/ubuntu-26.04
           if-no-files-found: error
 
       - name: Snapshot every scene
@@ -133,7 +133,28 @@ jobs:
 
       # Each platform keeps its own set (`tests/baselines/<os>/`), recorded on that platform. The
       # Linux set was drawn on this image; a Mac's differs by up to 3% per scene.
+      - name: Check the runner image is the one that drew the baselines
+        env:
+          TYPR_BASELINE_SET: ubuntu-26.04
+        run: |
+          set -euo pipefail
+          recorded=$(tr -s '[:space:]' ' ' < "crates/typr/tests/baselines/$TYPR_BASELINE_SET/image.txt")
+          actual="${ImageOS:-unset} ${ImageVersion:-unset}"
+          echo "recorded: $recorded"
+          echo "runner:   $actual"
+          if [ "$actual" = "unset unset" ]; then
+            echo "The runner exposes neither ImageOS nor ImageVersion, so the image check cannot run." >&2
+            exit 1
+          fi
+          if [ "${actual% }" != "${recorded% }" ]; then
+            echo "The runner image changed, so every baseline can differ without a line of code changing." >&2
+            echo "Re-record from a dispatch run (record_baselines on), download baselines-$TYPR_BASELINE_SET and commit it." >&2
+            exit 1
+          fi
+
       - name: Compare every scene with its baseline
+        env:
+          TYPR_BASELINE_SET: ubuntu-26.04
         run: |
           set -euo pipefail
           export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"

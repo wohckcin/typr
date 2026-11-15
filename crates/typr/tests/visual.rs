@@ -21,12 +21,22 @@ const CHANNEL_TOLERANCE: u8 = 2;
 /// row, a glyph swap in one label — passes, and no threshold can both absorb rounding and catch those.
 const DIFFERING_SHARE: f64 = 0.0005;
 
-/// The set for this platform. Fonts are rasterised by the platform, so a picture recorded on one
-/// machine says nothing about another's: the Linux runner and the author's Mac each keep a set.
+/// Which set to compare with: `TYPR_BASELINE_SET` when set, otherwise this platform's name.
+///
+/// Fonts are rasterised by the platform, so a picture recorded on one machine says nothing about
+/// another's. CI names its set explicitly, because a Linux machine running the record command would
+/// otherwise overwrite the very pictures the runner checks.
+fn baseline_set() -> String {
+    std::env::var("TYPR_BASELINE_SET")
+        .ok()
+        .filter(|set| !set.trim().is_empty())
+        .unwrap_or_else(|| std::env::consts::OS.to_string())
+}
+
 fn baselines() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/baselines")
-        .join(std::env::consts::OS)
+        .join(baseline_set())
 }
 
 fn scenes() -> Vec<String> {
@@ -114,9 +124,9 @@ fn every_scene_matches_its_baseline() {
         }
         if !baseline.exists() {
             failures.push(format!(
-                "{scene}: no baseline at {}\n  record {}'s set with TYPR_UPDATE_BASELINES=1 cargo test --test visual",
+                "{scene}: no baseline at {}\n  record the {} set with TYPR_UPDATE_BASELINES=1 cargo test --test visual",
                 baseline.display(),
-                std::env::consts::OS
+                baseline_set()
             ));
             continue;
         }
