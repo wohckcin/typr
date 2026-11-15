@@ -41,8 +41,9 @@ fn preprocessing_twice_changes_nothing() {
 }
 
 #[test]
-fn a_highlight_loses_its_markers() {
-    assert_eq!(rewrite("==the Krebs cycle=="), "**the Krebs cycle**");
+fn a_highlight_is_left_for_the_renderer() {
+    // The toolkit draws `==text==` on a background, so the markers must reach it unchanged.
+    assert_eq!(rewrite("==the Krebs cycle=="), "==the Krebs cycle==");
 }
 
 #[test]

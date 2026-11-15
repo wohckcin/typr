@@ -1,0 +1,31 @@
+# Vendored from anomalyco/rune at 764fbe9e75ebc91ab94c830181920826fb417be0 (crates/rune-kit). Local changes are listed in PATCHES.md.
+#
+# This crate is its own workspace root: the typr workspace above it does not list it as a member,
+# and cargo refuses a package that inherits from a workspace it is not part of.
+[workspace]
+
+[package]
+name = "rune-kit"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+description = "Generic, themable components for Rune. Components read only semantic tokens (`Kit`); a theme crate supplies them."
+
+[dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0", default-features = false }
+# The built-in syntax highlighter: Desktop's own lexers (syntax).
+rune-highlights = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+rune-mermaid = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0", optional = true }
+rune-motion = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+# Search's accent folding (`search`): NFD, the data Parley already links.
+icu_normalizer = { version = "2", default-features = false, features = ["compiled_data"] }
+unicode-segmentation = "1.13"
+pulldown-cmark = { version = "0.13", default-features = false, optional = true }
+
+[features]
+# `Markdown` and `MarkdownStyle`.
+markdown = ["dep:pulldown-cmark"]
+# Native ```mermaid diagrams in `Markdown` (flowcharts, sequence and state diagrams), and `mermaid`.
+mermaid = ["markdown", "dep:rune-mermaid"]
+# Phase timings for the headless benches (`markdown_resize`).
+frame-profile = ["rune/frame-profile"]

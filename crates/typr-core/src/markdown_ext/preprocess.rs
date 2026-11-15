@@ -184,32 +184,10 @@ fn code_end(chars: &[char], from: usize, width: usize) -> Option<usize> {
 
 /// One construct starting at `at`, as the text to write and how many characters it consumed.
 fn construct(chars: &[char], at: usize) -> Option<(String, usize)> {
-    highlight(chars, at)
-        .or_else(|| ruby(chars, at))
+    ruby(chars, at)
         .or_else(|| math(chars, at))
         .or_else(|| superscript(chars, at))
         .or_else(|| subscript(chars, at))
-}
-
-/// `==text==` becomes bold: the renderer has no inline background, and bold is what the design records
-/// as the fallback. The markers are gone, which is what a reader sees.
-fn highlight(chars: &[char], at: usize) -> Option<(String, usize)> {
-    if chars.get(at) != Some(&'=') || chars.get(at + 1) != Some(&'=') {
-        return None;
-    }
-    let body_at = at + 2;
-    let mut i = body_at;
-    while i + 1 < chars.len() {
-        if chars[i] == '=' && chars[i + 1] == '=' {
-            let body: String = chars[body_at..i].iter().collect();
-            if body.trim().is_empty() {
-                return None;
-            }
-            return Some((format!("**{}**", body.trim()), i + 2 - at));
-        }
-        i += 1;
-    }
-    None
 }
 
 /// `{base}(reading)` becomes `base (reading)`: both are kept, in reading order.

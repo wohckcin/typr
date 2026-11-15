@@ -2767,7 +2767,6 @@ dependencies = [
 [[package]]
 name = "rune-kit"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=764fbe9e75ebc91ab94c830181920826fb417be0#764fbe9e75ebc91ab94c830181920826fb417be0"
 dependencies = [
  "icu_normalizer",
  "pulldown-cmark",

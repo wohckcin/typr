@@ -24,9 +24,20 @@ pub fn body(source: &str) -> El {
 
 /// One card that writes every construct in `SUPPORTED`, as Mochi's shortcut panel spells it.
 ///
+/// The degraded constructs come first: the kitchen-sink scene is one window tall, and those rewrites are
+/// the ones a reviewer must see on the picture.
+///
 /// The inventory test compares these names with the list, and the render tests read the "renders as"
 /// column, so a construct cannot be answered for in one place and left unproven in the other.
 pub const CASES: &[(&str, &str)] = &[
+    ("image", "![plate](plate.png)"),
+    ("highlight", "==the Krebs cycle=="),
+    ("ruby", "{漢字}(かんじ)"),
+    ("superscript", "20^th^ century"),
+    ("subscript", "H~2~0"),
+    ("definition-list", "Krebs cycle\n: in the matrix"),
+    ("inline-math", "the area is $\\pi r^2$"),
+    ("display-math", "$$\n\\int_0^1 x\\,dx\n$$"),
     ("strong", "**the Krebs cycle**"),
     ("emphasis", "*the Krebs cycle*"),
     ("strikethrough", "~~the Krebs cycle~~"),
@@ -35,17 +46,9 @@ pub const CASES: &[(&str, &str)] = &[
     ("table", "| stage | where |\n|---|---|\n| Krebs | matrix |"),
     ("task-list", "- [x] the Krebs cycle"),
     ("link", "[the Krebs cycle](https://example.com)"),
-    ("image", "![plate](plate.png)"),
     ("heading", "## the Krebs cycle"),
     ("list", "- the Krebs cycle"),
     ("quote", "> the Krebs cycle"),
-    ("highlight", "==the Krebs cycle=="),
-    ("ruby", "{漢字}(かんじ)"),
-    ("superscript", "20^th^ century"),
-    ("subscript", "H~2~0"),
-    ("definition-list", "Krebs cycle\n: in the matrix"),
-    ("inline-math", "the area is $\\pi r^2$"),
-    ("display-math", "$$\n\\int_0^1 x\\,dx\n$$"),
     ("raw-html", "<b>the Krebs cycle</b>"),
     ("footnote", "the Krebs cycle[^1]"),
     ("latex", "\\frac{a}{b}"),

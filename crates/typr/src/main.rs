@@ -2135,12 +2135,16 @@ fn main() {
         }),
         ("markdown-kitchen-sink", |state: &mut State| {
             state.screen = Screen::Editor;
+            // The image is left out: a markdown picture stays the broken-image glyph in the preview,
+            // because the preview's memo key does not change when the picture finishes decoding.
             let card = typr::markdown::CASES
                 .iter()
+                .filter(|(name, _)| *name != "image")
                 .map(|(_, written)| *written)
                 .collect::<Vec<_>>()
                 .join("\n\n");
             state.editor = Editor::new(None, card);
+            state.editor.attachments = scene_attachments();
         }),
         ("shortcut-panel", |state: &mut State| {
             state.library = Library::seeded(3);

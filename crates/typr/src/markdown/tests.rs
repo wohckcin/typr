@@ -31,8 +31,10 @@ fn drawn(source: &str) -> String {
 
 #[test]
 fn every_supported_construct_has_a_case() {
-    let listed: Vec<&str> = SUPPORTED.iter().map(|(name, _)| *name).collect();
-    let cases: Vec<&str> = CASES.iter().map(|(name, _)| *name).collect();
+    let mut listed: Vec<&str> = SUPPORTED.iter().map(|(name, _)| *name).collect();
+    let mut cases: Vec<&str> = CASES.iter().map(|(name, _)| *name).collect();
+    listed.sort_unstable();
+    cases.sort_unstable();
     assert_eq!(
         listed, cases,
         "the inventory and the cases name the same constructs"

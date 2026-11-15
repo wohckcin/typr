@@ -28,7 +28,7 @@ pub const SUPPORTED: &[(&str, Support)] = &[
     ("heading", Support::Rendered),
     ("list", Support::Rendered),
     ("quote", Support::Rendered),
-    ("highlight", Support::Degraded),
+    ("highlight", Support::Rendered),
     ("ruby", Support::Degraded),
     ("superscript", Support::Degraded),
     ("subscript", Support::Degraded),
