@@ -32,7 +32,7 @@ pub fn body(source: &str) -> El {
 pub const CASES: &[(&str, &str)] = &[
     ("image", "![plate](plate.png)"),
     ("highlight", "==the Krebs cycle=="),
-    ("ruby", "{漢字}(かんじ)"),
+    ("ruby", "{mitosis}(my-TOH-sis)"),
     ("superscript", "20^th^ century"),
     ("subscript", "H~2~0"),
     ("definition-list", "Krebs cycle\n: in the matrix"),
