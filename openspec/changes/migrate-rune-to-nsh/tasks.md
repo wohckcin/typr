@@ -18,7 +18,7 @@
 - [x] 3.2 `ui` core set: button/icon button (variants, sizes, hover/active/focus/disabled/loading), input, field, checkbox, switch, select, tabs/segmented, menu, popover, tooltip, dialog, alert helper, toast, list row, surface/card, badge, separator, empty, skeleton, spinner; verify a gallery page shows every variant and state and a `Headless` test presses each control by role
 - [x] 3.3 `App` root, `main.rs` desktop runner and `shell.rs` (sidebar + work area) with stores provided by context; verify `cargo run -p typr` opens the window and a `Headless` test sees the sidebar headings
 - [x] 3.4 Rewrite `tests/tokens.rs` to fail on spacing, font-size, radius or colour literals and on direct `nsh_base` control use in screen modules; verify it fails on a planted literal and passes after removing it
-- [ ] 3.5 Write the motion inventory for every screen in `DESIGN.md` before screen work starts
+- [x] 3.5 Write the motion inventory for every screen in `DESIGN.md` before screen work starts
 
 ## 4. Screens (each task deletes its Rune module and ports its flow tests to Headless)
 
