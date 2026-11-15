@@ -18,9 +18,9 @@ Depends on `settings-screen` (theme and scale tokens) and on every screen it res
 
 ## 3. Review surface
 
-- [ ] 3.1 `review_canvas`: dimmed background, centred card, reserved answer slot, hints below the card.
+- [x] 3.1 `review_canvas`: dimmed background, centred card, reserved answer slot, hints below the card.
   - **Verification**: `revealing_does_not_move_the_card` compares the card's rect before and after a reveal; `the_hints_sit_under_the_card` compares their rects.
-- [ ] 3.2 Empty states everywhere a list or queue can be empty, including the queue offering a cram session.
+- [x] 3.2 Empty states everywhere a list or queue can be empty, including the queue offering a cram session.
   - **Verification**: `an_empty_library_offers_a_card` and `an_empty_queue_offers_a_cram`.
 
 ## 4. Baselines
@@ -36,7 +36,7 @@ Depends on `settings-screen` (theme and scale tokens) and on every screen it res
 
 - [x] 5.1 README documents the token set, how to regenerate a baseline, and how to add a scene.
   - **Verification**: the section exists and names both commands.
-- [ ] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping, baselines matching.
+- [x] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping, baselines matching.
   - **Verification**: all report success.
 
 ## Workflow follow-up
