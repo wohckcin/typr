@@ -33,3 +33,13 @@ pub fn skeleton() -> impl IntoElement {
 pub fn spinner_label(label: &'static str) -> impl IntoElement {
     text(label).text_sm().text_color(move || tokens::muted_foreground())
 }
+
+/// A key's name, drawn as a small keycap.
+pub fn keycap(chord: impl IntoReactive<SharedString>) -> impl IntoElement {
+    view()
+        .px_2()
+        .rounded(tokens::radius)
+        .border_1()
+        .border_color(move || tokens::border())
+        .child(text(chord).text_xs().text_color(move || tokens::muted_foreground()))
+}

@@ -3,6 +3,7 @@
 pub mod editor;
 pub mod grid;
 pub mod history;
+pub mod keymap;
 pub mod library;
 pub mod settings;
 pub mod sidebar;
