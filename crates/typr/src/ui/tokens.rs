@@ -5,7 +5,7 @@
 //! theme's `AdaptiveColor`, which resolves per commit.
 
 use nsh_base::{theme, tokens_of};
-use nsh_core::prelude::{AdaptiveColor, Points};
+use nsh_core::prelude::{AdaptiveColor, Points, px};
 
 /// The app's theme file: the default theme with the roles this app adds.
 pub const THEME: &str = include_str!("../../theme.json");
@@ -82,4 +82,9 @@ pub fn review_backdrop() -> AdaptiveColor {
 /// The radius of a card surface and of a small control inside one.
 pub fn radius() -> Points {
     theme().radius
+}
+
+/// The width of the sidebar: a layout measurement the screens take rather than write.
+pub fn sidebar_width() -> Points {
+    px(220.0)
 }

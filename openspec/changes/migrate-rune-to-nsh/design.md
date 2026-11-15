@@ -88,3 +88,8 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - `src/shell.rs` holds the `App` root and the sidebar. The work area is a placeholder until the screens are ported.
 - `src/bin/typr_nsh.rs` is the NSH desktop runner. `default-run = "typr_nsh"` makes `cargo run -p typr` open it.
 - `src/main.rs` stays as the Rune binary until task 6.1 removes it.
+
+## Task 3.4 token check
+
+- `scripts/check-tokens.sh` checks NSH screens only, starting with `src/shell.rs`. The Rune screen modules are not checked because they are deleted as each screen is ported (tasks 4.x); each port adds its file to the list.
+- The `ui` layer is exempt, since it is where the values are named.

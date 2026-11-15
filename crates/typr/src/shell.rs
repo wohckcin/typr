@@ -41,7 +41,7 @@ fn group(name: &'static str, count: impl Fn() -> usize + 'static) -> impl IntoEl
 fn sidebar() -> impl IntoElement {
     let library = library();
     view()
-        .w(px(220.0))
+        .w(tokens::sidebar_width())
         .p_3()
         .gap_3()
         .border_r_1()
