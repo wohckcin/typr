@@ -1,4 +1,4 @@
-# Vendored from anomalyco/rune at 764fbe9e75ebc91ab94c830181920826fb417be0 (crates/rune-kit). Local changes are listed in PATCHES.md.
+# Vendored from anomalyco/rune at 615f06a43a565c4d9abe2d883b12fcd895421f4e (crates/rune-kit). Local changes are listed in PATCHES.md.
 #
 # This crate is its own workspace root: the typr workspace above it does not list it as a member,
 # and cargo refuses a package that inherits from a workspace it is not part of.
@@ -12,11 +12,11 @@ license = "MIT"
 description = "Generic, themable components for Rune. Components read only semantic tokens (`Kit`); a theme crate supplies them."
 
 [dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0", default-features = false }
+rune = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e", default-features = false }
 # The built-in syntax highlighter: Desktop's own lexers (syntax).
-rune-highlights = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
-rune-mermaid = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0", optional = true }
-rune-motion = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+rune-highlights = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+rune-mermaid = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e", optional = true }
+rune-motion = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
 # Search's accent folding (`search`): NFD, the data Parley already links.
 icu_normalizer = { version = "2", default-features = false, features = ["compiled_data"] }
 unicode-segmentation = "1.13"
@@ -33,7 +33,7 @@ frame-profile = ["rune/frame-profile"]
 # Standalone builds (`cargo test --manifest-path vendor/rune-kit/Cargo.toml`) need the patches the typr
 # workspace root carries. As a dependency these entries are ignored.
 [patch.crates-io]
-winit = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
-parley_engine = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
-wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
-accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "764fbe9e75ebc91ab94c830181920826fb417be0" }
+winit = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
