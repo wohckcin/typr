@@ -657,3 +657,111 @@ fn the_views_scene_shows_a_pinned_card_under_its_view() {
     );
     assert!(library.pinned_only, "the pinned-only row reads as chosen");
 }
+
+/// A library of `count` cards in a deck that is read `view` ways, with the first card selected.
+fn in_view(count: usize, view: ViewMode) -> Library {
+    let mut library = Library::seeded(count);
+    let deck = typr_core::store::Deck {
+        id: 1,
+        parent: None,
+        name: "Seeded".to_string(),
+        archived: false,
+        reverse: None,
+        template: None,
+        view,
+    };
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        snapshot.decks = vec![deck];
+    }
+    library.selected_deck = Some(1);
+    library.selected_card = Some(1);
+    library.refresh();
+    library
+}
+
+fn draw(library: Library) -> rune::Runtime<Library> {
+    let mut runtime = rune::Runtime::new(
+        library,
+        |s: &Library, _: &mut rune::Cx<Library>| view::<Library>(s),
+        (1200.0, 800.0),
+        rune::Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.0);
+    runtime
+}
+
+#[test]
+fn each_view_draws_the_same_cards() {
+    let grid = draw(in_view(3, ViewMode::Grid));
+    let list = draw(in_view(3, ViewMode::List));
+    let notebook = draw(in_view(3, ViewMode::Notebook));
+    let column = draw(in_view(3, ViewMode::Column));
+
+    for id in 1..=3 {
+        assert!(
+            grid.find(&format!("tile-{id}")).is_some(),
+            "the grid lost card {id}"
+        );
+        assert!(
+            list.find(&format!("list-row-{id}")).is_some(),
+            "the list lost card {id}"
+        );
+        assert!(
+            notebook.find(&format!("notebook-{id}")).is_some(),
+            "the notebook lost card {id}"
+        );
+    }
+    assert!(
+        column.find("column-card").is_some(),
+        "the column view draws no card at all"
+    );
+    assert!(
+        column.find("column-name").is_some(),
+        "the column view does not name the card it reads"
+    );
+    // The column view is one card at reading width, so it cannot draw the other two, and saying so
+    // is the point: it is the only view that shows less than the filter holds.
+    assert!(column.find("notebook-1").is_none());
+}
+
+#[test]
+fn the_notebook_reads_in_the_order_the_deck_holds() {
+    let mut library = in_view(3, ViewMode::Notebook);
+    {
+        let snapshot = std::sync::Arc::make_mut(&mut library.snapshot);
+        // Deliberately not the id order: the deck holds card 3 first.
+        snapshot.cards[0].position = 2;
+        snapshot.cards[1].position = 0;
+        snapshot.cards[2].position = 1;
+    }
+    // `visible` is an owned copy of the cards, so an order changed behind `refresh` would not be
+    // the order the view reads.
+    library.refresh();
+    let runtime = draw(library);
+    let names: Vec<String> = runtime
+        .elements()
+        .iter()
+        .filter_map(|element| element.key.clone())
+        .filter(|key| key.starts_with("notebook-") && !key.starts_with("notebook-name-"))
+        .collect();
+    let mut positions: Vec<(String, f32)> = names
+        .into_iter()
+        .filter_map(|key| {
+            let rect = runtime
+                .elements()
+                .iter()
+                .find(|each| each.key.as_deref() == Some(key.as_str()) && !each.exiting)?
+                .rect;
+            Some((key, rect[1]))
+        })
+        .collect();
+    positions.sort_by(|left, right| left.1.total_cmp(&right.1));
+    let order: Vec<&str> = positions.iter().map(|(key, _)| key.as_str()).collect();
+    assert_eq!(
+        order,
+        vec!["notebook-2", "notebook-3", "notebook-1"],
+        "the notebook stacks the deck's order, not the ids"
+    );
+}

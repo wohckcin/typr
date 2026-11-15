@@ -8,7 +8,7 @@
 
 ## 2. Views
 
-- [ ] 2.1 Split `library::view` into `grid_view`, `list_view`, `notebook_view` and `column_view`, chosen by the deck's `ViewMode`; the list view keeps today's 44 px rows. Verification: `each_view_draws_the_same_cards`.
+- [x] 2.1 Split `library::view` into `grid_view`, `list_view`, `notebook_view` and `column_view`, chosen by the deck's `ViewMode`; the list view keeps today's 44 px rows. Verification: `each_view_draws_the_same_cards`.
 - [ ] 2.2 Notebook view draws full card contents with an edit affordance per card, keyed `notebook-{id}`. Verification: `the_notebook_view_draws_a_whole_card` asserts the second side appears in the view and the first does not in the grid.
 - [ ] 2.3 Column view draws one card's contents at reading width with in-card find (next and previous match, and a no-match state). Verification: `the_column_view_finds_the_second_match`.
 - [ ] 2.4 Add the view switcher to the deck header, keyed `view-grid`, `view-list`, `view-notebook`, `view-column`, calling `Host::set_view`. Verification: `switching_views_keeps_the_selection`.

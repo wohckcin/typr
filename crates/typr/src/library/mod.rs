@@ -12,6 +12,7 @@ use rune::{
 use rune_kit::{Button, ButtonVariant, Dialog, Kit, Markdown, MarkdownStyle, root};
 
 use typr_core::keymap::{Command, Surface};
+use typr_core::library_view::ViewMode;
 
 use typr_core::store::{
     CardMode, CardSummary, Deck, Id, SavedView, Snapshot, Sort, SortDir, ViewSpec,
@@ -42,6 +43,10 @@ pub const SIDEBAR_WIDTH: f32 = 200.0;
 
 /// The width the grid assumes before it has been laid out: a three-column window.
 pub const FALLBACK_GRID_WIDTH: f32 = 767.0;
+
+/// How wide a notebook card reads, and how wide a column view's card reads.
+pub const NOTEBOOK_WIDTH: f32 = 760.0;
+pub const COLUMN_WIDTH: f32 = 720.0;
 
 /// The tallest a tile may grow, so one long card cannot swallow the deck.
 pub const TILE_MAX_HEIGHT: f32 = 160.0;
@@ -407,6 +412,15 @@ impl Library {
     }
 
     /// The cards on screen, in the order they are drawn.
+    /// How the selected deck is read. The whole library has no view of its own, so it reads as the
+    /// grid, which is what every deck looked like before views existed.
+    pub fn view_mode(&self) -> ViewMode {
+        self.selected_deck
+            .and_then(|id| self.snapshot.decks.iter().find(|deck| deck.id == id))
+            .map(|deck| deck.view)
+            .unwrap_or_default()
+    }
+
     pub fn cards(&self) -> &[CardSummary] {
         &self.visible
     }
@@ -716,6 +730,7 @@ impl Library {
             .map(|id| CardSummary {
                 id,
                 deck: 1,
+                position: id,
                 kind: typr_core::store::CardKind::Text,
                 image: None,
                 caption: None,
@@ -1550,6 +1565,45 @@ fn plural(count: usize) -> &'static str {
 
 /// The library screen.
 pub fn view<S: Host>(s: &S) -> El {
+    let list = view_body::<S>(s);
+    let body = row()
+        .w_full()
+        .h_full()
+        .fill(tok::theme(true).bg)
+        .on_layout(|s: &mut S, rect: [f32; 4]| {
+            // The window, less the sidebar: measuring the grid's own parent would make the tiles
+            // decide the width they are laid out in.
+            let width = (rect[2] - SIDEBAR_WIDTH).max(0.0);
+            if (s.library().grid_width - width).abs() > 0.5 {
+                s.library_mut().grid_width = width;
+            }
+        })
+        .child(deck_sidebar::<S>(s))
+        .child(
+            col()
+                .grow(1.0)
+                .h_full()
+                .child(filter_bar::<S>(s))
+                .child(list),
+        );
+    let mut layer = Vec::new();
+    confirmation::<S>(s, &mut layer);
+    deck_confirmation::<S>(s, &mut layer);
+    root(body, layer)
+}
+
+/// The list area, in whichever view the selected deck is read.
+fn view_body<S: Host>(s: &S) -> El {
+    match s.library().view_mode() {
+        ViewMode::Grid => grid_view::<S>(s),
+        ViewMode::List => list_view::<S>(s),
+        ViewMode::Notebook => notebook_view::<S>(s),
+        ViewMode::Column => column_view::<S>(s),
+    }
+}
+
+/// The deck's cards as tiles, as many across as the window holds.
+fn grid_view<S: Host>(s: &S) -> El {
     let library = s.library();
     let now = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock);
     // The grid is laid out from the width the scroll viewport actually got, so the column count
@@ -1567,7 +1621,7 @@ pub fn view<S: Host>(s: &S) -> El {
     } else {
         tile_rows(library.visible.len(), columns)
     };
-    let list = col()
+    col()
         .key("cards")
         .grow(1.0)
         .h_full()
@@ -1597,31 +1651,179 @@ pub fn view<S: Host>(s: &S) -> El {
                         line
                     },
                 ),
-        );
-    let body = row()
-        .w_full()
+        )
+}
+
+/// One line per card: the anatomy a version-11 library had, kept as its own view.
+fn list_view<S: Host>(s: &S) -> El {
+    let library = s.library();
+    let now = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock);
+    let lines = library.visible.len();
+    col()
+        .key("cards")
+        .grow(1.0)
         .h_full()
-        .fill(tok::theme(true).bg)
-        .on_layout(|s: &mut S, rect: [f32; 4]| {
-            // The window, less the sidebar: measuring the grid's own parent would make the tiles
-            // decide the width they are laid out in.
-            let width = (rect[2] - SIDEBAR_WIDTH).max(0.0);
-            if (s.library().grid_width - width).abs() > 0.5 {
-                s.library_mut().grid_width = width;
-            }
+        .scroll(ScrollSpec {
+            stick_bottom: false,
         })
-        .child(deck_sidebar::<S>(s))
         .child(
             col()
+                .key("rows")
+                .growth(GrowthSpec::default())
+                .virtual_rows(
+                    lines,
+                    ROW_HEIGHT,
+                    |_s: &S, index| -> Cow<'_, str> { format!("line-{index}").into() },
+                    move |s: &S, index| {
+                        s.library().built_rows.fetch_add(1, Ordering::Relaxed);
+                        list_row::<S>(s, index, now)
+                    },
+                ),
+        )
+}
+
+/// One card as one line: what it is called, what it opens with, and where its schedule stands.
+fn list_row<S: Host>(s: &S, index: usize, now: i64) -> El {
+    let t = tok::theme(true);
+    let library = s.library();
+    let Some(card) = library.visible.get(index) else {
+        return row().key("line").h(ROW_HEIGHT).w_full();
+    };
+    let id = card.id;
+    let (word, kicker) = self::tile::words(self::tile::state(card, now));
+    let mut line = row()
+        .w_full()
+        .h(ROW_HEIGHT)
+        .px(12.0)
+        .center_y()
+        .gap(8.0)
+        .fill(if library.selected_card == Some(id) {
+            t.control_off
+        } else {
+            t.bg
+        })
+        .child(
+            text(card.name.clone())
+                .font(type_::LABEL)
+                .shrink()
+                .color(t.text),
+        )
+        .child(
+            text(card.preview.clone())
+                .font(type_::BODY)
                 .grow(1.0)
-                .h_full()
-                .child(filter_bar::<S>(s))
-                .child(list),
+                .shrink()
+                .color(t.text_secondary),
+        )
+        .child(text(word).font(type_::MONO_CAPTION).color(t.text_secondary));
+    if card.pinned {
+        line = line.child(text("\u{2605}").color(t.text));
+    }
+    let _ = kicker;
+    // The virtual row keys the element the builder returns, so the line that carries the card's
+    // key is one level in: a key on the returned element would be replaced by `line-{index}`.
+    col().w_full().h(ROW_HEIGHT).child(
+        line.on_press(move |s: &mut S| {
+            s.library_mut().selected_card = Some(id);
+            s.open_card(id);
+        })
+        // The key is set last because a press target wraps its element, and the wrapper is what the
+        // elements list shows.
+        .key(format!("list-row-{id}")),
+    )
+}
+
+/// Every card's contents stacked, which is the view a deck of long cards is read in.
+fn notebook_view<S: Host>(s: &S) -> El {
+    let library = s.library();
+    let mut body = col()
+        .key("cards")
+        .grow(1.0)
+        .h_full()
+        .gap(GAP)
+        .padding(16.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(col().key("rows").growth(GrowthSpec::default()));
+    for card in in_deck_order(library) {
+        body = body.child(notebook_card::<S>(s, card));
+    }
+    body
+}
+
+/// The cards of the shown deck in the order the deck holds them.
+fn in_deck_order(library: &Library) -> Vec<&CardSummary> {
+    let mut cards: Vec<&CardSummary> = library.visible.iter().collect();
+    cards.sort_by_key(|card| (card.position, card.id));
+    cards
+}
+
+/// One card in the notebook: its name and its contents, read at a comfortable width.
+fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
+    let t = tok::theme(true);
+    let id = card.id;
+    let side = self::tile::first_side(card);
+    col()
+        .key(format!("notebook-{id}"))
+        .w_full()
+        .max_w(NOTEBOOK_WIDTH)
+        .gap(6.0)
+        .padding(12.0)
+        .radius(6.0)
+        .fill(if s.library().selected_card == Some(id) {
+            t.control_off
+        } else {
+            t.card
+        })
+        .child(
+            text(card.name.clone())
+                .key(format!("notebook-name-{id}"))
+                .font(type_::LABEL)
+                .color(t.text),
+        )
+        .child(Markdown::new(side).render(&MarkdownStyle::neutral(true)))
+        .on_press(move |s: &mut S| s.library_mut().selected_card = Some(id))
+}
+
+/// One card's contents at reading width: the layout for working through a long card.
+fn column_view<S: Host>(s: &S) -> El {
+    let library = s.library();
+    let t = tok::theme(true);
+    let shown = library
+        .selected_card
+        .and_then(|id| library.visible.iter().find(|card| card.id == id))
+        .or_else(|| library.visible.first());
+    let Some(card) = shown else {
+        return col().key("cards").grow(1.0).h_full().child(
+            text("No card to read")
+                .color(t.text_secondary)
+                .key("column-empty"),
         );
-    let mut layer = Vec::new();
-    confirmation::<S>(s, &mut layer);
-    deck_confirmation::<S>(s, &mut layer);
-    root(body, layer)
+    };
+    let side = self::tile::first_side(card);
+    col()
+        .key("cards")
+        .grow(1.0)
+        .h_full()
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(
+            col()
+                .key("column-card")
+                .w_full()
+                .max_w(COLUMN_WIDTH)
+                .gap(10.0)
+                .padding(24.0)
+                .child(
+                    text(card.name.clone())
+                        .key("column-name")
+                        .font(type_::TITLE)
+                        .color(t.text),
+                )
+                .child(Markdown::new(side).render(&MarkdownStyle::neutral(true))),
+        )
 }
 
 /// The question shown before a deck that holds cards would disappear with them.

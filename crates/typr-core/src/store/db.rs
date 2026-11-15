@@ -591,7 +591,7 @@ impl Db {
                         c.search_text, COUNT(sp.card_id), SUM(sp.card_id IS NOT NULL AND sp.due_at IS NULL), MIN(sp.due_at),
                         c.reverse, c.kind, c.image, c.caption, c.template, c.pinned, c.created_at,
                         (SELECT COUNT(*) FROM review_log r WHERE r.card_id = c.id AND r.phase <> 'learn'),
-                        c.name
+                        c.name, c.position
                  FROM card c
                  LEFT JOIN studyable_prompt sp ON sp.card_id = c.id
                  GROUP BY c.id
@@ -616,6 +616,7 @@ impl Db {
                     pinned: row.get::<_, i64>(16)? != 0,
                     preview: preview(&row.get::<_, String>(6)?),
                     name: row.get(19)?,
+                    position: row.get(20)?,
                     markdown: row.get(6)?,
                     search_text: row.get(7)?,
                     prompts: count_of(row.get(8)?),

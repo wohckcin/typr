@@ -135,6 +135,8 @@ pub struct CardRef {
 /// fields they care about, so a new field here does not rewrite every literal.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CardSummary {
+    /// Where the card sits in its deck, which is the order the notebook and column views read in.
+    pub position: i64,
     pub id: Id,
     pub deck: Id,
     /// Whether the card asks in text or in a picture.
