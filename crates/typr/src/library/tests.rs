@@ -990,6 +990,15 @@ fn switching_views_keeps_the_selection() {
 }
 
 #[test]
+fn the_switcher_names_the_view_it_is_showing() {
+    let runtime = draw(in_view(2, ViewMode::Notebook));
+    assert!(
+        all_text(&runtime).contains("View: Notebook"),
+        "the switcher does not say which view is active"
+    );
+}
+
+#[test]
 fn the_whole_library_has_no_view_to_choose() {
     let mut library = in_view(2, ViewMode::Grid);
     library.selected_deck = None;

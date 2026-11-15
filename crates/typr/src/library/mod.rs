@@ -1714,7 +1714,8 @@ fn view_switcher<S: Host>(s: &S) -> El {
         .center_y()
         .gap(4.0)
         .child(
-            text("View")
+            text(format!("View: {}", current.label()))
+                .key("view-name")
                 .font(type_::MONO_CAPTION)
                 .color(t.text_secondary),
         );
