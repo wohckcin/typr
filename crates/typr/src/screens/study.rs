@@ -5,8 +5,7 @@
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Chord, Command, Key, Surface, chord_of};
-use typr_core::screen::Queue;
-use typr_core::session::{Entry, Session};
+use typr_core::session::Session;
 use typr_core::store::{Grade, Id};
 
 use crate::ui::{
@@ -24,14 +23,15 @@ pub fn can_reveal(session: &Session) -> bool {
     !session.finished() && !session.gradeable()
 }
 
-/// The study screen over the due queue of `entries`. `on_grade` writes each grade for its card and
+/// The study screen over `session`, which the caller builds for the queue it wants (due, new,
+/// reverse or cram). `on_grade` writes each grade for its card and
 /// reports whether the store took it; a refused grade leaves the card answerable.
 pub fn study(
-    entries: Vec<Entry>,
+    session: Session,
     on_grade: impl Fn(Id, Grade) -> bool + Clone + 'static,
     on_leave: impl Fn() + Clone + 'static,
 ) -> impl IntoElement {
-    let session = stored(Session::new(Queue::Due, entries));
+    let session = stored(session);
     let version = signal(0_u32);
     let refused = signal(false);
     let grade_out = on_grade.clone();

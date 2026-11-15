@@ -97,3 +97,9 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 ## Sidebar selected fill
 
 - `ui::tokens::row_fill(selected)` decides the fill; a unit test checks that the selected and unselected fills differ and that the selected one is not transparent. Pixel confirmation is a 5.1 fixture: a sidebar capture with a selected deck, light and dark.
+
+## Task 4.4 study session
+
+- The screen takes a `typr_core::session::Session`, so due, new, reverse and cram are chosen by the caller. Reveal, grades, Back, Shuffle and Leave come from the review keymap table.
+- A refused grade shows "The grade was not saved. Grade again to retry." and leaves the card answerable.
+- Queue rules (the cap, forgot cycling, cram not writing a schedule) are typr-core behaviour; typr-core's own tests cover them.

@@ -8,14 +8,14 @@ use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::screens::study::{can_reveal, study};
-use typr_core::session::{Entry, Session};
 use typr_core::screen::Queue;
+use typr_core::session::{Entry, Session};
 
 #[component]
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
-    study(entries, |_, _| true, || {})
+    study(Session::new(Queue::Due, entries), |_, _| true, || {})
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn a_grade_is_sent_out_with_its_card() {
 #[component]
 fn Refusing() -> impl IntoElement {
     typr::ui::tokens::install();
-    study(vec![Entry::sides(1, ["Question", "Answer"], 0)], |_, _| false, || {})
+    study(Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]), |_, _| false, || {})
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn Leaving() -> impl IntoElement {
     typr::ui::tokens::install();
     let left = signal(false);
     view()
-        .child(study(vec![Entry::sides(1, ["Question", "Answer"], 0)], |_, _| true, move || left.set(true)))
+        .child(study(Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]), |_, _| true, move || left.set(true)))
         .child(text(move || format!("left={}", left.get())))
 }
 
@@ -96,5 +96,32 @@ fn escape_leaves_through_the_keymap_binding() -> Result<(), String> {
     app.wait_for("text:/left=false/")?;
     app.press_key("escape")?;
     app.wait_for("text:/left=true/")?;
+    Ok(())
+}
+
+#[component]
+fn Reverse() -> impl IntoElement {
+    typr::ui::tokens::install();
+    study(Session::new(Queue::Due, vec![Entry::reverse(1, ["Question", "Answer"], 0)]), |_, _| true, || {})
+}
+
+#[test]
+fn a_reverse_review_shows_the_last_side_first() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Reverse>())).unwrap();
+    app.wait_for("Answer")?;
+    assert!(!app.screen().shows("Question"));
+    Ok(())
+}
+
+#[component]
+fn Cramming() -> impl IntoElement {
+    typr::ui::tokens::install();
+    study(Session::cram(vec![Entry::sides(1, ["Front", "Back"], 0)]), |_, _| true, || {})
+}
+
+#[test]
+fn a_cram_session_asks_its_cards() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Cramming>())).unwrap();
+    app.wait_for("Front")?;
     Ok(())
 }
