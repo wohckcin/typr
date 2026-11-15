@@ -26,7 +26,11 @@ pub fn can_reveal(session: &Session) -> bool {
 
 /// The study screen over the due queue of `entries`. `on_grade` writes each grade for its card and
 /// reports whether the store took it; a refused grade leaves the card answerable.
-pub fn study(entries: Vec<Entry>, on_grade: impl Fn(Id, Grade) -> bool + Clone + 'static) -> impl IntoElement {
+pub fn study(
+    entries: Vec<Entry>,
+    on_grade: impl Fn(Id, Grade) -> bool + Clone + 'static,
+    on_leave: impl Fn() + Clone + 'static,
+) -> impl IntoElement {
     let session = stored(Session::new(Queue::Due, entries));
     let version = signal(0_u32);
     let refused = signal(false);
@@ -66,6 +70,23 @@ pub fn study(entries: Vec<Entry>, on_grade: impl Fn(Id, Grade) -> bool + Clone +
     if let Some(key) = keystroke_of(Command::GradeRemembered) {
         let remembered = grade_remembered.clone();
         on_key(&key, move |_| remembered(Grade::Remembered));
+    }
+    if let Some(key) = keystroke_of(Command::Back) {
+        on_key(&key, move |_| {
+            session.with(|s| s.backward());
+            version.update(|v| *v += 1);
+        });
+    }
+    if let Some(key) = keystroke_of(Command::Shuffle) {
+        on_key(&key, move |_| {
+            let seed = SystemClock.now_ms() as u64;
+            session.with(|s| s.reshuffle(seed));
+            version.update(|v| *v += 1);
+        });
+    }
+    if let Some(key) = keystroke_of(Command::Leave) {
+        let leave = on_leave.clone();
+        on_key(&key, move |_| leave());
     }
     view()
         .flex_1()
@@ -122,6 +143,9 @@ fn keystroke_of(command: Command) -> Option<String> {
         Chord::Key(Key::Space) => Some("space".to_owned()),
         Chord::Key(Key::Enter) => Some("enter".to_owned()),
         Chord::Key(Key::Char(c)) => Some(c.to_string()),
+        Chord::Key(Key::Escape) => Some("escape".to_owned()),
+        Chord::Key(Key::Left) => Some("left".to_owned()),
+        Chord::Key(Key::Right) => Some("right".to_owned()),
         _ => None,
     }
 }

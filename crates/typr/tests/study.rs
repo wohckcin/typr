@@ -15,7 +15,7 @@ use typr_core::screen::Queue;
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
-    study(entries, |_, _| true)
+    study(entries, |_, _| true, || {})
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn a_grade_is_sent_out_with_its_card() {
 #[component]
 fn Refusing() -> impl IntoElement {
     typr::ui::tokens::install();
-    study(vec![Entry::sides(1, ["Question", "Answer"], 0)], |_, _| false)
+    study(vec![Entry::sides(1, ["Question", "Answer"], 0)], |_, _| false, || {})
 }
 
 #[test]
@@ -78,5 +78,23 @@ fn the_keyboard_reveals_and_grades_as_the_keymap_says() -> Result<(), String> {
     app.wait_for("role:button[Remembered]")?;
     app.press_key("j")?;
     app.wait_for("text:/Session complete · 1 reviewed/")?;
+    Ok(())
+}
+
+#[component]
+fn Leaving() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let left = signal(false);
+    view()
+        .child(study(vec![Entry::sides(1, ["Question", "Answer"], 0)], |_, _| true, move || left.set(true)))
+        .child(text(move || format!("left={}", left.get())))
+}
+
+#[test]
+fn escape_leaves_through_the_keymap_binding() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Leaving>())).unwrap();
+    app.wait_for("text:/left=false/")?;
+    app.press_key("escape")?;
+    app.wait_for("text:/left=true/")?;
     Ok(())
 }
