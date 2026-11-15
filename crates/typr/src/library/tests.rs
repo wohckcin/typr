@@ -1524,3 +1524,19 @@ fn pressing_the_search_row_focuses_the_search_field() {
         "the keystroke reached the field the row focused"
     );
 }
+
+#[test]
+fn the_sidebar_states_the_library_is_open() {
+    let runtime = draw(Library::seeded_nested());
+    let line = runtime
+        .elements()
+        .iter()
+        .filter(|element| !element.exiting)
+        .find(|element| element.key.as_deref() == Some("sidebar-state-line"))
+        .and_then(|element| element.text.clone());
+    assert_eq!(
+        line.as_deref(),
+        Some("Library open"),
+        "the state row is part of the column, not a function nobody draws"
+    );
+}

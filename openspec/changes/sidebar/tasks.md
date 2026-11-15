@@ -56,7 +56,7 @@
       *Verification*: changing the binding in the table changes what the row draws, and
       the test fails when the row is given a constant instead.
 
-- [ ] 3.2 Draw the state row: neutral when the library is open, danger tone naming the
+- [x] 3.2 Draw the state row: neutral when the library is open, danger tone naming the
       reason when it is not.
       *Verification*: a state with no store draws the danger tone and the status line below
       the screen names the reason.

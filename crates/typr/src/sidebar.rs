@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use rune::tok::{self, type_};
 use rune::{El, col, text};
+use rune_kit::Kit;
 use typr_core::store::{Id, Snapshot};
 
 /// The width of the whole column, in points.
@@ -241,6 +242,41 @@ pub fn label_color(selected: bool, disabled: bool) -> rune::Color {
     } else {
         t.text
     }
+}
+
+/// The library's own state, drawn under the utilities: quiet while the library is open, and in
+/// the danger tone with the reason when it is not, because a closed library explains every empty
+/// list under it.
+pub fn state_row<S: 'static>(reason: Option<&str>) -> El {
+    let t = tok::theme(true);
+    let danger = Kit::neutral(true).c.danger.fg;
+    let mut body = col().key("sidebar-state").w_full().gap(2.0);
+    match reason {
+        Some(why) => {
+            body = body
+                .child(
+                    text("Library closed")
+                        .font(type_::LABEL)
+                        .color(danger)
+                        .key("sidebar-state-line"),
+                )
+                .child(
+                    text(why.to_string())
+                        .font(type_::MONO_CAPTION)
+                        .color(danger)
+                        .key("sidebar-state-reason"),
+                );
+        }
+        None => {
+            body = body.child(
+                text("Library open")
+                    .font(type_::LABEL)
+                    .color(t.text_secondary)
+                    .key("sidebar-state-line"),
+            );
+        }
+    }
+    body
 }
 
 /// The count a row carries at its right edge: 18 by 16 points, 8-point radius, a 12-point

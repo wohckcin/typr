@@ -263,3 +263,60 @@ fn the_selected_row_differs_from_its_sibling_in_fill_and_in_label() {
         "a move target keeps its own tint"
     );
 }
+
+#[test]
+fn an_open_library_states_it_and_a_closed_one_names_why() {
+    let open = draw_state(None);
+    let keys = keys_of(&open);
+    assert!(keys.iter().any(|key| key == "sidebar-state"));
+    assert_eq!(
+        text_of(&open, "sidebar-state-line").as_deref(),
+        Some("Library open")
+    );
+    assert!(
+        !keys.iter().any(|key| key == "sidebar-state-reason"),
+        "an open library has nothing to explain"
+    );
+
+    let closed = draw_state(Some("the file is newer than this app"));
+    assert_eq!(
+        text_of(&closed, "sidebar-state-line").as_deref(),
+        Some("Library closed")
+    );
+    assert_eq!(
+        text_of(&closed, "sidebar-state-reason").as_deref(),
+        Some("the file is newer than this app"),
+        "the row names the reason rather than saying something went wrong"
+    );
+}
+
+fn draw_state(reason: Option<&'static str>) -> rune::Runtime<Option<&'static str>> {
+    let mut runtime = rune::Runtime::new(
+        reason,
+        |reason: &Option<&'static str>, _: &mut rune::Cx<Option<&'static str>>| {
+            state_row::<Option<&'static str>>(*reason)
+        },
+        (WIDTH, 200.0),
+        Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime
+}
+
+fn keys_of<S>(runtime: &rune::Runtime<S>) -> Vec<String> {
+    runtime
+        .elements()
+        .iter()
+        .filter(|element| !element.exiting)
+        .filter_map(|element| element.key.clone())
+        .collect()
+}
+
+fn text_of<S>(runtime: &rune::Runtime<S>, key: &str) -> Option<String> {
+    runtime
+        .elements()
+        .iter()
+        .filter(|element| !element.exiting)
+        .find(|element| element.key.as_deref() == Some(key))
+        .and_then(|element| element.text.clone())
+}

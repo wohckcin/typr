@@ -91,6 +91,12 @@ pub trait Host: 'static {
         false
     }
 
+    /// Why the library is not open, or `None` while it is. The sidebar states it, because a
+    /// closed library explains every empty list under it.
+    fn library_state(&self) -> Option<String> {
+        None
+    }
+
     /// Switch the list to another view. The default needs no store: it only changes what is drawn.
     fn set_mode(&mut self, mode: CardMode) {
         self.library_mut().set_mode(mode);
@@ -1407,7 +1413,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
     // Tags: only when the library holds one, and only the ones it holds.
     let tags = tag_rows::<S>(s);
 
-    let utilities = utility_rows::<S>();
+    let utilities = utility_rows::<S>(s);
 
     for group in [
         (crate::sidebar::Group::Navigation, navigation),
@@ -1499,7 +1505,7 @@ fn search_row<S: Host>(s: &S) -> El {
 
 /// What the app can do from anywhere: import a file, open the settings screen, or look in the
 /// trash. Each landed with its own change, so none of them is drawn disabled.
-fn utility_rows<S: Host>() -> Vec<El> {
+fn utility_rows<S: Host>(s: &S) -> Vec<El> {
     vec![
         crate::sidebar::row_tx::<S>(
             &crate::sidebar::Row::new("nav-import", "Import").kind(crate::sidebar::Kind::Import),
@@ -1520,6 +1526,7 @@ fn utility_rows<S: Host>() -> Vec<El> {
             &crate::sidebar::Row::new("nav-trash", "Trash").kind(crate::sidebar::Kind::Trash),
             |s: &mut S| s.set_mode(CardMode::Trash),
         ),
+        crate::sidebar::state_row::<S>(s.library_state().as_deref()),
     ]
 }
 
