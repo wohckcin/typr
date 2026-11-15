@@ -90,7 +90,7 @@ fn mark_line(line: &str, out: &mut String, changed: &mut bool) {
             }
             (_, Some(at)) => {
                 let body = at + 2;
-                match rest[body..].find("==") {
+                match closing_marker(&rest[body..]) {
                     Some(close) if is_highlight_body(&rest[body..body + close]) => {
                         out.push_str(&rest[..at]);
                         out.push(OPEN);
@@ -111,6 +111,30 @@ fn mark_line(line: &str, out: &mut String, changed: &mut bool) {
             }
         }
     }
+}
+
+/// The offset of the first `==` in `body` that is not inside a code span, or `None`.
+///
+/// A backtick run with no matching run after it is literal, as in the inline parser.
+fn closing_marker(body: &str) -> Option<usize> {
+    let mut i = 0;
+    while i < body.len() {
+        let rest = &body[i..];
+        if rest.starts_with('`') {
+            let width = rest.chars().take_while(|c| *c == '`').count();
+            let run = "`".repeat(width);
+            i += match rest[width..].find(&run) {
+                Some(end) => width + end + width,
+                None => width,
+            };
+            continue;
+        }
+        if rest.starts_with("==") {
+            return Some(i);
+        }
+        i += rest.chars().next().map_or(1, char::len_utf8);
+    }
+    None
 }
 
 /// A highlight holds text: an empty or blank pair is two equals signs written as they are.
@@ -187,6 +211,11 @@ mod tests {
     #[test]
     fn an_unclosed_marker_stays_as_written() {
         assert_eq!(rewrite("a == b").as_ref(), "a == b");
+    }
+
+    #[test]
+    fn a_closing_marker_inside_a_code_span_does_not_close() {
+        assert_eq!(rewrite("==`a == b`==").as_ref(), format!("{OPEN}`a == b`{CLOSE}"));
     }
 
     #[test]

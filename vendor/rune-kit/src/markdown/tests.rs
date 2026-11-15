@@ -401,3 +401,26 @@ fn a_highlighted_run_is_drawn_with_the_highlight_style() {
     let mark = inline.spans.iter().find(|span| span.2 == Style::Mark).expect("a mark run");
     assert_eq!(&inline.text[mark.0..mark.1], "b");
 }
+
+#[test]
+fn an_unclosed_highlight_is_written_back_where_it_opened() {
+    // The `==` closes inside the emphasis, so the parser cannot pair it: the opener must come back.
+    let inline = parsed_paragraphs("==a *b== c*").remove(0);
+    assert_eq!(inline.text, "==a b== c");
+    assert!(!inline.spans.iter().any(|span| span.2 == Style::Mark));
+}
+
+#[test]
+fn a_closing_marker_inside_a_code_span_is_not_a_closer() {
+    let inline = parsed_paragraphs("==`a == b`==").remove(0);
+    assert!(!inline.text.contains(['\u{FDD0}', '\u{FDD1}']), "no sentinel: {:?}", inline.text);
+    assert!(inline.text.contains("a == b"), "{:?}", inline.text);
+}
+
+#[test]
+fn a_double_equals_inside_a_link_destination_is_kept() {
+    let (blocks, ..) = doc_cached(&super::mark::rewrite_owned("[x](u?a==1&b==2)".to_string()));
+    let Block::Para(inline) = &blocks[0] else { panic!("a paragraph") };
+    let link = inline.links.first().expect("a link");
+    assert_eq!(link.2, "u?a==1&b==2");
+}

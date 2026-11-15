@@ -247,8 +247,17 @@ impl Builder {
 
     fn flush_inline(&mut self) {
         if let Some((kind, mut inl, open, mut map)) = self.inline.take() {
+            let mut unpaired = Vec::new();
             for o in open {
-                end_run(&mut inl, o);
+                if o.style == Style::Mark {
+                    unpaired.push(o.start);
+                } else {
+                    end_run(&mut inl, o);
+                }
+            }
+            // Written back last-first, so each insertion leaves the earlier offsets valid.
+            for at in unpaired.into_iter().rev() {
+                insert_at(&mut inl, &mut map, at, "==");
             }
             let trimmed = trimmed_len(&inl);
             inl.text.truncate(trimmed);
@@ -568,7 +577,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                 Tag::Strong => open(&mut b, Style::Strong, None),
                 Tag::Emphasis => open(&mut b, Style::Em, None),
                 Tag::Strikethrough => open(&mut b, Style::Strike, None),
-                Tag::Link { dest_url, .. } => open(&mut b, Style::Link, Some(dest_url.into_string())),
+                Tag::Link { dest_url, .. } => open(&mut b, Style::Link, Some(mark::restore(&dest_url).into_owned())),
                 Tag::Image { dest_url, title, .. } => {
                     let start = b.inline().1.text.len();
                     b.image_starts.push(start);
@@ -603,6 +612,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                     if let Some(start) = b.image_starts.pop() {
                         let end = b.inline().1.text.len();
                         let (src, title) = b.image_dests.pop().unwrap_or_default();
+                        let src = mark::restore(&src).into_owned();
                         if !b.lift_image(start, end, src, title) {
                             b.image_ranges.push((start, end));
                         }
@@ -802,6 +812,36 @@ pub(super) fn open(b: &mut Builder, style: Style, url: Option<String>) {
     let inl = b.inline();
     let start = inl.1.text.len();
     inl.2.push(Open { start, style, url });
+}
+
+/// Writes `text` into a run at byte `at`, moving the spans, links and source map that follow it.
+///
+/// A range that ends exactly at `at` keeps its end: the inserted text comes after it.
+fn insert_at(inl: &mut Inline, map: &mut SpanMap, at: usize, text: &str) {
+    inl.text.insert_str(at, text);
+    let n = text.len();
+    let start = |x: &mut usize| {
+        if *x >= at {
+            *x += n;
+        }
+    };
+    let end = |x: &mut usize| {
+        if *x > at {
+            *x += n;
+        }
+    };
+    for s in &mut inl.spans {
+        start(&mut s.0);
+        end(&mut s.1);
+    }
+    for l in &mut inl.links {
+        start(&mut l.0);
+        end(&mut l.1);
+    }
+    for (_, out) in &mut map.0 {
+        start(&mut out.start);
+        end(&mut out.end);
+    }
 }
 
 /// Appends text to the open inline run, and maps its source range onto it.
