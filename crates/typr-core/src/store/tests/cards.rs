@@ -2099,3 +2099,52 @@ fn moving_a_card_renumbers_its_deck() {
         "a position past the end puts the card last rather than failing"
     );
 }
+
+/// The deck whose name is `name`, with its view.
+fn view_of(db: &Db, deck: Id) -> crate::library_view::ViewMode {
+    db.snapshot()
+        .expect("snapshot")
+        .decks
+        .iter()
+        .find(|own| own.id == deck)
+        .expect("the deck exists")
+        .view
+}
+
+#[test]
+fn a_decks_view_survives_a_restart() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    db.apply(
+        &Command::SetDeckView {
+            deck,
+            view: crate::library_view::ViewMode::Notebook,
+        },
+        0,
+    )
+    .expect("set the view");
+    drop(db);
+
+    let db = open_temp(&dir);
+    assert_eq!(view_of(&db, deck), crate::library_view::ViewMode::Notebook);
+}
+
+#[test]
+fn one_decks_view_leaves_another_alone() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let spanish = deck(&mut db, "Spanish");
+    let german = deck(&mut db, "German");
+    db.apply(
+        &Command::SetDeckView {
+            deck: spanish,
+            view: crate::library_view::ViewMode::Column,
+        },
+        0,
+    )
+    .expect("set the view");
+
+    assert_eq!(view_of(&db, spanish), crate::library_view::ViewMode::Column);
+    assert_eq!(view_of(&db, german), crate::library_view::ViewMode::Grid);
+}
