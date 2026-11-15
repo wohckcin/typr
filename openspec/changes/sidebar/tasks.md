@@ -68,7 +68,7 @@
       *Verification*: `cargo run -p typr -- --scene sidebar-decks --snap` writes a
       non-empty file, and the tree lists rows 25 points tall with equal label offsets.
 
-- [ ] 4.2 Run `cargo test --workspace --locked`, `cargo fmt --check` and
+- [x] 4.2 Run `cargo test --workspace --locked`, `cargo fmt --check` and
       `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
       *Verification*: all three exit zero.
 
