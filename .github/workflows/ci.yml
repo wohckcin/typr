@@ -18,7 +18,9 @@ jobs:
     # Rune draws through wgpu, so the runner needs Vulkan and the X11/wayland client libraries
     # even for headless snapshots: the tooling path still creates a surface for the frames it
     # renders. Development packages build and link, runtime packages load when a window opens.
-    runs-on: ubuntu-latest
+    # Pinned to the image whose baselines are committed: `ubuntu-latest` moves, and a moved image
+    # rasterises its fonts differently, which would repaint every baseline without a code change.
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
 

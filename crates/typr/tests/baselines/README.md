@@ -24,8 +24,10 @@ Fonts are rasterised by the platform, so each platform keeps its own set and the
 runner.
 
 - `macos/` — macOS 27.2.0, arm64, recorded at `884a2f8`, `history.png` again at `5cbece8`.
-- `linux/` — `ubuntu-latest` on GitHub Actions, recorded by the `Record this runner's baselines` step
-  (`workflow_dispatch` with `record_baselines` on) and committed from its `baselines-linux` artifact.
+- `linux/` — GitHub Actions image `ubuntu-26.04`, build `20261111.196.1`, recorded at `fb3905e` by the
+  `Record this runner's baselines` step (`workflow_dispatch` with `record_baselines` on, run
+  `43672594363`) and committed from its `baselines-linux` artifact. `ci.yml` pins `runs-on: ubuntu-26.04`
+  for this reason: `ubuntu-latest` moved on 2026-10-19 and would repaint every picture.
 
 The zone cannot drift: `visual.rs` draws every scene with `TZ=UTC`, because the history scene prints its
 moments with the local offset. A platform with no set fails on its first run with the command that
