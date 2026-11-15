@@ -45,3 +45,10 @@ tests (135 at the time of writing), including the mark, definition-list and math
 1. Copy the new `crates/rune-kit` into `vendor/rune-kit`, keeping `assets/` and the manifest.
 2. Re-apply the files listed above. `mark.rs` is self-contained.
 3. Keep the manifest's git revision in step with the root `Cargo.toml` and `crates/typr/Cargo.toml`.
+
+## Bundled fonts and their licences
+
+`assets/fonts/` holds `InterVariable.ttf` and `IBMPlexMono-Regular.ttf`, copied unchanged from the Rune
+checkout, with their SIL Open Font License texts beside them (`Inter-LICENSE.txt`,
+`IBMPlexMono-LICENSE.txt`). The licences travel with the font files, as the OFL requires; keep them
+together when re-copying on a Rune bump.
