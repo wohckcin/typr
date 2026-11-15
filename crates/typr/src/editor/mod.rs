@@ -1,5 +1,6 @@
 //! The card editor: the markdown buffer on the left, its rendering on the right.
 
+use crate::design;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -850,7 +851,7 @@ fn markdown<S: Host>(
 /// The names a half-typed reference can complete to, each one press away.
 fn reference_picker<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
-    let mut picker = col().key("reference-picker").w_full().gap(2.0);
+    let mut picker = col().key("reference-picker").w_full().gap(design::TIGHT);
     // A templated card's text comes from its fields, so there is no markdown pane to complete.
     if s.editor().templated() {
         return picker;
@@ -892,7 +893,7 @@ fn reference_picker<S: Host>(s: &S) -> El {
 
 fn source_pane<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
-    text_input(&s.editor().buffer, type_::BODY.lh(22.0))
+    text_input(&s.editor().buffer, design::type_editor())
         .key("sides")
         .grow(1.0)
         .placeholder(
@@ -920,7 +921,7 @@ fn field_pane<S: Host>(s: &S) -> El {
         }
         Some(_) => "This card's text comes from a deck above this one. Fill the fields.",
     };
-    let mut rows = col().key("field-table").w_full().gap(6.0);
+    let mut rows = col().key("field-table").w_full().gap(design::space(2));
     for (index, field) in editor.fields.iter().enumerate() {
         let label = text(&field.name)
             .key(format!("field-label-{index}"))
@@ -931,10 +932,10 @@ fn field_pane<S: Host>(s: &S) -> El {
         let entry = if field.computed {
             text(field.value.text.clone())
                 .key(format!("field-value-{index}"))
-                .font(type_::BODY.lh(20.0))
+                .font(design::type_input())
                 .color(t.text_secondary)
         } else {
-            text_input(&field.value, type_::BODY.lh(20.0))
+            text_input(&field.value, design::type_input())
                 .key(format!("field-{index}"))
                 .w_full()
                 .single_line()
@@ -948,7 +949,7 @@ fn field_pane<S: Host>(s: &S) -> El {
             col()
                 .key(format!("field-row-{index}"))
                 .w_full()
-                .gap(2.0)
+                .gap(design::TIGHT)
                 .child(label)
                 .child(entry),
         );
@@ -957,8 +958,8 @@ fn field_pane<S: Host>(s: &S) -> El {
         .key("field-pane")
         .grow(1.0)
         .h_full()
-        .gap(10.0)
-        .padding(16.0)
+        .gap(design::space(3))
+        .padding(design::space(4))
         .child(
             text(note)
                 .key("template-note")
@@ -986,8 +987,8 @@ fn preview_pane<S: Host>(s: &S) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .gap(8.0)
-        .padding(16.0)
+        .gap(design::space(2))
+        .padding(design::space(4))
         .fill(t.card)
         .child(if editor.saveable() {
             markdown::<S>(
@@ -1014,7 +1015,7 @@ fn preview_pane<S: Host>(s: &S) -> El {
 /// The references in this card that name nothing, said where the preview is: the sentence still
 /// reads, but it does not take a reader anywhere until a card takes that name.
 fn unresolved_note<S: Host>(s: &S) -> El {
-    let mut note = col().key("unresolved").w_full().gap(2.0);
+    let mut note = col().key("unresolved").w_full().gap(design::TIGHT);
     for (index, name) in s.editor().unresolved().iter().enumerate() {
         note = note.child(
             text(format!("[[{name}]] names no card"))
@@ -1030,7 +1031,7 @@ fn unresolved_note<S: Host>(s: &S) -> El {
 /// and the only way back from a card that was reached through one.
 fn backlink_panel<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
-    let mut panel = col().key("backlinks").w_full().gap(4.0);
+    let mut panel = col().key("backlinks").w_full().gap(design::space(1));
     if s.editor().backlinks.is_empty() {
         return panel;
     }
@@ -1111,7 +1112,7 @@ fn tag_field<S: Host>(s: &S) -> El {
     let t = tok::theme(true);
     text_input(s.editor().tags_text(), type_::LABEL)
         .key("tags")
-        .w(240.0)
+        .w(design::size(60))
         .single_line()
         .placeholder("tags, comma separated", t.text_secondary)
         .on_edit(|s: &mut S| &mut s.editor_mut().tags)
@@ -1154,8 +1155,8 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
     let buttons = row()
         .key("leave-buttons")
         .w_full()
-        .padding(16.0)
-        .gap(8.0)
+        .padding(design::space(4))
+        .gap(design::space(2))
         .justify_end()
         .child(button::<S>("Stay", ButtonVariant::Ghost, Choice::Stay))
         .child(button::<S>(
@@ -1189,7 +1190,7 @@ fn diagram_pane<S: Host>(s: &S) -> El {
     let mut picture_box = col()
         .key("diagram-pane")
         .w_full()
-        .max_w(400.0)
+        .max_w(design::size(100))
         .on_layout(|s: &mut S, rect| s.editor_mut().pane = (rect[2], rect[3]))
         .on_drag(|s: &mut S, drag: &mut rune::Drag, _: &mut rune::Tx| {
             // A rectangle is the drag's own corners read as fractions of the pane the gesture was
@@ -1207,7 +1208,7 @@ fn diagram_pane<S: Host>(s: &S) -> El {
                 s.send_masks(card, &change);
             }
         });
-    let mut pane = col().key("diagram-editor").w_full().gap(8.0);
+    let mut pane = col().key("diagram-editor").w_full().gap(design::space(2));
 
     match editor
         .image
@@ -1215,7 +1216,7 @@ fn diagram_pane<S: Host>(s: &S) -> El {
         .and_then(|name| editor.attachments.picture(name))
     {
         Some(picture) => {
-            let mut drawn = rune::el().role("image").w_full().padding(0.0);
+            let mut drawn = rune::el().role("image").w_full().padding(design::space(0));
             if let Some([w, _]) = picture.size() {
                 drawn = drawn.max_w(w as f32);
             }
@@ -1239,7 +1240,7 @@ fn diagram_pane<S: Host>(s: &S) -> El {
                 .key(format!("shape-{index}"))
                 .absolute(mask.rect.x * pane_w, mask.rect.y * pane_h)
                 .size(mask.rect.w * pane_w, mask.rect.h * pane_h)
-                .radius(2.0)
+                .radius(design::radius_small())
                 .fill(tok::accent(1, true).alpha(0.12))
                 .border(1.0, tok::accent(1, true))
                 .child(
@@ -1255,7 +1256,7 @@ fn diagram_pane<S: Host>(s: &S) -> El {
 
     let controls = row()
         .key("diagram-controls")
-        .gap(6.0)
+        .gap(design::space(2))
         .child(
             Button::new("Choose picture")
                 .variant(ButtonVariant::Ghost)
@@ -1371,10 +1372,10 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
     let refusal = s.editor().refusal();
     let mut header = row()
         .key("editor-header")
-        .h(44.0)
-        .px(16.0)
+        .h(design::size(11))
+        .px(design::space(4))
         .center_y()
-        .gap(8.0);
+        .gap(design::space(2));
     if !s.editor().name.is_empty() {
         // Every other screen identifies this card by its name, so the editor says it too.
         header = header.child(
@@ -1425,8 +1426,8 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
             row()
                 .grow(1.0)
                 .h_full()
-                .padding(12.0)
-                .gap(12.0)
+                .padding(design::space(3))
+                .gap(design::space(3))
                 .child(
                     col()
                         .key("source")
@@ -1445,9 +1446,9 @@ pub fn view<S: Host + crate::history::Host>(s: &S) -> El {
                 .children(s.editor().showing_history.then(|| {
                     col()
                         .key("history-panel")
-                        .w(320.0)
+                        .w(design::size(80))
                         .h_full()
-                        .padding(12.0)
+                        .padding(design::space(3))
                         .child(crate::history::view::<S>(s))
                 })),
         ),

@@ -1,5 +1,6 @@
 //! The library screen: decks and tags on the left, a virtualised card list on the right.
 
+use crate::design;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -1160,9 +1161,9 @@ fn mode_tab<S: Host>(label: &'static str, mode: CardMode, current: CardMode) -> 
             CardMode::Archived => "mode-archived",
             CardMode::Trash => "mode-trash",
         })
-        .h(28.0)
-        .px(10.0)
-        .radius(6.0)
+        .h(design::size(7))
+        .px(design::space(3))
+        .radius(design::radius())
         .center_y()
         .fill(if selected {
             t.control_off
@@ -1319,7 +1320,7 @@ fn deck_row<S: Host>(state: &DeckRow<'_>, name: &TextEdit) -> El {
         .pl(inset + crate::sidebar::ROW_PAD)
         .pr(crate::sidebar::ROW_PAD)
         .gap(crate::sidebar::GAP_AFTER_ICON)
-        .radius(5.0)
+        .radius(design::radius_small())
         .center_y()
         .fill(crate::sidebar::row_fill(selected, moving))
         .child(
@@ -1341,9 +1342,9 @@ fn deck_row<S: Host>(state: &DeckRow<'_>, name: &TextEdit) -> El {
         line = line.child(
             col()
                 .key(format!("deck-marker-{}", deck.id))
-                .w(3.0)
-                .h(14.0)
-                .radius(2.0)
+                .w(design::size(1))
+                .h(design::size(4))
+                .radius(design::radius_small())
                 .fill(rune::Color::WHITE.alpha(0.85)),
         );
     }
@@ -1454,7 +1455,7 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
     }
 
     if library.selected_deck.is_some() {
-        let mut actions = col().key("deck-actions").w_full().gap(2.0).child(
+        let mut actions = col().key("deck-actions").w_full().gap(design::TIGHT).child(
             Button::new("Rename")
                 .variant(ButtonVariant::Ghost)
                 // The field only exists once `renaming` is set, and `Tx::focus` resolves the
@@ -1506,8 +1507,8 @@ fn search_row<S: Host>(s: &S, chord: Option<String>) -> El {
     let mut search = row()
         .key("sidebar-search")
         .w_full()
-        .h(28.0)
-        .radius(5.0)
+        .h(design::size(7))
+        .radius(design::radius_small())
         .pl(crate::sidebar::ROW_PAD + crate::sidebar::LABEL_X)
         .pr(crate::sidebar::ROW_PAD)
         .center_y()
@@ -1602,7 +1603,7 @@ fn tag_rows<S: Host>(s: &S) -> Vec<El> {
 fn views_section<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
-    let mut section = col().key("views").w_full().gap(2.0);
+    let mut section = col().key("views").w_full().gap(design::TIGHT);
     section = section.child(
         text("Views")
             .key("views-title")
@@ -1633,8 +1634,8 @@ fn views_section<S: Host>(s: &S) -> El {
             row()
                 .key("view-name-row")
                 .w_full()
-                .h(30.0)
-                .px(10.0)
+                .h(design::size(7))
+                .px(design::space(3))
                 .center_y()
                 .fill(t.control_off)
                 .child(
@@ -1699,7 +1700,7 @@ fn view_row<S: Host>(s: &S, view: &SavedView) -> El {
     let library = s.library();
     let id = view.id;
     let selected = library.selected_view == Some(id);
-    let mut label = row().grow(1.0).gap(4.0).child(
+    let mut label = row().grow(1.0).gap(design::space(1)).child(
         text(view.name.clone())
             .key(format!("view-label-{}", view.id))
             .font(type_::LABEL)
@@ -1722,7 +1723,7 @@ fn view_row<S: Host>(s: &S, view: &SavedView) -> El {
         .h(crate::sidebar::ROW_HEIGHT)
         .px(crate::sidebar::ROW_PAD)
         .gap(crate::sidebar::GAP_AFTER_ICON)
-        .radius(5.0)
+        .radius(design::radius_small())
         .center_y()
         .fill(crate::sidebar::row_fill(selected, false))
         .child(
@@ -1757,9 +1758,9 @@ fn template_panel<S: Host>(s: &S, deck: Id) -> El {
     col()
         .key("template-panel")
         .w_full()
-        .gap(6.0)
-        .padding(6.0)
-        .radius(6.0)
+        .gap(design::space(2))
+        .padding(design::space(2))
+        .radius(design::radius())
         .fill(t.control_off)
         .child(
             text("Deck template")
@@ -1768,10 +1769,10 @@ fn template_panel<S: Host>(s: &S, deck: Id) -> El {
                 .color(t.text_secondary),
         )
         .child(
-            text_input(library.template_text(), type_::MONO_CAPTION.lh(18.0))
+            text_input(library.template_text(), design::type_caption_tight())
                 .key("template-field")
                 .w_full()
-                .h(96.0)
+                .h(design::size(24))
                 .placeholder(
                     "<<Front>>\n---\n<<Back>>, one separator for the deck",
                     t.text_secondary,
@@ -1784,7 +1785,7 @@ fn template_panel<S: Host>(s: &S, deck: Id) -> El {
         .child(
             row()
                 .w_full()
-                .gap(6.0)
+                .gap(design::space(2))
                 .child(
                     Button::new("Save")
                         .variant(ButtonVariant::Submit)
@@ -1813,8 +1814,8 @@ fn template_panel<S: Host>(s: &S, deck: Id) -> El {
             Some(shown) => col()
                 .key("template-preview")
                 .w_full()
-                .padding(6.0)
-                .radius(4.0)
+                .padding(design::space(2))
+                .radius(design::radius_small())
                 .fill(t.card)
                 .child(
                     Markdown::new(crate::editor::preview_body(&shown))
@@ -1845,7 +1846,7 @@ fn deck_reverse<S: Host>(s: &S) -> El {
     row()
         .key("deck-reverse")
         .w_full()
-        .gap(4.0)
+        .gap(design::space(1))
         .child(
             text(format!("Reverse: {state}"))
                 .font(type_::LABEL)
@@ -1883,18 +1884,22 @@ fn deck_reverse_button<S: Host>(label: &str, key: &str, deck: Id, reverse: Optio
 fn order_controls<S: Host>(s: &S) -> El {
     match s.library().view_mode() {
         ViewMode::Grid | ViewMode::List => sort_controls::<S>(s),
-        ViewMode::Notebook | ViewMode::Column => row().key("sorting").h(28.0).gap(8.0).child(
-            text("Deck order")
-                .font(type_::MONO_CAPTION)
-                .color(tok::theme(true).text_secondary),
-        ),
+        ViewMode::Notebook | ViewMode::Column => row()
+            .key("sorting")
+            .h(design::size(7))
+            .gap(design::space(2))
+            .child(
+                text("Deck order")
+                    .font(type_::MONO_CAPTION)
+                    .color(tok::theme(true).text_secondary),
+            ),
     }
 }
 
 fn sort_controls<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
-    let mut row = row().key("sorting").gap(2.0).center_y();
+    let mut row = row().key("sorting").gap(design::TIGHT).center_y();
     for sort in Sort::ALL {
         let chosen = !library.shuffled() && library.sort == sort;
         row = row.child(
@@ -1948,9 +1953,9 @@ fn view_switcher<S: Host>(s: &S) -> El {
     let mut row_ = row()
         .key("view-switcher")
         .h(ROW_HEIGHT)
-        .px(12.0)
+        .px(design::space(3))
         .center_y()
-        .gap(4.0)
+        .gap(design::space(1))
         .child(
             text(format!("View: {}", current.label()))
                 .key("view-name")
@@ -1975,7 +1980,7 @@ fn view_switcher<S: Host>(s: &S) -> El {
 fn filter_bar<S: Host>(s: &S) -> El {
     let library = s.library();
     let t = tok::theme(true);
-    let search = text_input(&library.query, type_::BODY.lh(20.0))
+    let search = text_input(&library.query, design::type_input())
         .key("search")
         .single_line()
         .grow(1.0)
@@ -1984,10 +1989,10 @@ fn filter_bar<S: Host>(s: &S) -> El {
         .on_input_change(|s: &mut S, _| s.library_mut().refresh());
     let mut bar = row()
         .key("filters")
-        .h(44.0)
-        .px(12.0)
+        .h(design::size(11))
+        .px(design::space(3))
         .center_y()
-        .gap(8.0)
+        .gap(design::space(2))
         .child(mode_tab::<S>("Active", CardMode::Active, library.mode))
         .child(mode_tab::<S>("Archived", CardMode::Archived, library.mode))
         .child(mode_tab::<S>("Trash", CardMode::Trash, library.mode))
@@ -2282,9 +2287,9 @@ fn list_row<S: Host>(s: &S, index: usize, now: i64) -> El {
     let mut line = row()
         .w_full()
         .h(ROW_HEIGHT)
-        .px(12.0)
+        .px(design::space(3))
         .center_y()
-        .gap(8.0)
+        .gap(design::space(2))
         .fill(if library.selected_card == Some(id) {
             t.control_off
         } else {
@@ -2332,7 +2337,7 @@ fn notebook_view<S: Host>(s: &S) -> El {
         .grow(1.0)
         .h_full()
         .gap(GAP)
-        .padding(16.0)
+        .padding(design::space(4))
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
@@ -2398,9 +2403,9 @@ fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
         .key(format!("notebook-{id}"))
         .w_full()
         .max_w(NOTEBOOK_WIDTH)
-        .gap(8.0)
-        .padding(14.0)
-        .radius(6.0)
+        .gap(design::space(2))
+        .padding(design::space(4))
+        .radius(design::radius())
         .fill(if s.library().selected_card == Some(id) {
             t.control_off
         } else {
@@ -2411,7 +2416,7 @@ fn notebook_card<S: Host>(s: &S, card: &CardSummary) -> El {
                 .key(format!("notebook-head-{id}"))
                 .w_full()
                 .center_y()
-                .gap(8.0)
+                .gap(design::space(2))
                 .child(
                     text(card.name.clone())
                         .key(format!("notebook-name-{id}"))
@@ -2475,8 +2480,8 @@ fn column_view<S: Host>(s: &S) -> El {
                         .key("column-card")
                         .w_full()
                         .max_w(COLUMN_WIDTH)
-                        .gap(10.0)
-                        .padding(24.0)
+                        .gap(design::space(3))
+                        .padding(design::space(6))
                         .child(
                             text(card.name.clone())
                                 .key("column-name")
@@ -2506,17 +2511,17 @@ fn column_find<S: Host>(s: &S) -> El {
     let mut bar = row()
         .key("column-find")
         .w_full()
-        .h(44.0)
-        .px(24.0)
+        .h(design::size(11))
+        .px(design::space(6))
         .center_y()
-        .gap(8.0)
+        .gap(design::space(2))
         .child(
             // A fixed width, not `grow`: the bar is measured by its content, and a growing field
             // in a row with no bound pushed the two buttons past the window's edge.
-            text_input(&library.find, type_::BODY.lh(20.0))
+            text_input(&library.find, design::type_input())
                 .key("find")
                 .single_line()
-                .w(240.0)
+                .w(design::size(60))
                 .placeholder("Find in this card", t.text_secondary)
                 .on_edit(|s: &mut S| &mut s.library_mut().find)
                 .on_input_change(|s: &mut S, _| s.library_mut().find_in_current()),
@@ -2553,8 +2558,8 @@ fn deck_confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
     let buttons = row()
         .key("archive-buttons")
         .w_full()
-        .padding(16.0)
-        .gap(8.0)
+        .padding(design::space(4))
+        .gap(design::space(2))
         .justify_end()
         .child(
             Button::new("Cancel")
@@ -2592,12 +2597,12 @@ fn peek_panel<S: Host>(s: &S, layer: &mut Vec<El>) {
     let body = col()
         .key("peek-body")
         .w_full()
-        .gap(12.0)
+        .gap(design::space(3))
         .child(
             text(card.name.clone())
                 .key("peek-name")
                 .font(type_::TITLE)
-                .max_w(560.0),
+                .max_w(design::size(140)),
         )
         .child(
             Markdown::new(crate::editor::preview_body(&card.markdown))
@@ -2616,8 +2621,8 @@ fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
     let buttons = row()
         .key("empty-buttons")
         .w_full()
-        .padding(16.0)
-        .gap(8.0)
+        .padding(design::space(4))
+        .gap(design::space(2))
         .justify_end()
         .child(
             Button::new("Cancel")

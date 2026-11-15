@@ -1,5 +1,6 @@
 //! A card's review count and full record list, so the schedule can be argued with.
 
+use crate::design;
 use rune::tok::{self, type_};
 use rune::{El, ScrollSpec, col, row, text};
 use rune_kit::root;
@@ -75,7 +76,7 @@ fn row_view(entry: &ReviewRow) -> El {
     row()
         .key(format!("history-{}", entry.at))
         .w_full()
-        .gap(16.0)
+        .gap(design::space(4))
         .child(
             text(when(entry.at))
                 .color(t.text_secondary)
@@ -101,7 +102,7 @@ pub fn view<S: Host>(s: &S) -> El {
     let mut list = col()
         .key("history")
         .w_full()
-        .gap(8.0)
+        .gap(design::space(2))
         .child(
             text(format!("{} reviews", history.count))
                 .key("history-count")

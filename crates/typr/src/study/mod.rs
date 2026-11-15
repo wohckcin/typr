@@ -1,6 +1,7 @@
 //! The study screen: the side in front of the user, the keys that answer it, and the summary
 //! that ends a session.
 
+use crate::design;
 use std::rc::Rc;
 
 use rune::tok::{self, type_};
@@ -133,7 +134,7 @@ fn bindings() -> El {
     let t = tok::theme(true);
     row()
         .key("bindings")
-        .gap(12.0)
+        .gap(design::space(3))
         .children(
             typr_core::keymap::bindings_of(Surface::Session).map(|binding| {
                 text(format!("{}  {}", binding.chord, binding.command.label()))
@@ -141,7 +142,7 @@ fn bindings() -> El {
                     .color(t.text_secondary)
             }),
         )
-        .gap(12.0)
+        .gap(design::space(3))
 }
 
 fn side_heading<S: Host>(s: &S) -> String {
@@ -182,11 +183,11 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
         .key("picture-box")
         .w_full()
         .on_layout(|s: &mut S, rect| s.set_picture_pane(rect[2], rect[3]));
-    let mut pane = col().key("diagram-face").w_full().gap(6.0);
+    let mut pane = col().key("diagram-face").w_full().gap(design::space(2));
 
     match s.picture(image) {
         Some(picture) => {
-            let mut drawn = rune::el().role("image").w_full().padding(0.0);
+            let mut drawn = rune::el().role("image").w_full().padding(design::space(0));
             if let Some([w, _]) = picture.size() {
                 drawn = drawn.max_w(w as f32);
             }
@@ -198,8 +199,8 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
             picture_box = picture_box.child(
                 col()
                     .w_full()
-                    .h(160.0)
-                    .radius(4.0)
+                    .h(design::size(40))
+                    .radius(design::radius_small())
                     .fill(t.text_secondary.alpha(0.08))
                     .center()
                     .child(
@@ -225,7 +226,7 @@ fn picture_face<S: Host>(s: &S, face: &Face) -> Option<El> {
                     .key(format!("cover-{index}"))
                     .absolute(left, top)
                     .size(width, height)
-                    .radius(2.0)
+                    .radius(design::radius_small())
                     .fill(t.card)
                     .border(1.0, t.text_secondary.alpha(0.35)),
             );
@@ -259,7 +260,7 @@ pub fn view<S: Host>(s: &S) -> El {
         .key("session-card")
         .grow(1.0)
         .w_full()
-        .gap(16.0)
+        .gap(design::space(4))
         .scroll(ScrollSpec {
             stick_bottom: false,
         });
@@ -278,13 +279,17 @@ pub fn view<S: Host>(s: &S) -> El {
         );
     }
 
-    let mut answers = row().key("answers").gap(8.0).justify_end().child(
-        Button::new("Settings")
-            .variant(ButtonVariant::Ghost)
-            .on_press(|s: &mut S| s.open_settings())
-            .build(&rune_kit::Kit::neutral(true))
-            .key("settings"),
-    );
+    let mut answers = row()
+        .key("answers")
+        .gap(design::space(2))
+        .justify_end()
+        .child(
+            Button::new("Settings")
+                .variant(ButtonVariant::Ghost)
+                .on_press(|s: &mut S| s.open_settings())
+                .build(&rune_kit::Kit::neutral(true))
+                .key("settings"),
+        );
     answers = answers.child(
         with_key(s, Command::Shuffle, "Shuffle", ButtonVariant::Ghost)
             .on_press(|s: &mut S| s.reshuffle())
@@ -316,8 +321,8 @@ pub fn view<S: Host>(s: &S) -> El {
         .w_full()
         .h_full()
         .fill(t.bg)
-        .padding(24.0)
-        .gap(16.0)
+        .padding(design::space(6))
+        .gap(design::space(4))
         .child(
             text(side_heading::<S>(s))
                 .font(type_::LABEL)
@@ -360,8 +365,8 @@ pub fn summary<S: Host>(s: &S) -> El {
         .w_full()
         .h_full()
         .fill(t.bg)
-        .padding(24.0)
-        .gap(12.0)
+        .padding(design::space(6))
+        .gap(design::space(3))
         .child(text("Session finished").font(type_::TITLE).color(t.text))
         .child(
             text(format!("{remembered} remembered · {forgot} forgot"))
@@ -381,7 +386,7 @@ pub fn summary<S: Host>(s: &S) -> El {
             row()
                 .key("save-cram")
                 .w_full()
-                .gap(8.0)
+                .gap(design::space(2))
                 .child(
                     text_input(s.cram_name(), type_::LABEL)
                         .key("cram-name")

@@ -53,6 +53,21 @@ pub fn type_caption() -> TextStyle {
     type_::MONO_CAPTION
 }
 
+/// A caption on a tight line, for a label beside a control.
+pub fn type_caption_tight() -> TextStyle {
+    type_::MONO_CAPTION.lh(18.0)
+}
+
+/// Body copy inside a one-line control, where the line height is the control's own.
+pub fn type_input() -> TextStyle {
+    type_::BODY.lh(20.0)
+}
+
+/// The text an editor writes in: body copy on a line tall enough to read a paragraph.
+pub fn type_editor() -> TextStyle {
+    type_::BODY.lh(22.0)
+}
+
 /// The radius of a card surface and of a row's selection fill.
 pub fn radius() -> f32 {
     KIT.radius.md

@@ -2,6 +2,7 @@
 //! tags. `card-grid` and later views share this constructor so a card looks the same wherever it is
 //! listed.
 
+use crate::design;
 use rune::tok::{self, type_};
 use rune::{El, col, memo, row, text};
 use rune_kit::{Button, ButtonVariant, Markdown, MarkdownStyle};
@@ -119,7 +120,7 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
         .key(format!("tile-body-{id}"))
         .w_full()
         .padding(PADDING)
-        .gap(4.0);
+        .gap(design::space(1));
     if named {
         // The name reads first and the text under it, which is what makes a templated card
         // distinguishable from its own first line: a card named `hablar (verb)` opens with
@@ -154,7 +155,7 @@ pub fn tile<S: Host>(s: &S, card: &CardSummary, width: f32, now_ms: i64) -> El {
         .h(FOOTER_HEIGHT)
         .px(PADDING)
         .center_y()
-        .gap(6.0)
+        .gap(design::space(2))
         .fill(t.control_off.alpha(0.1))
         .child(
             text(word)
@@ -233,9 +234,9 @@ fn action_menu<S: Host>(card: &CardSummary, mode: CardMode) -> El {
     let mut menu = col()
         .key("actions")
         .w_full()
-        .radius(4.0)
-        .padding(4.0)
-        .gap(2.0)
+        .radius(design::radius_small())
+        .padding(design::space(1))
+        .gap(design::TIGHT)
         .fill(t.control_off);
     menu = match mode {
         CardMode::Active => menu
@@ -312,9 +313,9 @@ fn action<S: Host>(
     row()
         .key(key)
         .w_full()
-        .px(6.0)
-        .py(3.0)
-        .radius(4.0)
+        .px(design::space(2))
+        .py(design::space(1))
+        .radius(design::radius_small())
         .child(text(label.to_string()).font(type_::LABEL).color(color))
         .on_press(move |s: &mut S| (pressed)(s))
 }
@@ -327,11 +328,11 @@ pub fn placeholder<S: Host>(width: f32) -> El {
         .w(width)
         .h(TILE_HEIGHT)
         .mb(crate::library::GAP)
-        .radius(4.0)
+        .radius(design::radius_small())
         .border(1.0, t.text_secondary.alpha(0.2))
         .border_dash(4.0, 4.0)
         .padding(PADDING)
-        .gap(8.0)
+        .gap(design::space(2))
         .justify_center()
         .items_center()
         .child(
@@ -373,13 +374,13 @@ fn hidden_strip(sides: usize) -> El {
 fn chip_row(tags: Vec<String>, width: f32) -> El {
     let t = tok::theme(true);
     let (shown, dropped) = chips(&tags, width);
-    let mut chips = row().key("tags").gap(4.0).center_y();
+    let mut chips = row().key("tags").gap(design::space(1)).center_y();
     for (index, tag) in shown.iter().enumerate() {
         chips = chips.child(
             row()
                 .key(format!("chip-{index}"))
-                .px(6.0)
-                .radius(4.0)
+                .px(design::space(2))
+                .radius(design::radius_small())
                 .fill(t.control_off.alpha(0.6))
                 .child(text((*tag).clone()).font(type_::MONO_CAPTION).color(t.text)),
         );

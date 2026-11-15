@@ -1,5 +1,6 @@
 //! The settings screen: every key the library holds, grouped the way the spec reads.
 
+use crate::design;
 use rune::tok::type_;
 use rune::{El, ScrollSpec, TextEdit, col, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, Kit, root};
@@ -103,7 +104,10 @@ pub fn view<S: Host>(s: &S) -> El {
     let settings = s.settings();
     let kit = kit(settings);
     let t = kit.c;
-    let mut sections = col().key("settings-sections").w_full().gap(28.0);
+    let mut sections = col()
+        .key("settings-sections")
+        .w_full()
+        .gap(design::space(7));
     for group in Group::ALL {
         sections = sections.child(section(s, group));
     }
@@ -112,8 +116,8 @@ pub fn view<S: Host>(s: &S) -> El {
         .w_full()
         .h_full()
         .fill(t.page)
-        .padding(24.0)
-        .gap(16.0)
+        .padding(design::space(6))
+        .gap(design::space(4))
         .child(header(s))
         .child(sections.scroll(ScrollSpec {
             stick_bottom: false,
@@ -127,7 +131,7 @@ fn header<S: Host>(s: &S) -> El {
         .key("settings-header")
         .w_full()
         .center_y()
-        .gap(12.0)
+        .gap(design::space(3))
         .child(
             text("Settings")
                 .key("settings-title")
@@ -149,7 +153,7 @@ fn section<S: Host>(s: &S, group: Group) -> El {
     let mut list = col()
         .key(format!("settings-{}", group.title().to_ascii_lowercase()))
         .w_full()
-        .gap(14.0)
+        .gap(design::space(4))
         .child(
             text(group.title())
                 .font(type_::SECTION)
@@ -180,11 +184,11 @@ fn setting<S: Host>(s: &S, key: SettingKey) -> El {
     let mut line = row()
         .key(format!("setting-{}", key.as_str()))
         .w_full()
-        .gap(16.0)
+        .gap(design::space(4))
         .center_y()
         .child(
             col()
-                .gap(2.0)
+                .gap(design::TIGHT)
                 .grow(1.0)
                 .child(text(key.label()).font(type_::LABEL).color(t.text_base))
                 .child(text(key.help()).font(type_::LABEL).color(t.text_muted)),
@@ -251,7 +255,7 @@ fn editor<S: Host>(s: &S, key: SettingKey, kit: &Kit) -> El {
         _ => 96.0,
     };
     row()
-        .gap(6.0)
+        .gap(design::space(2))
         .center_y()
         .child(
             text_input(s.setting_input(key), type_::LABEL)
@@ -285,7 +289,7 @@ fn library_block<S: Host>(s: &S) -> El {
     let mut block = col()
         .key("library-facts")
         .w_full()
-        .gap(10.0)
+        .gap(design::space(3))
         .child(fact_row::<S>(
             s,
             "Database",
@@ -322,7 +326,7 @@ fn library_block<S: Host>(s: &S) -> El {
         .child(
             row()
                 .key("facts-transfer")
-                .gap(8.0)
+                .gap(design::space(2))
                 .child(
                     Button::new("Import…")
                         .variant(ButtonVariant::Ghost)
@@ -381,11 +385,11 @@ fn fact_row<S: Host>(
     row()
         .key(format!("fact-{value_key}"))
         .w_full()
-        .gap(12.0)
+        .gap(design::space(3))
         .center_y()
         .child(
             text(label.to_string())
-                .w(110.0)
+                .w(design::size(28))
                 .font(type_::LABEL)
                 .color(t.text_muted),
         )
