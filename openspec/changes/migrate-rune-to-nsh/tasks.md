@@ -31,7 +31,7 @@
 - [ ] 4.7 Keymap panel and palette, with `Chord::from_event` rewritten for NSH key events; verify `keymap-panel` scenarios
 - [ ] 4.8 Embeds and markdown rendering per the spike's decision; verify `card-embeds` scenarios
 - [ ] 4.9 Diagnostics and import/export entry points; verify `diagnostics` and `transfer` UI scenarios
-- [x] 4.10 Run the Finishing checklist and accessibility checklist on each screen in light and dark with `nsh run`, keyboard-only; record per-group results in the PR
+- [ ] 4.10 Run the Finishing checklist and accessibility checklist on each screen in light and dark with `nsh run`, keyboard-only; record per-group results in the PR
 
 ## 5. Screenshot baselines
 
