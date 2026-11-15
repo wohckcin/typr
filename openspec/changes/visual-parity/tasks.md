@@ -34,7 +34,7 @@ Depends on `settings-screen` (theme and scale tokens) and on every screen it res
 
 ## 5. Close out
 
-- [ ] 5.1 README documents the token set, how to regenerate a baseline, and how to add a scene.
+- [x] 5.1 README documents the token set, how to regenerate a baseline, and how to add a scene.
   - **Verification**: the section exists and names both commands.
 - [ ] 5.2 Full gate: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene snapping, baselines matching.
   - **Verification**: all report success.
