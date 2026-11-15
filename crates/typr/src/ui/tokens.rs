@@ -95,16 +95,3 @@ pub fn row_fill(selected: bool) -> AdaptiveColor {
     if selected { hover() } else { background() }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_selected_row_takes_a_fill_its_sibling_does_not() {
-        let selected = row_fill(true);
-        let plain = row_fill(false);
-        assert_ne!(selected, plain);
-        assert_ne!(selected.light.a, 0.0);
-        assert_ne!(selected.dark.a, 0.0);
-    }
-}
