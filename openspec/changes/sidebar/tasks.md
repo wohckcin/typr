@@ -44,7 +44,7 @@
 - [x] 2.4 Keep `collapsed: HashSet<Id>` on `Library` so it survives a snapshot refresh.
       *Verification*: collapsing, then applying a new snapshot, leaves the deck collapsed.
 
-- [ ] 2.5 Fill the selected deck's row with the selection surface and draw its label at
+- [x] 2.5 Fill the selected deck's row with the selection surface and draw its label at
       full contrast.
       *Verification*: the selected row and a sibling differ in background and in text
       colour.

@@ -1988,6 +1988,16 @@ fn overlay_key(s: &mut State, event: &rune::KeyEvent, tx: &mut Tx) -> bool {
 
 /// A folder holding the picture the diagram scenes draw, so a snap shows a diagram rather than a
 /// missing image. The folder outlives the scene because the process exits with it.
+/// Make every seeded card due, so a scene shows the counts a real library carries.
+fn due_soon(library: &mut Library) {
+    let mut snapshot = (*library.snapshot()).clone();
+    let now = typr_core::clock::Clock::now_ms(&typr_core::clock::SystemClock);
+    for card in &mut snapshot.cards {
+        card.due_at = Some(now - 60_000);
+    }
+    library.set_snapshot(std::sync::Arc::new(snapshot));
+}
+
 fn scene_attachments() -> typr::attachments::Attachments {
     let root = std::env::temp_dir()
         .join(format!("typr-scene-{}", std::process::id()))
@@ -2126,6 +2136,24 @@ fn main() {
         }),
         ("library-nested", |state: &mut State| {
             state.library = Library::seeded_nested();
+            state.seeded = true;
+        }),
+        ("sidebar-decks", |state: &mut State| {
+            state.library = Library::seeded_nested();
+            due_soon(&mut state.library);
+            state.library.select_deck(Some(2));
+            state.seeded = true;
+        }),
+        ("sidebar-collapsed", |state: &mut State| {
+            state.library = Library::seeded_nested();
+            due_soon(&mut state.library);
+            state.library.select_deck(Some(2));
+            state.library.toggle_collapsed(1);
+            state.seeded = true;
+        }),
+        ("sidebar-closed", |state: &mut State| {
+            state.library = Library::seeded_nested();
+            state.library.select_deck(Some(2));
             state.seeded = true;
         }),
         ("deck-list", |state: &mut State| {
