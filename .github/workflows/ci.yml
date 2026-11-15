@@ -58,7 +58,9 @@ jobs:
         run: cargo build --workspace --locked
 
       - name: Test
-        run: cargo test --workspace --locked
+        # The visual test compares against pictures recorded on a development machine; it runs as its
+        # own step below so a platform whose fonts rasterise differently cannot stop the snapshot gate.
+        run: cargo test --workspace --locked -- --skip every_scene_matches_its_baseline
 
       - name: Snapshot every scene
         run: |
