@@ -12,3 +12,19 @@ pub fn prose(source: impl Fn() -> SharedString + 'static) -> impl IntoElement {
         .text_sm()
         .text_color(move || tokens::foreground())
 }
+
+pub use nsh_base::text_view::CodeBlock;
+
+/// Markdown whose fenced blocks are drawn by `block`, for content that carries app blocks such as
+/// card embeds. Every other part of the markdown is drawn as [`prose`] draws it.
+pub fn prose_with_blocks(
+    source: SharedString,
+    block: impl Fn(&CodeBlock) -> AnyElement + 'static,
+) -> impl IntoElement {
+    text_view()
+        .markdown(move || Some(source.clone()))
+        .gap_3()
+        .text_sm()
+        .text_color(move || tokens::foreground())
+        .render_code_block(move |code: &CodeBlock| block(code))
+}

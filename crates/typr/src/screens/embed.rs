@@ -4,12 +4,11 @@
 //!
 //! The rewrite is typr-core's (`markdown_ext::expand`); this screen only draws the blocks it leaves.
 
-use nsh_base::text_view;
-use nsh_base::text_view::CodeBlock;
 use nsh_core::prelude::*;
 use typr_core::markdown_ext::{INFO, MISSING, expand};
 
-use crate::ui::{prose::prose, surface, tokens};
+use crate::ui::prose::{CodeBlock, prose, prose_with_blocks};
+use crate::ui::{surface, tokens};
 
 /// The name and body of every card the embeds may name.
 pub type Cards = Vec<(String, String)>;
@@ -24,11 +23,7 @@ pub fn embedded(markdown: &str, cards: Cards, this: String) -> impl IntoElement 
     let source = expand(markdown, |name| body_of(&cards, name).map(str::to_owned));
     let render_cards = cards.clone();
     let render_this = this.clone();
-    text_view()
-        .markdown(move || Some(source.clone().into()))
-        .gap_3()
-        .text_color(move || tokens::foreground())
-        .render_code_block(move |block: &CodeBlock| {
+    prose_with_blocks(source.into(), move |block: &CodeBlock| {
             let name = block.code.trim().to_owned();
             match block.language.as_deref() {
                 Some(INFO) if name == render_this => surface::card(
