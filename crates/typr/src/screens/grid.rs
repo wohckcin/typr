@@ -6,7 +6,21 @@
 
 use nsh_core::prelude::*;
 
-use crate::ui::{status::badge, surface, tokens};
+use crate::ui::{prose::prose, status::badge, surface, tokens};
+
+/// How a card's schedule reads on its tile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Schedule {
+    /// Never graded: the tile says it is new.
+    New,
+    /// Graded and due later: the days until it comes back.
+    Interval(u32),
+    /// Graded and due now.
+    Due,
+}
+
+/// Tags past this many are counted rather than drawn, so a tile with many tags stays one card tall.
+pub const TAGS_SHOWN: usize = 2;
 
 /// One card's tile: what it shows, read from the snapshot.
 #[derive(Clone, Debug, PartialEq)]
@@ -19,6 +33,34 @@ pub struct Tile {
     pub hidden_sides: usize,
     /// The card's tags, in the order they were set.
     pub tags: Vec<SharedString>,
+    /// Where the card's schedule stands.
+    pub schedule: Schedule,
+    /// Whether the card is pinned to the top of its deck.
+    pub pinned: bool,
+}
+
+const DAY_MS: i64 = 86_400_000;
+
+/// The schedule state of a card at `now_ms`.
+pub fn schedule_of(reviews: u32, due_at: Option<i64>, now_ms: i64) -> Schedule {
+    match due_at {
+        _ if reviews == 0 || due_at.is_none() => Schedule::New,
+        Some(due) if due <= now_ms => Schedule::Due,
+        Some(due) => Schedule::Interval(((due - now_ms) / DAY_MS) as u32),
+        None => Schedule::New,
+    }
+}
+
+/// The tile a card draws, from its snapshot row.
+pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
+    Tile {
+        id: card.id,
+        preview: card.preview.clone().into(),
+        hidden_sides: (card.sides as usize).saturating_sub(1),
+        tags: card.tags.iter().map(|t| SharedString::from(t.clone())).collect(),
+        schedule: schedule_of(card.reviews, card.due_at, now_ms),
+        pinned: card.pinned,
+    }
 }
 
 /// The grid over `tiles`. An empty deck offers the tile that starts a card.
@@ -52,18 +94,36 @@ fn tile_cell(tiles: Signal<Vec<Tile>>, at: Position) -> impl IntoElement {
     let tile = computed(move || tiles.with(|t| t.get(at.index()).cloned()));
     let preview = move || tile.with(|t| t.as_ref().map(|t| t.preview.clone()).unwrap_or_default());
     let hidden = move || tile.with(|t| t.as_ref().map_or(0, |t| t.hidden_sides));
+    let schedule = move || {
+        let label = tile.with(|t| match t.as_ref().map(|t| t.schedule) {
+            Some(Schedule::New) | None => "New".to_owned(),
+            Some(Schedule::Interval(days)) => format!("{days} days"),
+            Some(Schedule::Due) => "Due".to_owned(),
+        });
+        label
+    };
     let tag_row = move || {
         let tags = tile.with(|t| t.as_ref().map(|t| t.tags.clone()).unwrap_or_default());
+        let more = tags.len().saturating_sub(TAGS_SHOWN);
         let mut row = view().flex_row().gap_1();
-        for tag in tags {
+        for tag in tags.into_iter().take(TAGS_SHOWN) {
             row = row.child(badge(tag));
+        }
+        if more > 0 {
+            row = row.child(badge(format!("{more} more")));
         }
         row
     };
     surface::card(
         view()
             .gap_2()
-            .child(text(preview).text_sm().text_color(move || tokens::foreground()))
+            .child(prose(preview))
+            .child(dynamic(move || {
+                if !tile.with(|t| t.as_ref().is_some_and(|t| t.pinned)) {
+                    return view().into_element();
+                }
+                badge("Pinned").into_element()
+            }))
             .child(dynamic(move || {
                 let n = hidden();
                 if n == 0 {
@@ -72,6 +132,7 @@ fn tile_cell(tiles: Signal<Vec<Tile>>, at: Position) -> impl IntoElement {
                 let label = if n == 1 { "1 hidden side".to_owned() } else { format!("{n} hidden sides") };
                 text(label).text_xs().text_color(move || tokens::muted_foreground()).into_element()
             }))
+            .child(text(schedule).text_xs().text_color(move || tokens::muted_foreground()))
             .child(dynamic(move || tag_row().into_element())),
     )
 }

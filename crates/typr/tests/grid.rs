@@ -12,7 +12,9 @@ fn tiles(count: i64) -> Vec<Tile> {
             id,
             preview: format!("card {id}").into(),
             hidden_sides: if id == 0 { 2 } else { 0 },
-            tags: if id == 0 { vec!["verbs".into()] } else { Vec::new() },
+            tags: if id == 0 { vec!["verbs".into(), "a".into(), "b".into(), "c".into()] } else { Vec::new() },
+            schedule: typr::screens::grid::Schedule::New,
+            pinned: false,
         })
         .collect()
 }
@@ -37,6 +39,8 @@ fn a_tile_shows_its_first_side_its_hidden_sides_and_its_tags() -> Result<(), Str
     app.wait_for("card 0")?;
     app.wait_for("2 hidden sides")?;
     app.wait_for("verbs")?;
+    app.wait_for("2 more")?;
+    app.wait_for("New")?;
     Ok(())
 }
 
@@ -65,4 +69,13 @@ fn the_column_count_follows_the_window_width_and_never_drops_to_none() {
     assert_eq!(grid_columns(260.0), 1);
     assert!(grid_columns(1200.0) > grid_columns(600.0));
     assert!(grid_columns(600.0) >= grid_columns(300.0));
+}
+
+#[test]
+fn a_new_card_is_new_and_a_studied_card_states_its_interval() {
+    use typr::screens::grid::{Schedule, schedule_of};
+    let day = 86_400_000;
+    assert_eq!(schedule_of(0, None, 1000), Schedule::New);
+    assert_eq!(schedule_of(1, Some(1000 + 10 * day), 1000), Schedule::Interval(10));
+    assert_eq!(schedule_of(1, Some(500), 1000), Schedule::Due);
 }
