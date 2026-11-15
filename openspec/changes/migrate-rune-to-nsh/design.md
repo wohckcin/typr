@@ -76,3 +76,9 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - `editor()` holds the card's markdown source: `language("markdown")` gives it syntax colours and line numbers, and it is controlled — `value(|| Some(source.get()))` with `on_change(&SharedString)` wrote the whole text back (a two-character insertion left the source at 77 chars, one event). Typing and the caret work as the card editor needs.
 - Not exercised by the spike: selection ranges and pasting an image file into the editor. Both are card-editor behaviours that task 4.3 checks before the port of that screen is called done; if either fails, the editor falls back to a multiline `input()`.
 - The window exposes the editor to accessibility as `textarea`, so the screenshot and flow tests can reach it by role.
+
+## Task 3.2 decisions
+
+- **Toast** is a plain view bound to a message signal (`ui::overlay::toast`), not `nsh_base`'s toast stack. Rune's equivalent was a single line, and the screens need one message at a time; the stack is revisited if a screen needs queued notifications.
+- **Spinner** is a text label (`ui::status::spinner_label`), not an animated control. Rune drew none either; a busy control shows its state through `busy_button`, which disables it and reads "Working…".
+- **Tooltip** renders through the element's `tooltip` hint and has no press test: a hint is not pressable. It is checked when the first screen that uses it is ported.

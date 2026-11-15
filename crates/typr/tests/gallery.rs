@@ -5,7 +5,7 @@ use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::ui::{
-    button::{Variant, button},
+    button::{Variant, busy_button, button},
     choice::{choose, list_row, tab_row},
     input::field,
     overlay::{anchored, command_menu, decision, toast},
@@ -26,6 +26,7 @@ fn Gallery() -> impl IntoElement {
     let draft = signal(String::new());
     let ticked = signal(false);
     let sound = signal(false);
+    let saving = signal(false);
     let commands: Vec<(&'static str, Box<dyn Fn()>)> = vec![(
         "Rename",
         Box::new(move || renamed.set(true)),
@@ -56,6 +57,7 @@ fn Gallery() -> impl IntoElement {
         .child(choose(&[("apple", "Apple"), ("kiwi", "Kiwi")], chosen))
         .child(text(move || format!("renamed={}", renamed.get())))
         .child(button(Variant::Default, "Locked", || true, || {}))
+        .child(busy_button(Variant::Primary, "Save", move || saving.get(), move || saving.set(true)))
 }
 
 fn start() -> Headless {
@@ -133,5 +135,15 @@ fn a_disabled_button_is_not_enabled() -> Result<(), String> {
     let mut app = start();
     app.wait_for("role:button[Locked]")?;
     assert!(!app.screen().enabled("role:button[Locked]")?);
+    Ok(())
+}
+
+#[test]
+fn a_busy_button_says_it_is_working_and_cannot_be_pressed() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("role:button[Save]")?;
+    app.press("role:button[Save]")?;
+    app.wait_for("role:button[Working…]")?;
+    assert!(!app.screen().enabled("role:button[Working…]")?);
     Ok(())
 }

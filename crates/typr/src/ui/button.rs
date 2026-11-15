@@ -52,3 +52,17 @@ pub fn button(
 
 /// Presses take this long to settle back, from the motion tokens.
 pub const PRESS_MS: f32 = motion::FAST;
+
+/// A button for work in flight: while `busy`, it is disabled and its label says so.
+///
+/// The label reads "Working…" in place of `idle`, so the button keeps its size and the user sees
+/// why a second press does nothing.
+pub fn busy_button(
+    variant: Variant,
+    idle: &'static str,
+    busy: impl Fn() -> bool + Copy + 'static,
+    on_press: impl Fn() + 'static,
+) -> impl IntoElement {
+    let label = move || -> SharedString { if busy() { "Working…".into() } else { idle.into() } };
+    button(variant, label, busy, on_press)
+}
