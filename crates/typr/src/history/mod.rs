@@ -115,6 +115,14 @@ pub fn view<S: Host>(s: &S) -> El {
                 .font(type_::LABEL)
                 .color(t.text_secondary),
         );
+    if history.rows.is_empty() {
+        list = list.child(
+            text("No reviews yet: this card has not been studied.".to_string())
+                .key("history-empty")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        );
+    }
     for entry in &history.rows {
         list = list.child(row_view(entry));
     }

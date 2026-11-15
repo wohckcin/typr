@@ -33,6 +33,9 @@ pub trait Host: 'static {
     /// Reorder the cards still to answer, without touching any schedule.
     fn reshuffle(&mut self);
 
+    /// Start a drill over what the library is showing, for a queue with nothing due.
+    fn review_anyway(&mut self) {}
+
     /// Whether the window has room for a keycap beside a control's label.
     fn keycaps(&self) -> bool {
         false
@@ -396,6 +399,23 @@ pub fn summary<S: Host>(s: &S) -> El {
                 .key("summary-grades")
                 .color(t.text_secondary),
         );
+    // A queue that held nothing is a screen the reader can land on, so it says why it is empty and
+    // offers the one thing worth doing from it.
+    if session.grades.is_empty() && !cram {
+        body = body
+            .child(
+                text("Nothing is due right now.".to_string())
+                    .key("summary-empty")
+                    .color(t.text_secondary),
+            )
+            .child(
+                Button::new("Review anyway")
+                    .variant(ButtonVariant::Submit)
+                    .on_press(|s: &mut S| s.review_anyway())
+                    .build(&rune_kit::Kit::neutral(true))
+                    .key("summary-cram"),
+            );
+    }
     if cram {
         body = body.child(
             text(format!(

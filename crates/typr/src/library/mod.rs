@@ -1828,6 +1828,62 @@ fn template_panel<S: Host>(s: &S, deck: Id) -> El {
         })
 }
 
+/// Why the list is empty, and what the reader can do about it. A list emptied by a filter says so
+/// and offers the way back; a library with no card offers the one that starts it.
+fn empty_note<S: Host>(s: &S) -> Option<El> {
+    let library = s.library();
+    if !library.visible.is_empty() {
+        return None;
+    }
+    let t = tok::theme(true);
+    let filtered = !library.query.text.trim().is_empty()
+        || library.tag.is_some()
+        || library.selected_deck.is_some()
+        || library.pinned_only
+        || library.mode != CardMode::Active;
+    let (key, reason, action) = if filtered {
+        (
+            "library-empty-filtered",
+            "Nothing here matches what you are looking at.",
+            "Show the whole library",
+        )
+    } else {
+        (
+            "library-empty-first",
+            "This library holds no card yet.",
+            "Make the first card",
+        )
+    };
+    let button = if filtered {
+        Button::new(action)
+            .variant(ButtonVariant::Ghost)
+            .on_press(|s: &mut S| s.library_mut().forget_filters())
+            .build(&KIT)
+            .key("library-empty-action")
+    } else {
+        Button::new(action)
+            .variant(ButtonVariant::Submit)
+            .on_press(|s: &mut S| s.new_card())
+            .build(&KIT)
+            .key("library-empty-action")
+    };
+    Some(
+        col()
+            .key(key)
+            .w_full()
+            .padding(design::space(6))
+            .gap(design::space(3))
+            .items_center()
+            .child(
+                text(reason.to_string())
+                    .key("library-empty-reason")
+                    .font(design::type_body())
+                    .color(t.text_secondary),
+            )
+            .child(button),
+    )
+}
+
 /// The deck's three-state reverse setting: on, off, or whatever its parent says.
 fn deck_reverse<S: Host>(s: &S) -> El {
     let library = s.library();
@@ -2176,6 +2232,7 @@ pub fn view<S: Host>(s: &S) -> El {
                 .h_full()
                 .child(filter_bar::<S>(s))
                 .child(view_switcher::<S>(s))
+                .children(empty_note::<S>(s))
                 .child(list),
         );
     let mut layer = Vec::new();

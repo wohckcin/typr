@@ -1684,3 +1684,37 @@ fn pressing_the_fold_chevron_hides_the_children() {
     press(&mut runtime, "deck-toggle-1");
     assert!(runtime.find("deck-2").is_some(), "and opens it again");
 }
+
+#[test]
+fn an_empty_library_offers_a_card() {
+    let runtime = draw(Library::default());
+    let elements = runtime.elements();
+    assert_eq!(
+        text_of(&elements, "library-empty-reason"),
+        "This library holds no card yet."
+    );
+    assert!(
+        elements
+            .iter()
+            .any(|element| element.key.as_deref() == Some("library-empty-action")),
+        "the empty library offers the first card"
+    );
+}
+
+#[test]
+fn a_list_emptied_by_a_filter_offers_the_way_back() {
+    let mut library = Library::seeded(3);
+    library.query.replace_text("nothing matches this");
+    library.refresh();
+    let runtime = draw(library);
+    let elements = runtime.elements();
+    assert_eq!(
+        text_of(&elements, "library-empty-reason"),
+        "Nothing here matches what you are looking at."
+    );
+    assert!(
+        elements
+            .iter()
+            .any(|element| element.key.as_deref() == Some("library-empty-action"))
+    );
+}

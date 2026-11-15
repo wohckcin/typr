@@ -515,3 +515,49 @@ fn the_hints_sit_under_the_card() {
         "the keys sit below the card: {hints:?} under {card:?}"
     );
 }
+
+#[test]
+fn an_empty_queue_offers_a_cram() {
+    fn draw(s: &App, _: &mut rune::Cx<App>) -> rune::El {
+        summary(s)
+    }
+    let app = App::with(Queue::Due, &[]);
+    let mut runtime = Runtime::new(app, draw, (900.0, 600.0), Env::new(true, 1.0));
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    let elements = runtime.elements();
+    let text_of = |key: &str| {
+        elements
+            .iter()
+            .find(|element| !element.exiting && element.key.as_deref() == Some(key))
+            .and_then(|element| element.text.clone())
+    };
+    assert_eq!(
+        text_of("summary-empty").as_deref(),
+        Some("Nothing is due right now.")
+    );
+    assert!(
+        elements
+            .iter()
+            .any(|element| element.key.as_deref() == Some("summary-cram")),
+        "an empty queue offers a drill"
+    );
+}
+
+#[test]
+fn a_history_with_no_review_says_so() {
+    let history = crate::history::History::default();
+    fn draw(s: &crate::history::History, _: &mut rune::Cx<crate::history::History>) -> rune::El {
+        crate::history::view(s)
+    }
+    let mut runtime = Runtime::new(history, draw, (900.0, 600.0), Env::new(true, 1.0));
+    runtime.frame(0.0);
+    runtime.frame(0.1);
+    assert!(
+        runtime
+            .elements()
+            .iter()
+            .any(|element| element.key.as_deref() == Some("history-empty")),
+        "a card nobody has reviewed says so"
+    );
+}
