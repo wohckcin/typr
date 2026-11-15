@@ -59,3 +59,20 @@ fn an_empty_library_says_it_is_closed() -> Result<(), String> {
     app.wait_for("Library closed")?;
     Ok(())
 }
+
+#[test]
+fn a_tag_shows_under_tags_with_its_name_only() -> Result<(), String> {
+    #[component]
+    fn Tagged() -> impl IntoElement {
+        typr::ui::tokens::install();
+        let snapshot = Snapshot {
+            cards: vec![CardSummary { id: 1, tags: vec!["spanish/verbs".to_owned()], ..CardSummary::default() }],
+            ..Snapshot::default()
+        };
+        typr::shell::shell(snapshot, true)
+    }
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Tagged>())).unwrap();
+    app.wait_for("Tags")?;
+    app.wait_for("verbs")?;
+    Ok(())
+}

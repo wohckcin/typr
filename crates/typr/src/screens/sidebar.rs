@@ -236,6 +236,22 @@ pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
             has_children: parents.contains(&deck.id),
         });
     }
+    // Tags: every tag path, nested under its parent path. A tag's count is not a due count, so it
+    // draws none.
+    fn tags(branches: &[typr_core::store::TagBranch], parent: Option<&str>, out: &mut Vec<Item>) {
+        for branch in branches {
+            out.push(Item {
+                key: format!("tag:{}", branch.path).into(),
+                label: branch.path.rsplit('/').next().unwrap_or(&branch.path).to_owned().into(),
+                group: Group::Tags,
+                parent: parent.map(|p| format!("tag:{p}").into()),
+                due: 0,
+                has_children: !branch.children.is_empty(),
+            });
+            tags(&branch.children, Some(&branch.path), out);
+        }
+    }
+    tags(&snapshot.tag_tree(), None, &mut items);
     for view in &snapshot.views {
         items.push(Item {
             key: format!("view:{}", view.id).into(),
