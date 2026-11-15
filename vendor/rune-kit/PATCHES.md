@@ -1,6 +1,6 @@
 # Local patches to rune-kit
 
-Vendored from `anomalyco/rune` at revision `764fbe9e75ebc91ab94c830181920826fb417be0`
+Vendored from `anomalyco/rune` at revision `615f06a43a565c4d9abe2d883b12fcd895421f4e`
 (`crates/rune-kit`). Upstream grants this project no write access, so the delta lives here.
 
 ## What changed
