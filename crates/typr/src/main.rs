@@ -693,6 +693,14 @@ impl library::Host for State {
         );
     }
 
+    fn reorder_card(&mut self, card: Id, position: u32) {
+        let sent = match self.store.as_ref() {
+            Some(store) => store.move_card_to(card, position),
+            None => Err(StoreError::Closed),
+        };
+        self.track("move_card_to", sent);
+    }
+
     /// Open an editor on a new card that belongs at `position` in `deck`; the card is moved there
     /// once the store has created it.
     fn new_card_at(&mut self, deck: Id, position: u32) {

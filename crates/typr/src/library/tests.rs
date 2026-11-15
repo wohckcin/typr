@@ -1065,6 +1065,7 @@ struct Recorder {
     opened: Vec<Id>,
     trashed: Vec<Id>,
     made: Vec<(Id, u32)>,
+    moved: Vec<(Id, u32)>,
 }
 
 impl Host for Recorder {
@@ -1087,10 +1088,47 @@ impl Host for Recorder {
     fn new_card_at(&mut self, deck: Id, position: u32) {
         self.made.push((deck, position));
     }
+
+    fn reorder_card(&mut self, card: Id, position: u32) {
+        self.moved.push((card, position));
+    }
 }
 
 fn press_host(host: &mut Recorder, key: rune::Key) -> bool {
     super::key(host, &key_event(key), &mut rune::Tx::default())
+}
+
+fn press_alt(host: &mut Recorder, key: rune::Key) -> bool {
+    let event = rune::KeyEvent {
+        key,
+        mods: rune::Mods {
+            alt: true,
+            ..rune::Mods::default()
+        },
+    };
+    super::key(host, &event, &mut rune::Tx::default())
+}
+
+#[test]
+fn a_card_moves_up_and_down_its_deck() {
+    let mut host = Recorder {
+        library: in_view(3, ViewMode::Notebook),
+        ..Recorder::default()
+    };
+    host.library.selected_card = Some(2);
+    assert!(press_alt(&mut host, rune::Key::Up));
+    assert_eq!(
+        host.moved,
+        vec![(2, 0)],
+        "the second card takes the first place"
+    );
+
+    host.library.selected_card = Some(3);
+    assert!(
+        !press_alt(&mut host, rune::Key::Down),
+        "the last card has nowhere to go"
+    );
+    assert_eq!(host.moved, vec![(2, 0)], "and nothing was sent");
 }
 
 #[test]

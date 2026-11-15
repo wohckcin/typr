@@ -122,6 +122,9 @@ pub trait Host: 'static {
     /// Open an editor on a card that does not exist yet.
     fn new_card(&mut self) {}
 
+    /// Put a card at `position` in its deck, which is what the notebook shows.
+    fn reorder_card(&mut self, _card: Id, _position: u32) {}
+
     /// Open an editor on a new card that belongs at `position` in `deck`.
     fn new_card_at(&mut self, deck: Id, position: u32) {
         self.library_mut().selected_deck = Some(deck);
@@ -528,6 +531,32 @@ impl Library {
         let place = if below { index + 1 } else { index };
         let place = u32::try_from(place).ok()?;
         Some((self.visible[index].deck, place))
+    }
+
+    /// The cards of one deck, in the order the notebook reads them.
+    pub fn deck_order(&self, deck: Id) -> Vec<&CardSummary> {
+        let mut cards: Vec<&CardSummary> = self
+            .snapshot
+            .cards
+            .iter()
+            .filter(|card| card.deck == deck)
+            .collect();
+        cards.sort_by_key(|card| (card.position, card.id));
+        cards
+    }
+
+    /// Where the selected card would go if it moved one place: its deck, and the new place in it.
+    /// `None` at either end of the deck, so the move keys do nothing there.
+    pub fn move_target(&self, up: bool) -> Option<(Id, u32)> {
+        let card = self.selected_card?;
+        let deck = self.snapshot.cards.iter().find(|own| own.id == card)?.deck;
+        let order = self.deck_order(deck);
+        let index = order.iter().position(|own| own.id == card)?;
+        let place = if up { index.checked_sub(1)? } else { index + 1 };
+        if place >= order.len() {
+            return None;
+        }
+        Some((card, u32::try_from(place).ok()?))
     }
 
     /// Reread the find against the card the column view shows. Called whenever the text or the
@@ -1828,6 +1857,16 @@ pub fn key<S: Host>(host: &mut S, event: &rune::KeyEvent, tx: &mut rune::Tx) -> 
             }
             None => false,
         },
+        Command::MoveCardUp | Command::MoveCardDown => {
+            let up = command == Command::MoveCardUp;
+            match host.library().move_target(up) {
+                Some((card, position)) => {
+                    host.reorder_card(card, position);
+                    true
+                }
+                None => false,
+            }
+        }
         Command::AddCardBelow | Command::AddCardAbove => {
             let below = command == Command::AddCardBelow;
             match host.library().add_target(below) {

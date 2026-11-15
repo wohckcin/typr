@@ -1886,3 +1886,78 @@ fn a_card_added_below_is_placed_where_it_was_asked() {
     }
     panic!("the new card never arrived");
 }
+
+#[test]
+fn moving_a_card_up_survives_a_restart() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("library.sqlite3");
+    let mut state = view_state(&dir);
+    let deck = state
+        .store
+        .as_ref()
+        .expect("store")
+        .create_deck(None, "Order")
+        .expect("the deck is created") as i64;
+    for text in ["one", "two", "three"] {
+        state
+            .store
+            .as_ref()
+            .expect("store")
+            .create_card(deck, text)
+            .expect("the card is created");
+    }
+    for _ in 0..200 {
+        state.drain();
+        if state.library.snapshot().cards.len() == 3 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let second = state
+        .library
+        .snapshot()
+        .cards
+        .iter()
+        .find(|card| card.markdown == "two")
+        .expect("the second card exists")
+        .id;
+    state.library.selected_deck = Some(deck);
+    state.library.selected_card = Some(second);
+
+    let mut tx = rune::Tx::default();
+    assert!(typr::library::key(
+        &mut state,
+        &rune::KeyEvent {
+            key: rune::Key::Up,
+            mods: rune::Mods {
+                alt: true,
+                ..rune::Mods::default()
+            },
+        },
+        &mut tx,
+    ));
+    let mut moved = false;
+    for _ in 0..200 {
+        state.drain();
+        let order = typr::library::Library::deck_order(&state.library, deck);
+        if order.first().map(|card| card.id) == Some(second) {
+            moved = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(moved, "the second card takes the first place");
+    drop(state);
+
+    // A fresh open of the same file is the restart.
+    let db = typr_core::store::Db::open(&path).expect("reopen");
+    let snapshot = db.snapshot().expect("snapshot");
+    let mut order: Vec<(i64, i64, String)> = snapshot
+        .cards
+        .iter()
+        .map(|card| (card.position, card.id, card.markdown.clone()))
+        .collect();
+    order.sort();
+    let texts: Vec<&str> = order.iter().map(|(_, _, text)| text.as_str()).collect();
+    assert_eq!(texts, ["two", "one", "three"], "the order was written down");
+}

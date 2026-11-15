@@ -59,6 +59,8 @@ pub enum Command {
     DeleteCard,
     AddCardBelow,
     AddCardAbove,
+    MoveCardUp,
+    MoveCardDown,
 }
 
 impl Command {
@@ -92,6 +94,8 @@ impl Command {
             Command::DeleteCard => "Move the selected card to the trash",
             Command::AddCardBelow => "Add a card below",
             Command::AddCardAbove => "Add a card above",
+            Command::MoveCardUp => "Move the card up its deck",
+            Command::MoveCardDown => "Move the card down its deck",
         }
     }
 }
@@ -275,6 +279,12 @@ const TABLE: &[Binding] = &[
         Surface::Library,
         Command::AddCardAbove,
         Chord::key(Key::Char('O')),
+    ),
+    row(Surface::Library, Command::MoveCardUp, Chord::alt(Key::Up)),
+    row(
+        Surface::Library,
+        Command::MoveCardDown,
+        Chord::alt(Key::Down),
     ),
     row(Surface::Editor, Command::Leave, Chord::key(Key::Escape)),
     row(Surface::Editor, Command::Save, Chord::key(Key::Char('s'))),
