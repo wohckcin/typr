@@ -4,7 +4,7 @@ Depends on `settings-screen` (theme and scale tokens) and on every screen it res
 
 ## 1. Tokens
 
-- [ ] 1.1 New `crates/typr/src/design.rs`: `space(u8) -> f32` on a 4 px scale, `type_body/type_title/type_caption` from the kit, `radius`, `elevation`, `focus_ring`, and `surface_card(children) -> El`.
+- [x] 1.1 New `crates/typr/src/design.rs`: `space(u8) -> f32` on a 4 px scale, `type_body/type_title/type_caption` from the kit, `radius`, `elevation`, `focus_ring`, and `surface_card(children) -> El`.
   - **Verification**: `cargo test -p typr --lib design` asserts each token's value and that `surface_card` nests its children inside one bordered element.
 - [ ] 1.2 A CI step refusing a spacing or font-size literal inside a screen file (`grep -nE '\.(px|gap|padding|w|h)\([0-9]'` over `crates/typr/src/{library,editor,study,history,settings}.rs`, with the token module excluded).
   - **Verification**: the step passes on the final tree and fails when a literal is reintroduced, checked by hand in a scratch worktree.

@@ -3,6 +3,7 @@ pub mod keymap;
 
 pub mod attachments;
 pub mod day_offset;
+pub mod design;
 pub mod editor;
 pub mod embed;
 pub mod history;
