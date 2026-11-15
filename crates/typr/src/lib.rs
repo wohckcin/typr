@@ -12,6 +12,7 @@ pub mod logging;
 pub mod markdown;
 pub mod paths;
 pub mod screen;
+pub mod screens;
 pub mod settings;
 pub mod sidebar;
 pub mod shell;
