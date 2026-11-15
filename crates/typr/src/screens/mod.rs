@@ -2,6 +2,7 @@
 
 pub mod diagnostics;
 pub mod editor;
+pub mod embed;
 pub mod grid;
 pub mod history;
 pub mod keymap;

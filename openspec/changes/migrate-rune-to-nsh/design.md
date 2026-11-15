@@ -103,3 +103,8 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - The screen takes a `typr_core::session::Session`, so due, new, reverse and cram are chosen by the caller. Reveal, grades, Back, Shuffle and Leave come from the review keymap table.
 - A refused grade shows "The grade was not saved. Grade again to retry." and leaves the card answerable.
 - Queue rules (the cap, forgot cycling, cram not writing a schedule) are typr-core behaviour; typr-core's own tests cover them.
+
+## Task 4.8 embeds
+
+- `screens/embed.rs` rewrites embeds with typr-core's `markdown_ext::expand`, then draws each `typr-embed` fence with the body, `typr-embed-missing` with "No card named …", and a self-embed with a marker.
+- Deviation: an embed written inside an embedded body is drawn as literal `![[Name]]` text, not as a marker. The one-level rule holds; the marker for that case is not drawn yet.

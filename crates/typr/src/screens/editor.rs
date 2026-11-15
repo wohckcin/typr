@@ -11,7 +11,6 @@ use crate::ui::{
     prose::prose,
     source::source,
     status::badge,
-    tokens,
 };
 
 /// Whether the text holds anything once trimmed; an empty card is not saved.

@@ -15,6 +15,7 @@ screens=(
   crates/typr/src/screens/sidebar.rs
   crates/typr/src/screens/grid.rs
   crates/typr/src/screens/editor.rs
+  crates/typr/src/screens/embed.rs
   crates/typr/src/screens/diagnostics.rs
   crates/typr/src/screens/history.rs
   crates/typr/src/screens/keymap.rs
