@@ -7,4 +7,5 @@ pub mod history;
 pub mod keymap;
 pub mod library;
 pub mod settings;
+pub mod study;
 pub mod sidebar;

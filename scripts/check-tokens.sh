@@ -19,6 +19,7 @@ screens=(
   crates/typr/src/screens/history.rs
   crates/typr/src/screens/keymap.rs
   crates/typr/src/screens/settings.rs
+  crates/typr/src/screens/study.rs
 )
 
 if [ "$#" -gt 0 ]; then
