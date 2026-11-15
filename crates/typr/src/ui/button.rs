@@ -21,7 +21,12 @@ pub enum Variant {
 }
 
 /// A button, filled with the variant's colours and sized from the scale.
-pub fn button(variant: Variant, label: impl IntoReactive<SharedString>, on_press: impl Fn() + 'static) -> impl IntoElement {
+pub fn button(
+    variant: Variant,
+    label: impl IntoReactive<SharedString>,
+    disabled: impl Fn() -> bool + 'static,
+    on_press: impl Fn() + 'static,
+) -> impl IntoElement {
     let (fill, text_color) = match variant {
         Variant::Primary => (tokens::selection(), tokens::selection_foreground()),
         Variant::Default => (tokens::card(), tokens::foreground()),
@@ -29,6 +34,7 @@ pub fn button(variant: Variant, label: impl IntoReactive<SharedString>, on_press
         Variant::Destructive => (tokens::destructive(), tokens::selection_foreground()),
     };
     base_button()
+        .disabled(disabled)
         .on_press(on_press)
         .h(px(32.0))
         .px_4()

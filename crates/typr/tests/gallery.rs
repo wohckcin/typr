@@ -42,19 +42,20 @@ fn Gallery() -> impl IntoElement {
         .child(list_row("First row", move || row.get() == 0, move || row.set(0)))
         .child(list_row("Second row", move || row.get() == 1, move || row.set(1)))
         .child(text(move || format!("row={}", row.get())))
-        .child(button(Variant::Primary, "Open", move || open.set(true)))
+        .child(button(Variant::Primary, "Open", || false, move || open.set(true)))
         .child(decision(open, move || {
             view()
                 .gap_2()
                 .child(text("Confirm the change?"))
-                .child(button(Variant::Default, "Close", move || open.set(false)))
+                .child(button(Variant::Default, "Close", || false, move || open.set(false)))
         }))
-        .child(button(Variant::Destructive, "Notify", move || message.set(Some("Saved".into()))))
+        .child(button(Variant::Destructive, "Notify", || false, move || message.set(Some("Saved".into()))))
         .child(toast(message))
-        .child(command_menu(button(Variant::Ghost, "More", || {}), commands))
-        .child(anchored(button(Variant::Ghost, "Details", || {}), text("Shipped")))
+        .child(command_menu(button(Variant::Ghost, "More", || false, || {}), commands))
+        .child(anchored(button(Variant::Ghost, "Details", || false, || {}), text("Shipped")))
         .child(choose(&[("apple", "Apple"), ("kiwi", "Kiwi")], chosen))
         .child(text(move || format!("renamed={}", renamed.get())))
+        .child(button(Variant::Default, "Locked", || true, || {}))
 }
 
 fn start() -> Headless {
@@ -124,5 +125,13 @@ fn a_popover_shows_its_content_when_its_trigger_is_pressed() -> Result<(), Strin
 fn a_select_shows_its_placeholder_until_a_value_is_chosen() -> Result<(), String> {
     let mut app = start();
     app.wait_for("Choose")?;
+    Ok(())
+}
+
+#[test]
+fn a_disabled_button_is_not_enabled() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("role:button[Locked]")?;
+    assert!(!app.screen().enabled("role:button[Locked]")?);
     Ok(())
 }

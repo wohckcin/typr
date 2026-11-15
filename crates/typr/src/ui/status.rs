@@ -1,6 +1,5 @@
 //! Small status pieces: a badge for a short state, an empty state that names the next action.
 
-use nsh_base::button;
 use nsh_core::prelude::*;
 
 use super::tokens;
@@ -33,9 +32,4 @@ pub fn skeleton() -> impl IntoElement {
 /// Reserved for an indeterminate wait: a control that is working, not a decoration.
 pub fn spinner_label(label: &'static str) -> impl IntoElement {
     text(label).text_sm().text_color(move || tokens::muted_foreground())
-}
-
-#[allow(dead_code)]
-fn _uses_button_module() -> impl IntoElement {
-    button().child(text("x"))
 }

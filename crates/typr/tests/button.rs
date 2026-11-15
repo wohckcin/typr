@@ -12,7 +12,7 @@ fn Probe() -> impl IntoElement {
     let count = signal(0_u32);
     view()
         .flex_row()
-        .child(button(Variant::Primary, "Add", move || count.update(|n| *n += 1)))
+        .child(button(Variant::Primary, "Add", || false, move || count.update(|n| *n += 1)))
         .child(text(move || format!("pressed {}", count.get())))
 }
 

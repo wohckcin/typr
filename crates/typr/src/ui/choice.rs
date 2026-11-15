@@ -50,5 +50,5 @@ pub fn list_row(title: impl IntoReactive<SharedString>, selected: impl Fn() -> b
     view()
         .w_full()
         .bg(move || if selected() { tokens::hover() } else { tokens::background() })
-        .child(button(Variant::Ghost, title, on_press))
+        .child(button(Variant::Ghost, title, || false, on_press))
 }
