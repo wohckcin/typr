@@ -19,8 +19,11 @@ pub enum Schedule {
     Due,
 }
 
-/// Tags past this many are counted rather than drawn, so a tile with many tags stays one card tall.
-pub const TAGS_SHOWN: usize = 2;
+/// The width a tile is given: the window less the page's padding, shared across its columns.
+fn tile_width() -> f32 {
+    let columns = tokens::grid_columns(window().width.0) as f32;
+    (window().width.0 - 32.0) / columns
+}
 
 /// One card's tile: what it shows, read from the snapshot.
 #[derive(Clone, Debug, PartialEq)]
@@ -122,9 +125,12 @@ fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position) -> impl IntoElement {
     };
     let tag_row = move || {
         let tags = tile.with(|t| t.as_ref().map(|t| t.tags.clone()).unwrap_or_default());
-        let more = tags.len().saturating_sub(TAGS_SHOWN);
+        let width = tile_width();
+        let names: Vec<&str> = tags.iter().map(|t| t.as_ref()).collect();
+        let shown = tokens::tags_that_fit(width, &names);
+        let more = tags.len() - shown;
         let mut row = view().flex_row().gap_1();
-        for tag in tags.into_iter().take(TAGS_SHOWN) {
+        for tag in tags.into_iter().take(shown) {
             row = row.child(badge(tag));
         }
         if more > 0 {

@@ -41,7 +41,6 @@ fn a_tile_shows_its_first_side_its_hidden_sides_and_its_tags() -> Result<(), Str
     app.wait_for("card 0")?;
     app.wait_for("2 hidden sides")?;
     app.wait_for("verbs")?;
-    app.wait_for("2 more")?;
     app.wait_for("New")?;
     Ok(())
 }
@@ -95,4 +94,14 @@ fn a_tile_never_shows_a_hidden_answer() {
 fn the_empty_deck_shows_the_binding_that_starts_a_card() {
     let chord = typr_core::keymap::chord_of(typr_core::keymap::Surface::Library, typr_core::keymap::Command::NewCard);
     assert!(chord.is_some(), "the library binds no key to a new card");
+}
+
+#[test]
+fn tags_past_the_tile_width_are_counted_not_drawn() {
+    use typr::ui::tokens::tags_that_fit;
+    assert_eq!(tags_that_fit(10_000.0, &["a", "b", "c"]), 3);
+    assert_eq!(tags_that_fit(40.0, &["verbs", "a"]), 0);
+    let long = ["spanish-verbs", "irregular", "x"];
+    let fit = tags_that_fit(200.0, &long);
+    assert!(fit >= 1 && fit < 3, "{fit}");
 }

@@ -20,3 +20,15 @@ pub fn card(content: impl IntoElement) -> impl IntoElement {
 pub fn separator() -> impl IntoElement {
     view().h(px(1.0)).w_full().bg(move || tokens::border())
 }
+
+/// A tile-shaped placeholder for a slot with nothing in it yet: a dashed border, not a filled card.
+pub fn placeholder(content: impl IntoElement) -> impl IntoElement {
+    view()
+        .p_4()
+        .gap_2()
+        .rounded(tokens::radius)
+        .border_1()
+        .border_dashed()
+        .border_color(move || tokens::border())
+        .child(content)
+}

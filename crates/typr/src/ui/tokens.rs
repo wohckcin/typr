@@ -112,3 +112,23 @@ pub fn grid_columns(width: f32) -> u32 {
     let usable = (width - padding).max(0.0);
     ((usable + gap) / (TILE_MIN_WIDTH + gap)).floor().max(1.0) as u32
 }
+
+/// Roughly how many points a character of tag text takes, and a chip's own padding.
+const CHAR_WIDTH: f32 = 7.0;
+const CHIP_PADDING: f32 = 16.0;
+
+/// How many of `tags` fit across a tile `width` points wide, in the order they were set; the rest
+/// are counted. A chip is estimated from its text, since a tile's text is measured only when drawn.
+pub fn tags_that_fit(width: f32, tags: &[&str]) -> usize {
+    let mut used = 0.0;
+    let mut fit = 0;
+    for tag in tags {
+        let chip = tag.chars().count() as f32 * CHAR_WIDTH + CHIP_PADDING;
+        if used + chip > width {
+            break;
+        }
+        used += chip + 4.0;
+        fit += 1;
+    }
+    fit
+}
