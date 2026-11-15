@@ -17,7 +17,8 @@ const CHANNEL_TOLERANCE: u8 = 2;
 /// At most this share of the picture may differ. Rendering the same scene twice on the same
 /// machine produces identical pixels, so this is headroom for a rasteriser that rounds differently,
 /// not for a design change: the corner radius moving from 6 to 10 points already changes 0.17% of a
-/// 1200×800 picture.
+/// 1920×1280 picture. A change confined to fewer pixels than the share allows — a hairline on one
+/// row, a glyph swap in one label — passes, and no threshold can both absorb rounding and catch those.
 const DIFFERING_SHARE: f64 = 0.0005;
 
 fn baselines() -> PathBuf {
@@ -43,8 +44,13 @@ fn scenes() -> Vec<String> {
 }
 
 /// Draw one scene to a PNG.
+///
+/// The zone is pinned: the history scene prints the moments it holds with the machine's offset, so
+/// without this the recorded picture would carry the recorder's clock and break at the next daylight
+/// saving change, or on a runner that keeps UTC.
 fn snap(scene: &str, out: &Path) {
     let output = Command::new(env!("CARGO_BIN_EXE_typr"))
+        .env("TZ", "UTC")
         .args(["--scene", scene, "--snap"])
         .arg(out)
         .args(["--frames", "4"])
