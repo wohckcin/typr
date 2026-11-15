@@ -23,7 +23,7 @@
 ## 4. Verification
 
 - [x] 4.1 Register scenes `deck-list`, `deck-notebook`, `deck-column` and confirm each snaps non-empty and differs from `deck-grid`. Verification: four `--snap` runs plus a size comparison.
-- [ ] 4.2 Run the gate: fmt, clippy with `-D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene. Verification: all four report success.
+- [x] 4.2 Run the gate: fmt, clippy with `-D warnings -W clippy::cast_possible_truncation`, `cargo test --workspace --locked`, every scene. Verification: all four report success.
 
 ## Workflow follow-up
 
