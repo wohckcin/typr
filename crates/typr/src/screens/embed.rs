@@ -32,6 +32,13 @@ pub fn embedded(markdown: &str, cards: Cards, this: String) -> impl IntoElement 
                 .into_element(),
                 Some(INFO) => {
                     let body = body_of(&render_cards, &name).unwrap_or("").to_owned();
+                    // One level only: a body that embeds another card is named, not drawn.
+                    if !typr_core::markdown_ext::embeds(&body).is_empty() {
+                        return surface::card(
+                            text(format!("“{name}” embeds another card")).text_sm().text_color(move || tokens::muted_foreground()),
+                        )
+                        .into_element();
+                    }
                     surface::card(prose(move || body.clone().into())).into_element()
                 }
                 Some(MISSING) => surface::card(

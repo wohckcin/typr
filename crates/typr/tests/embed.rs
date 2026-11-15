@@ -49,3 +49,22 @@ fn a_self_embed_draws_a_marker_not_its_body() -> Result<(), String> {
     app.wait_for("“Loop” embeds itself")?;
     Ok(())
 }
+
+#[component]
+fn Nested() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let outer: Cards = vec![
+        ("Outer".to_owned(), "Outer body ![[Inner]] text".to_owned()),
+        ("Inner".to_owned(), "Inner body".to_owned()),
+    ];
+    embedded("Start ![[Outer]] end", outer, "Note".to_owned())
+}
+
+#[test]
+fn a_nested_embed_draws_a_marker_naming_the_card_not_its_content() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Nested>())).unwrap();
+    app.wait_for("“Outer” embeds another card")?;
+    assert!(!app.screen().shows("Outer body"), "the nested body was drawn");
+    assert!(!app.screen().shows("Inner body"), "the inner card was drawn");
+    Ok(())
+}
