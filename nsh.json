@@ -1,0 +1,8 @@
+{
+  "name": "typr",
+  "id": "dev.typr.app",
+  "appearance": "system",
+  "rust": "crates/typr",
+  "root": "App",
+  "theme": "crates/typr/theme.json"
+}

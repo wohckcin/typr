@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 typr-core = { path = "../typr-core" }
+nsh-core.workspace = true
+nsh-base.workspace = true
 rune = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e", features = ["native-file-dialog"] }
 rune-kit = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e", features = ["markdown"] }
 rusqlite = { version = "0.42.0", features = ["bundled"] }
@@ -16,7 +18,15 @@ unicode-normalization = "0.1.26"
 # The `[patch.crates-io]` entries Rune needs live at the workspace root, where a patch section is
 # the only place cargo honours it.
 
+[target.'cfg(target_os = "macos")'.dependencies]
+nsh-platform-macos.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nsh-platform-linux.workspace = true
+
 [dev-dependencies]
+nsh-engine.workspace = true
+nsh-testing.workspace = true
 # Decodes the scene pictures so `tests/visual.rs` can compare them with their baselines. The
 # `image` crate is already in the tree through rune, so this adds nothing to the build.
 image = { version = "0.25", default-features = false, features = ["png"] }

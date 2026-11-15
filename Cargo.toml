@@ -2,6 +2,16 @@
 resolver = "3"
 members = ["crates/typr-core", "crates/typr"]
 
+# Native Shell, at the version the `nsh` CLI on this machine reports (0.5.0). One entry per crate, so
+# a bump is one edit and no member can resolve a different NSH.
+[workspace.dependencies]
+nsh-core = "=0.5.0"
+nsh-base = "=0.5.0"
+nsh-engine = { version = "=0.5.0", default-features = false }
+nsh-testing = { version = "=0.5.0", default-features = false }
+nsh-platform-macos = "=0.5.0"
+nsh-platform-linux = "=0.5.0"
+
 # `rune-kit` is vendored at vendor/rune-kit: its markdown renderer is the only place a highlight can
 # be drawn with a background. The delta from the pinned revision is listed in vendor/rune-kit/PATCHES.md.
 [patch."https://github.com/anomalyco/rune"]

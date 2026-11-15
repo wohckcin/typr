@@ -1,0 +1,11 @@
+{
+  "name": "typr",
+  "cssVars": {
+    "light": {
+      "review-backdrop": "oklch(0.86 0 0)"
+    },
+    "dark": {
+      "review-backdrop": "oklch(0.09 0 0)"
+    }
+  }
+}
