@@ -64,25 +64,25 @@ touches the root `[patch.crates-io]` entries and both members together. If upstr
 fallback is stated in the task: render highlight as bold, ruby as `base (reading)`, and record the divergence —
 never drop the text.
 
-### Upstream has no write path, so the divergence is recorded here
+### Upstream has no write path, so rune-kit is vendored with a recorded delta
 
-`anomalyco/rune` grants this account read-only access (`push: false`), and `rune-kit` offers no outside
-extension point: `MarkdownStyle`'s fields are `pub(super)`, `Markdown` exposes link and fence callbacks
-but no inline event hook, and the renderer draws inline runs inside a paragraph. No crate can therefore
-add a highlight background, a raised run or a gloss overlay without an upstream commit.
+`anomalyco/rune` grants this account read-only access, and `rune-kit`'s style fields are `pub(super)`, so
+no outside crate can add a highlight background or a definition layout. The toolkit's markdown renderer
+is therefore vendored at `vendor/rune-kit` with its delta listed in `vendor/rune-kit/PATCHES.md`.
 
-This is the fallback the task anticipated, taken deliberately:
+What the vendored renderer draws, and what is still a fallback:
 
-| Construct | Rendered as | Why |
+| Construct | Drawn as | Status |
 |---|---|---|
-| `==text==` | bold | no inline background exists |
-| `{base}(reading)` | `base (reading)` | the renderer cannot stack two runs |
-| `20^th^`, `H~2~0` | Unicode supers/subscripts where every character maps, else literal | text preserved, shape approximated |
-| `$x$`, `$$x$$` | inline code run, fenced block | monospace sets it apart and keeps the source |
-| definition lines | bold term, then a list | the renderer has no definition list |
+| `==text==` | background span (`mark_bg`) | Rendered |
+| definition list | bold term, definitions as paragraphs | Rendered |
+| `$x$` | inline code run, delimiters kept | Degraded (no typesetter) |
+| `$$x$$` | one code run, delimiters kept, on its own line | Degraded |
+| `20^th^`, `H~2~0` | Unicode raised/lowered where every character has one, else literal | Degraded (typr-core) |
+| `{base}(reading)` | `base (reading)` | Degraded (typr-core) |
 
-Tasks 1.1, 1.2 and 2.1–2.5 stay unchecked because their behaviour is not in this tree. The inventory
-in `supported.rs` marks each of these `Degraded`, never `Rendered`, so nothing claims otherwise.
+Superscript, subscript and ruby stay degraded because `rune::Span` has no baseline shift and no stacked
+layout. Those need a Rune change. Tasks 1.1, 2.2 and 2.5 stay unchecked for that reason.
 
 ## Risks / Trade-offs
 

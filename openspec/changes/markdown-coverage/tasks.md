@@ -2,20 +2,20 @@
 
 ## 1. Parser
 
-- [ ] 1.1 Widen the parser options in `crates/rune-kit/src/markdown/parser.rs` to add superscript, subscript and definition lists. Verification: `cargo test -p rune-kit markdown` still passes and a new upstream test asserts a superscript event is emitted for `20^th^`.
-- [ ] 1.2 Commit the upstream work on Rune's `dev`, bump `rune`/`rune-kit` and the four `[patch.crates-io]` entries to the new revision together. Verification: `cargo build --workspace --locked` from an empty target, and `cargo tree -p typr-core --edges normal` still names no toolkit crate.
+- [ ] 1.1 Superscript and subscript parser options. Blocked: `rune::Span` has no baseline shift, so a parsed superscript could only be drawn smaller, not raised. typr keeps the Unicode fallback (`20ᵗʰ`, `H₂0`) in `typr-core` until Rune gains a shift. Verification: not met.
+- [x] 1.2 Vendor rune-kit at `vendor/rune-kit` (root `[patch."https://github.com/anomalyco/rune"]`), with its delta recorded in `vendor/rune-kit/PATCHES.md`. Verification: `cargo build --workspace --locked` and `cargo tree -p typr-core --edges normal` names no toolkit crate.
 
 ## 2. Rendering
 
-- [ ] 2.1 Add `highlight: Background` to `MarkdownStyle` and render highlight runs with it. Verification: upstream test `a_highlighted_run_is_drawn_with_the_highlight_style`.
-- [ ] 2.2 Render superscript and subscript as raised and lowered runs. Verification: `superscript_is_raised` and `subscript_is_lowered` in the upstream renderer tests.
-- [ ] 2.3 Render definition lists as a term and its indented definitions. Verification: `a_term_with_two_definitions_keeps_both`.
-- [ ] 2.4 Render `InlineMath` and `DisplayMath` as a set-apart monospace run with the source intact. Verification: `inline_math_keeps_its_source` and `display_math_gets_its_own_line`.
-- [ ] 2.5 Render ruby as a base with its reading above. Verification: `a_ruby_gloss_draws_the_reading_over_the_base`.
+- [x] 2.1 Highlight runs drawn on `MarkdownStyle::mark_bg` (vendored). Verification: `a_highlighted_run_is_drawn_with_the_highlight_style` in `vendor/rune-kit/src/markdown/tests.rs`.
+- [ ] 2.2 Superscript and subscript as raised and lowered runs. Blocked on the same missing `rune::Span` baseline shift as 1.1. Verification: not met.
+- [x] 2.3 Definition lists: the term bold, each definition its own paragraph. Verification: `a_term_with_two_definitions_keeps_both` in `vendor/rune-kit/src/markdown/tests.rs`.
+- [x] 2.4 Inline and display math as a set-apart monospace code run, source kept (display math flattened to one run, since a code run cannot hold a line break). Verification: `inline_math_keeps_its_source` and `display_math_is_one_run_on_its_own_line`.
+- [ ] 2.5 Ruby as a base with its reading above. Blocked: needs stacked inline layout that `rune::Span` cannot express. typr keeps `base (reading)`. Verification: not met.
 
 ## 3. Preprocessing
 
-- [x] 3.1 Add `crates/typr-core/src/markdown_ext.rs` with `preprocess(text) -> Cow<str>` rewriting `==` and ruby, tracking fences and code spans. Verification: `equals_inside_code_are_left_alone`, `a_fence_is_left_alone`, `ruby_needs_braces_not_just_parentheses`.
+- [x] 3.1 Add `crates/typr-core/src/markdown_ext.rs` with `preprocess(text) -> Cow<str>` rewriting ruby, superscript and subscript, tracking fences and code spans. Verification: `equals_inside_code_are_left_alone`, `a_fence_is_left_alone`, `ruby_needs_braces_not_just_parentheses`.
 - [x] 3.2 Make the transform idempotent and assert it in a test. Verification: `preprocessing_twice_changes_nothing`.
 - [x] 3.3 Call `preprocess` from the one place cards are rendered, so the editor preview, the review and the tile all see the same text. Verification: `the_preview_and_the_review_render_the_same_highlight`.
 
