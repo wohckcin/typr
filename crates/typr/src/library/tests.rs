@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use super::{GAP, Library, WRAP_BELOW, columns_for, deck_tree, tile_width, view};
+use super::{GAP, Host, Library, WRAP_BELOW, columns_for, deck_tree, tile_width, view};
 use typr_core::keymap::Surface;
 use typr_core::library_view::ViewMode;
 use typr_core::store::{CardMode, Deck, Id};
@@ -1055,6 +1055,87 @@ fn pressing_down_in_the_list_keeps_the_selection_on_screen() {
         row[1],
         cards[1],
         cards[1] + cards[3]
+    );
+}
+
+/// A host that records what the keys asked for, since the library itself only draws.
+#[derive(Default)]
+struct Recorder {
+    library: Library,
+    opened: Vec<Id>,
+    trashed: Vec<Id>,
+    made: Vec<(Id, u32)>,
+}
+
+impl Host for Recorder {
+    fn library(&self) -> &Library {
+        &self.library
+    }
+
+    fn library_mut(&mut self) -> &mut Library {
+        &mut self.library
+    }
+
+    fn open_card(&mut self, card: Id) {
+        self.opened.push(card);
+    }
+
+    fn trash_card(&mut self, card: Id) {
+        self.trashed.push(card);
+    }
+
+    fn new_card_at(&mut self, deck: Id, position: u32) {
+        self.made.push((deck, position));
+    }
+}
+
+fn press_host(host: &mut Recorder, key: rune::Key) -> bool {
+    super::key(host, &key_event(key), &mut rune::Tx::default())
+}
+
+#[test]
+fn every_view_edits_previews_and_deletes() {
+    for view in ViewMode::ALL {
+        let mut host = Recorder {
+            library: in_view(3, view),
+            ..Recorder::default()
+        };
+        host.library.selected_card = Some(2);
+
+        assert!(press_host(&mut host, rune::Key::Enter), "{view:?} edit");
+        assert_eq!(host.opened, vec![2], "{view:?} opens the card it selected");
+
+        assert!(
+            press_host(&mut host, rune::Key::Text("p".to_string())),
+            "{view:?} preview"
+        );
+        assert_eq!(host.library.peek, Some(2), "{view:?} previews it");
+        assert!(
+            press_host(&mut host, rune::Key::Text("p".to_string())),
+            "{view:?} close"
+        );
+        assert_eq!(host.library.peek, None, "{view:?} puts the preview away");
+
+        assert!(
+            press_host(&mut host, rune::Key::Backspace),
+            "{view:?} delete"
+        );
+        assert_eq!(host.trashed, vec![2], "{view:?} trashes it");
+    }
+}
+
+#[test]
+fn the_notebook_view_adds_a_card_below() {
+    let mut host = Recorder {
+        library: in_view(3, ViewMode::Notebook),
+        ..Recorder::default()
+    };
+    host.library.selected_card = Some(2);
+    assert!(press_host(&mut host, rune::Key::Text("o".to_string())));
+    assert_eq!(
+        host.made,
+        vec![(1, 2)],
+        "the new card belongs right after the second"
     );
 }
 

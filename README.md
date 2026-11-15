@@ -274,6 +274,10 @@ points, and the action stays.
 | Library | `,` | Open settings |
 | Library | `Down` / `j` | Select the next card |
 | Library | `Up` / `k` | Select the previous card |
+| Library | `Enter` | Edit the selected card |
+| Library | `p` | Preview the selected card |
+| Library | `Backspace` | Move the selected card to the trash |
+| Library | `o` / `O` | Add a card below or above (notebook) |
 | Editor | `s` | Save the card |
 | Editor | `h` | Show the card's history |
 | Editor | `Alt+N` | Add a rectangle to a diagram |

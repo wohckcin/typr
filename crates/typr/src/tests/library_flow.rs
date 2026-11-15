@@ -1806,3 +1806,83 @@ fn exporting_and_importing_a_deck_through_the_library_round_trips() {
         state.failure
     );
 }
+
+#[test]
+fn a_card_added_below_is_placed_where_it_was_asked() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut state = view_state(&dir);
+    let deck = state
+        .store
+        .as_ref()
+        .expect("store")
+        .create_deck(None, "Notebook")
+        .expect("the deck is created") as i64;
+    for text in ["one", "two", "three"] {
+        state
+            .store
+            .as_ref()
+            .expect("store")
+            .create_card(deck, text)
+            .expect("the card is created");
+    }
+    for _ in 0..200 {
+        state.drain();
+        if state.library.snapshot().cards.len() == 3 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let cards: Vec<Id> = state
+        .library
+        .snapshot()
+        .cards
+        .iter()
+        .map(|card| card.id)
+        .collect();
+    state
+        .library
+        .set_view(deck, typr_core::library_view::ViewMode::Notebook);
+    state.library.selected_deck = Some(deck);
+    state.library.selected_card = Some(cards[1]);
+
+    let mut tx = rune::Tx::default();
+    assert!(typr::library::key(
+        &mut state,
+        &rune::KeyEvent {
+            key: rune::Key::Text("o".to_string()),
+            mods: rune::Mods::default(),
+        },
+        &mut tx,
+    ));
+    assert_eq!(state.screen, Screen::Editor, "the new card opens");
+    state
+        .editor
+        .buffer
+        .replace_text("two and a half".to_string());
+    state.editor.refresh();
+    assert!(state.persist());
+
+    for _ in 0..400 {
+        state.drain();
+        let mut order: Vec<(String, i64, Id)> = state
+            .library
+            .snapshot()
+            .cards
+            .iter()
+            .map(|card| (card.markdown.clone(), card.position, card.id))
+            .collect();
+        // The create publishes before the move does, so wait for the renumbering itself.
+        if order.len() == 4 && order.iter().any(|(_, position, _)| *position > 0) {
+            order.sort_by_key(|(_, position, id)| (*position, *id));
+            let texts: Vec<&str> = order.iter().map(|(text, _, _)| text.as_str()).collect();
+            assert_eq!(
+                texts,
+                ["one", "two", "two and a half", "three"],
+                "the new card sits right after the second"
+            );
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    panic!("the new card never arrived");
+}

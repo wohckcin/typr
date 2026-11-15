@@ -122,6 +122,13 @@ pub trait Host: 'static {
     /// Open an editor on a card that does not exist yet.
     fn new_card(&mut self) {}
 
+    /// Open an editor on a new card that belongs at `position` in `deck`.
+    fn new_card_at(&mut self, deck: Id, position: u32) {
+        self.library_mut().selected_deck = Some(deck);
+        self.library_mut().new_position = Some(position);
+        self.new_card();
+    }
+
     /// Move a card into a deck, keeping whatever schedule it has.
     fn move_card(&mut self, _card: Id, _deck: Id) {}
 
@@ -383,6 +390,10 @@ pub struct Library {
     pub find_hits: Vec<usize>,
     /// Which hit is shown, counting from zero; only meaningful while `find_hits` is not empty.
     pub find_at: usize,
+    /// The card whose whole text the preview draws, if one is open.
+    pub peek: Option<Id>,
+    /// Where a card opened from the notebook belongs in its deck, once it is created.
+    pub new_position: Option<u32>,
 }
 
 impl Default for Library {
@@ -419,6 +430,8 @@ impl Default for Library {
             find: TextEdit::default(),
             find_hits: Vec::new(),
             find_at: 0,
+            peek: None,
+            new_position: None,
         }
     }
 }
@@ -488,6 +501,33 @@ impl Library {
             ViewMode::Notebook => Some(format!("notebook-{}", self.visible[index].id)),
             ViewMode::Column => Some("column-card".to_string()),
         }
+    }
+
+    /// Show the whole card the selection is on, or put the preview away if it is already up.
+    pub fn toggle_peek(&mut self, card: Id) {
+        self.peek = match self.peek {
+            Some(open) if open == card => None,
+            _ => Some(card),
+        };
+    }
+
+    /// The card the preview draws.
+    pub fn peeked(&self) -> Option<&CardSummary> {
+        let card = self.peek?;
+        self.snapshot.cards.iter().find(|own| own.id == card)
+    }
+
+    /// Where a card added next to the selected one belongs: its deck, and the place in it. Only
+    /// the notebook offers this, because only it shows the deck's own order.
+    pub fn add_target(&self, below: bool) -> Option<(Id, u32)> {
+        if self.view_mode() != ViewMode::Notebook {
+            return None;
+        }
+        let card = self.selected_card?;
+        let index = self.visible.iter().position(|own| own.id == card)?;
+        let place = if below { index + 1 } else { index };
+        let place = u32::try_from(place).ok()?;
+        Some((self.visible[index].deck, place))
     }
 
     /// Reread the find against the card the column view shows. Called whenever the text or the
@@ -1752,25 +1792,54 @@ fn plural(count: usize) -> &'static str {
 
 /// The library's own movement keys: move the selection and ask the runtime to bring the card it
 /// landed on into view. Answers whether it took the key; every other library key is the app's.
-pub fn key(library: &mut Library, event: &rune::KeyEvent, tx: &mut rune::Tx) -> bool {
+pub fn key<S: Host>(host: &mut S, event: &rune::KeyEvent, tx: &mut rune::Tx) -> bool {
     let Some(command) = crate::keymap::command_for(Surface::Library, event) else {
         return false;
     };
-    let moved = match command {
-        Command::SelectionNext => {
-            library.select_next();
+    match command {
+        Command::SelectionNext | Command::SelectionPrevious => {
+            match command {
+                Command::SelectionNext => host.library_mut().select_next(),
+                _ => host.library_mut().select_previous(),
+            }
+            if let Some(key) = host.library().selection_key() {
+                tx.scroll_into_view(key);
+            }
             true
         }
-        Command::SelectionPrevious => {
-            library.select_previous();
-            true
+        Command::EditCard => match host.library().selected_card {
+            Some(card) => {
+                host.open_card(card);
+                true
+            }
+            None => false,
+        },
+        Command::PreviewCard => match host.library().selected_card {
+            Some(card) => {
+                host.library_mut().toggle_peek(card);
+                true
+            }
+            None => false,
+        },
+        Command::DeleteCard => match host.library().selected_card {
+            Some(card) => {
+                host.trash_card(card);
+                true
+            }
+            None => false,
+        },
+        Command::AddCardBelow | Command::AddCardAbove => {
+            let below = command == Command::AddCardBelow;
+            match host.library().add_target(below) {
+                Some((deck, position)) => {
+                    host.new_card_at(deck, position);
+                    true
+                }
+                None => false,
+            }
         }
         _ => false,
-    };
-    if moved && let Some(key) = library.selection_key() {
-        tx.scroll_into_view(key);
     }
-    moved
 }
 
 /// The library screen.
@@ -1800,6 +1869,7 @@ pub fn view<S: Host>(s: &S) -> El {
     let mut layer = Vec::new();
     confirmation::<S>(s, &mut layer);
     deck_confirmation::<S>(s, &mut layer);
+    peek_panel::<S>(s, &mut layer);
     root(body, layer)
 }
 
@@ -2166,6 +2236,34 @@ fn deck_confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
 }
 
 /// The question shown before the trash is destroyed, because its history goes with it.
+/// The whole text of the selected card, so a preview costs no trip to the editor.
+fn peek_panel<S: Host>(s: &S, layer: &mut Vec<El>) {
+    let Some(card) = s.library().peeked() else {
+        return;
+    };
+    let body = col()
+        .key("peek-body")
+        .w_full()
+        .gap(12.0)
+        .child(
+            text(card.name.clone())
+                .key("peek-name")
+                .font(type_::TITLE)
+                .max_w(560.0),
+        )
+        .child(
+            Markdown::new(crate::editor::preview_body(&card.markdown))
+                .render(&MarkdownStyle::neutral(true)),
+        );
+    Dialog::new("peek", "Preview")
+        .description("P puts this away.")
+        .fit()
+        .open(true)
+        .on_close(|s: &mut S| s.library_mut().peek = None)
+        .child(body)
+        .build(&KIT, layer);
+}
+
 fn confirmation<S: Host>(s: &S, layer: &mut Vec<El>) {
     let buttons = row()
         .key("empty-buttons")

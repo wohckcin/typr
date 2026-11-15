@@ -693,6 +693,14 @@ impl library::Host for State {
         );
     }
 
+    /// Open an editor on a new card that belongs at `position` in `deck`; the card is moved there
+    /// once the store has created it.
+    fn new_card_at(&mut self, deck: Id, position: u32) {
+        self.library.selected_deck = Some(deck);
+        self.library.new_position = Some(position);
+        self.new_card();
+    }
+
     fn new_deck(&mut self) {
         let parent = self.library.selected_deck;
         let name = self.free_deck_name();
@@ -1493,6 +1501,17 @@ impl State {
                             self.fail(&error);
                         }
                     }
+                    // A card added between two others starts at the end of its deck and is moved
+                    // into place now that it exists.
+                    if let Some(position) = self.library.new_position.take() {
+                        let sent = match &self.store {
+                            Some(store) => store.move_card_to(id, position),
+                            None => Err(StoreError::Closed),
+                        };
+                        if let Err(error) = sent {
+                            self.fail(&error);
+                        }
+                    }
                 }
                 Ok(Outcome::Draft(text)) if self.draft_request == Some(event.id) => {
                     self.draft_request = None;
@@ -1872,7 +1891,7 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, tx: &mut Tx) -> bool {
     };
     // The library moves its own selection: the movement keys decide what to scroll into view, and
     // that is the one place the answer lives.
-    if s.screen == Screen::Library && typr::library::key(&mut s.library, event, tx) {
+    if s.screen == Screen::Library && typr::library::key(s, event, tx) {
         return true;
     }
     match typr::keymap::command_for(surface, event) {

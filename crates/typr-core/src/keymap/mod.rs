@@ -54,6 +54,11 @@ pub enum Command {
     Settings,
     SelectionNext,
     SelectionPrevious,
+    EditCard,
+    PreviewCard,
+    DeleteCard,
+    AddCardBelow,
+    AddCardAbove,
 }
 
 impl Command {
@@ -82,6 +87,11 @@ impl Command {
             Command::Settings => "Settings",
             Command::SelectionNext => "Select the next card",
             Command::SelectionPrevious => "Select the previous card",
+            Command::EditCard => "Edit the selected card",
+            Command::PreviewCard => "Preview the selected card",
+            Command::DeleteCard => "Move the selected card to the trash",
+            Command::AddCardBelow => "Add a card below",
+            Command::AddCardAbove => "Add a card above",
         }
     }
 }
@@ -244,6 +254,27 @@ const TABLE: &[Binding] = &[
         Surface::Library,
         Command::ShowShortcuts,
         Chord::key(Key::Char('?')),
+    ),
+    row(Surface::Library, Command::EditCard, Chord::key(Key::Enter)),
+    row(
+        Surface::Library,
+        Command::PreviewCard,
+        Chord::key(Key::Char('p')),
+    ),
+    row(
+        Surface::Library,
+        Command::DeleteCard,
+        Chord::key(Key::Backspace),
+    ),
+    row(
+        Surface::Library,
+        Command::AddCardBelow,
+        Chord::key(Key::Char('o')),
+    ),
+    row(
+        Surface::Library,
+        Command::AddCardAbove,
+        Chord::key(Key::Char('O')),
     ),
     row(Surface::Editor, Command::Leave, Chord::key(Key::Escape)),
     row(Surface::Editor, Command::Save, Chord::key(Key::Char('s'))),
