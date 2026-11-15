@@ -472,13 +472,17 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
         image_dests: Vec::new(),
         tail: Tail::None,
     };
-    let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS;
+    let opts = Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TABLES
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_DEFINITION_LIST
+        | Options::ENABLE_MATH;
     let mut events = super::interrupt::list_interrupts(src, Parser::new_ext(src, opts).into_offset_iter());
     while let Some((ev, range)) = events.next() {
         let starts_block = matches!(
             ev,
             Event::Start(
-                Tag::Paragraph | Tag::Heading { .. } | Tag::CodeBlock(_) | Tag::BlockQuote(_) | Tag::List(_) | Tag::Table(_) | Tag::HtmlBlock
+                Tag::Paragraph | Tag::Heading { .. } | Tag::CodeBlock(_) | Tag::BlockQuote(_) | Tag::List(_) | Tag::Table(_) | Tag::HtmlBlock | Tag::DefinitionList
             ) | Event::Rule
         );
         if starts_block && b.stack.len() == 1 && b.code.is_none() {
@@ -574,6 +578,11 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                     b.flush_inline();
                     b.inline = Some((InlineKind::Cell, Inline::default(), Vec::new(), SpanMap::default()));
                 }
+                Tag::DefinitionList | Tag::DefinitionListDefinition => b.flush_inline(),
+                Tag::DefinitionListTitle => {
+                    b.flush_inline();
+                    open(&mut b, Style::Strong, None);
+                }
                 Tag::Strong => open(&mut b, Style::Strong, None),
                 Tag::Emphasis => open(&mut b, Style::Em, None),
                 Tag::Strikethrough => open(&mut b, Style::Strike, None),
@@ -607,6 +616,11 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                     }
                 }
                 TagEnd::BlockQuote(_) | TagEnd::Item | TagEnd::List(_) | TagEnd::Table => b.pop_container(),
+                TagEnd::DefinitionListTitle => {
+                    close(&mut b);
+                    b.flush_inline();
+                }
+                TagEnd::DefinitionListDefinition | TagEnd::DefinitionList => b.flush_inline(),
                 TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough | TagEnd::Link => close(&mut b),
                 TagEnd::Image => {
                     if let Some(start) = b.image_starts.pop() {
@@ -656,6 +670,16 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                 inl.1.spans.push((start, end, Style::Code));
                 inl.1.spans.push((end, inl.1.text.len(), Style::CodePad));
                 map_code_span(src, code_src, &t, start, &mut inl.3);
+            }
+            Event::InlineMath(t) => push_math(&mut b, &range, &t, "$"),
+            // Display math is a paragraph of its own, set apart like inline math.
+            Event::DisplayMath(t) => {
+                // A code run cannot hold a line break: it would wrap into one chip per line. Newlines
+                // become spaces, one byte for one byte, so the source map still lines up.
+                let body = t.replace('\n', " ");
+                b.flush_inline();
+                push_math(&mut b, &range, body.trim(), "$$");
+                b.flush_inline();
             }
             Event::SoftBreak => {
                 let inl = b.inline();
@@ -850,6 +874,23 @@ fn push_text(b: &mut Builder, range: &std::ops::Range<usize>, text: &str) {
     let start = inl.1.text.len();
     inl.1.text.push_str(text);
     inl.3.push(range.clone(), start..inl.1.text.len());
+}
+
+/// Math is drawn as a code run that keeps its delimiters, so the source stays on the page: the
+/// renderer has no typesetter, and a run that is set apart is the honest form of it.
+fn push_math(b: &mut Builder, range: &std::ops::Range<usize>, body: &str, delimiter: &str) {
+    let written = mark::restore(&format!("{delimiter}{body}{delimiter}")).into_owned();
+    let inl = b.inline();
+    let a = inl.1.text.len();
+    inl.1.text.push_str(OPEN);
+    let start = inl.1.text.len();
+    inl.1.text.push_str(&written);
+    let end = inl.1.text.len();
+    inl.1.text.push_str(CLOSE);
+    inl.1.spans.push((a, start, Style::CodePad));
+    inl.1.spans.push((start, end, Style::Code));
+    inl.1.spans.push((end, inl.1.text.len(), Style::CodePad));
+    inl.3.push(range.clone(), start..end);
 }
 
 fn close(b: &mut Builder) {

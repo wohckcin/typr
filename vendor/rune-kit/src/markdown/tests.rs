@@ -403,6 +403,35 @@ fn a_highlighted_run_is_drawn_with_the_highlight_style() {
 }
 
 #[test]
+fn a_term_with_two_definitions_keeps_both() {
+    let paragraphs = parsed_paragraphs("Term\n: one\n: two");
+    let texts: Vec<&str> = paragraphs.iter().map(|p| p.text.as_str()).collect();
+    assert_eq!(texts, ["Term", "one", "two"], "{texts:?}");
+    let term = &paragraphs[0];
+    assert!(term.spans.iter().any(|span| span.2 == Style::Strong), "the term is strong");
+}
+
+#[test]
+fn inline_math_keeps_its_source() {
+    let inline = parsed_paragraphs("the area is $x^2$").remove(0);
+    let run = inline.spans.iter().find(|span| span.2 == Style::Code).expect("a code run");
+    assert_eq!(&inline.text[run.0..run.1], "$x^2$");
+}
+
+#[test]
+fn display_math_is_one_run_on_its_own_line() {
+    let paragraphs = parsed_paragraphs("before\n\n$$\nx^2\n$$\n\nafter");
+    let texts: Vec<&str> = paragraphs.iter().map(|p| p.text.as_str()).collect();
+    assert_eq!(texts.len(), 3, "{texts:?}");
+    assert_eq!(texts[0], "before");
+    let math = &paragraphs[1];
+    assert_eq!(math.spans.iter().filter(|s| s.2 == Style::Code).count(), 1, "one code run: {:?}", math.text);
+    assert!(!math.text.contains('\n'), "no line break inside the run: {:?}", math.text);
+    assert!(math.text.contains("$$x^2$$"), "{:?}", math.text);
+    assert_eq!(texts[2], "after");
+}
+
+#[test]
 fn an_unclosed_highlight_is_written_back_where_it_opened() {
     // The `==` closes inside the emphasis, so the parser cannot pair it: the opener must come back.
     let inline = parsed_paragraphs("==a *b== c*").remove(0);
@@ -415,6 +444,15 @@ fn a_closing_marker_inside_a_code_span_is_not_a_closer() {
     let inline = parsed_paragraphs("==`a == b`==").remove(0);
     assert!(!inline.text.contains(['\u{FDD0}', '\u{FDD1}']), "no sentinel: {:?}", inline.text);
     assert!(inline.text.contains("a == b"), "{:?}", inline.text);
+}
+
+
+#[test]
+fn a_double_equals_inside_math_is_kept() {
+    let paragraphs = parsed_paragraphs("$x == 0$ or $y == 0$");
+    let text = &paragraphs[0].text;
+    assert!(!text.contains(['\u{FDD0}', '\u{FDD1}']), "no sentinel: {text:?}");
+    assert_eq!(text.matches("==").count(), 2, "both equals signs kept: {text:?}");
 }
 
 #[test]
