@@ -1302,10 +1302,13 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
     // Tags: only when the library holds one, and only the ones it holds.
     let tags = tag_rows::<S>(s);
 
+    let utilities = utility_rows::<S>();
+
     for group in [
         (crate::sidebar::Group::Navigation, navigation),
         (crate::sidebar::Group::Decks, decks),
         (crate::sidebar::Group::Tags, tags),
+        (crate::sidebar::Group::Utilities, utilities),
     ] {
         if let Some(section) = crate::sidebar::group(group.0, group.1) {
             column = column.child(section);
@@ -1356,6 +1359,32 @@ fn deck_sidebar<S: Host>(s: &S) -> El {
         column = column.child(actions);
     }
     column
+}
+
+/// What the app can do from anywhere: import a file, open the settings screen, or look in the
+/// trash. Each landed with its own change, so none of them is drawn disabled.
+fn utility_rows<S: Host>() -> Vec<El> {
+    vec![
+        crate::sidebar::row_tx::<S>(
+            &crate::sidebar::Row::new("nav-import", "Import").kind(crate::sidebar::Kind::Import),
+            |_: &mut S, tx: &mut Tx| {
+                tx.open_file(import_dialog(), |s: &mut S, result, _| {
+                    if let Ok(Some(path)) = result {
+                        let _ = s.import_file(path);
+                    }
+                });
+            },
+        ),
+        crate::sidebar::row::<S>(
+            &crate::sidebar::Row::new("nav-settings", "Settings")
+                .kind(crate::sidebar::Kind::Settings),
+            |s: &mut S| s.open_settings(),
+        ),
+        crate::sidebar::row::<S>(
+            &crate::sidebar::Row::new("nav-trash", "Trash").kind(crate::sidebar::Kind::Trash),
+            |s: &mut S| s.set_mode(CardMode::Trash),
+        ),
+    ]
 }
 
 /// The whole library's row, which is a way out of any deck or view.
@@ -1848,26 +1877,6 @@ fn filter_bar<S: Host>(s: &S) -> El {
                 .key("archive-deck"),
         );
     }
-    bar = bar.child(
-        Button::new("Settings")
-            .variant(ButtonVariant::Ghost)
-            .on_press(|s: &mut S| s.open_settings())
-            .build(&KIT)
-            .key("settings"),
-    );
-    bar = bar.child(
-        Button::new("Import")
-            .variant(ButtonVariant::Ghost)
-            .on_press_tx(|_: &mut S, tx: &mut Tx| {
-                tx.open_file(import_dialog(), |s: &mut S, result, _| {
-                    if let Ok(Some(path)) = result {
-                        let _ = s.import_file(path);
-                    }
-                });
-            })
-            .build(&KIT)
-            .key("import"),
-    );
     bar = bar.child(
         Button::new("Export")
             .variant(ButtonVariant::Ghost)

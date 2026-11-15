@@ -20,7 +20,7 @@
       *Verification*: a library with no tags draws no `tags` element, and one with tags
       draws it after the deck group.
 
-- [ ] 1.4 Put the utility group (`Import`, `Settings`, `Trash`) at the end of the column
+- [x] 1.4 Put the utility group (`Import`, `Settings`, `Trash`) at the end of the column
       with `GROUP_GAP` before it, drawn as disabled rows until their changes land.
       *Verification*: the rows appear after the deck group, separated by 20 points, and
       pressing a disabled row does nothing.

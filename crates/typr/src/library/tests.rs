@@ -1319,3 +1319,26 @@ fn the_tag_group_follows_the_decks_and_holds_each_tag_once() {
         .count();
     assert_eq!(drawn, 1, "a tag two cards hold draws one row");
 }
+
+#[test]
+fn the_utilities_sit_last_with_one_group_gap_before_them() {
+    let runtime = draw(Library::seeded(3));
+    let elements = runtime.elements();
+    let rect_of = |key: &str| {
+        elements
+            .iter()
+            .find(|element| element.key.as_deref() == Some(key))
+            .map(|element| element.rect)
+    };
+    let decks = rect_of("sidebar-decks").expect("the deck group");
+    let utilities = rect_of("sidebar-utilities").expect("the utilities group");
+    let gap = utilities[1] - (decks[1] + decks[3]);
+    assert!(
+        (gap - crate::sidebar::GROUP_GAP).abs() < 1.0,
+        "the gap before the utilities is {gap}, not {}",
+        crate::sidebar::GROUP_GAP
+    );
+    for key in ["nav-import", "nav-settings", "nav-trash"] {
+        assert!(rect_of(key).is_some(), "{key} is drawn");
+    }
+}

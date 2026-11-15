@@ -114,3 +114,56 @@ fn the_icon_slot_is_the_same_width_whatever_the_letter() {
     assert!((icon.rect[2] - ICON).abs() < 0.5, "the icon is {icon:?}");
     assert!((icon.rect[3] - ICON).abs() < 0.5, "the icon is {icon:?}");
 }
+
+/// Counts its presses, so a row that should not answer can be told apart from one that does.
+#[derive(Default)]
+struct Counted {
+    pressed: u32,
+}
+
+#[test]
+fn a_disabled_row_swallows_the_press() {
+    let mut runtime = rune::Runtime::new(
+        Counted::default(),
+        |_: &Counted, _: &mut rune::Cx<Counted>| {
+            col()
+                .px(INSET)
+                .w(WIDTH)
+                .child(row::<Counted>(
+                    &Row::new("row-live", "Live"),
+                    |s: &mut Counted| s.pressed += 1,
+                ))
+                .child(row::<Counted>(
+                    &Row::new("row-off", "Off").disabled(),
+                    |s: &mut Counted| s.pressed += 1,
+                ))
+        },
+        (WIDTH + 40.0, 200.0),
+        Env::new(true, 1.0),
+    );
+    runtime.frame(0.0);
+    runtime.frame(0.0);
+    let centre = |runtime: &rune::Runtime<Counted>, key: &str| {
+        runtime
+            .elements()
+            .iter()
+            .find(|element| element.key.as_deref() == Some(key))
+            .map(|element| {
+                (
+                    element.rect[0] + element.rect[2] / 2.0,
+                    element.rect[1] + element.rect[3] / 2.0,
+                )
+            })
+            .expect("the row")
+    };
+    let (off_x, off_y) = centre(&runtime, "row-off");
+    runtime.pointer_down(off_x, off_y);
+    runtime.pointer_up(off_x, off_y);
+    runtime.frame(0.0);
+    assert_eq!(runtime.state.pressed, 0, "a disabled row answers nothing");
+    let (live_x, live_y) = centre(&runtime, "row-live");
+    runtime.pointer_down(live_x, live_y);
+    runtime.pointer_up(live_x, live_y);
+    runtime.frame(0.0);
+    assert_eq!(runtime.state.pressed, 1, "a live row answers its press");
+}

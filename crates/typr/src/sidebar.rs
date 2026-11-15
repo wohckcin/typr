@@ -173,6 +173,11 @@ pub fn group(group: Group, rows: Vec<El>) -> Option<El> {
 /// The row is 25 points tall and as wide as it is offered, so the column insets its children
 /// rather than the row insetting itself. Hover draws an overlay, not another row.
 pub fn row<S: 'static>(item: &Row, on_press: impl Fn(&mut S) + 'static) -> El {
+    row_tx::<S>(item, move |s: &mut S, _: &mut rune::Tx| on_press(s))
+}
+
+/// One row whose press needs the transaction: opening a dialog, or moving focus.
+pub fn row_tx<S: 'static>(item: &Row, on_press: impl Fn(&mut S, &mut rune::Tx) + 'static) -> El {
     let t = tok::theme(true);
     let selected = item.selected;
     let disabled = item.disabled;
@@ -207,9 +212,9 @@ pub fn row<S: 'static>(item: &Row, on_press: impl Fn(&mut S) + 'static) -> El {
                     t.text
                 }),
         )
-        .on_press(move |s: &mut S| {
+        .on_press_tx(move |s: &mut S, tx: &mut rune::Tx| {
             if !disabled {
-                press(s);
+                press(s, tx);
             }
         })
 }
