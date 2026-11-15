@@ -441,6 +441,55 @@ impl Library {
         self.refresh();
     }
 
+    /// Move the selection one card down the list it is showing, stopping at the last card.
+    pub fn select_next(&mut self) {
+        let Some(at) = self
+            .visible
+            .iter()
+            .position(|card| Some(card.id) == self.selected_card)
+        else {
+            // Nothing is selected yet, so the first movement lands on the first card.
+            self.selected_card = self.visible.first().map(|card| card.id);
+            return;
+        };
+        let next = (at + 1).min(self.visible.len().saturating_sub(1));
+        self.selected_card = self.visible.get(next).map(|card| card.id);
+    }
+
+    /// Move the selection one card up the list it is showing, stopping at the first card.
+    pub fn select_previous(&mut self) {
+        let Some(at) = self
+            .visible
+            .iter()
+            .position(|card| Some(card.id) == self.selected_card)
+        else {
+            self.selected_card = self.visible.first().map(|card| card.id);
+            return;
+        };
+        let previous = at.saturating_sub(1);
+        self.selected_card = self.visible.get(previous).map(|card| card.id);
+    }
+
+    /// The key of the element that draws the selected card in the view in force, so the frame loop
+    /// can bring it into view. The column view draws one card, which is always in view.
+    pub fn selection_key(&self) -> Option<String> {
+        let index = self
+            .visible
+            .iter()
+            .position(|card| Some(card.id) == self.selected_card)?;
+        match self.view_mode() {
+            // The grid and the list are drawn only where they are scrolled to, so the row that
+            // holds the card has to be built before the card itself can be brought into view.
+            ViewMode::Grid => Some(format!(
+                "line-{}",
+                index / columns_for(self.grid_width).max(1)
+            )),
+            ViewMode::List => Some(format!("line-{index}")),
+            ViewMode::Notebook => Some(format!("notebook-{}", self.visible[index].id)),
+            ViewMode::Column => Some("column-card".to_string()),
+        }
+    }
+
     /// Reread the find against the card the column view shows. Called whenever the text or the
     /// card changes, so the count never describes a card that is no longer on screen.
     pub fn find_in_current(&mut self) {
@@ -1699,6 +1748,29 @@ pub fn export_dialog() -> FileDialogOptions {
 /// "card" for one, "cards" for everything else, so the count never reads "1 cards".
 fn plural(count: usize) -> &'static str {
     if count == 1 { "card" } else { "cards" }
+}
+
+/// The library's own movement keys: move the selection and ask the runtime to bring the card it
+/// landed on into view. Answers whether it took the key; every other library key is the app's.
+pub fn key(library: &mut Library, event: &rune::KeyEvent, tx: &mut rune::Tx) -> bool {
+    let Some(command) = crate::keymap::command_for(Surface::Library, event) else {
+        return false;
+    };
+    let moved = match command {
+        Command::SelectionNext => {
+            library.select_next();
+            true
+        }
+        Command::SelectionPrevious => {
+            library.select_previous();
+            true
+        }
+        _ => false,
+    };
+    if moved && let Some(key) = library.selection_key() {
+        tx.scroll_into_view(key);
+    }
+    moved
 }
 
 /// The library screen.

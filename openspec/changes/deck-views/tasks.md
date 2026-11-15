@@ -15,7 +15,7 @@
 
 ## 3. Behaviour
 
-- [ ] 3.1 Move the selection with the movement keys in every view, clamped at the ends, scrolling the selection into view. Verification: `the_selection_stops_at_the_first_and_last_card` and `moving_selection_scrolls_it_into_view`.
+- [x] 3.1 Move the selection with the movement keys in every view, clamped at the ends, scrolling the selection into view. Verification: `the_selection_stops_at_the_first_and_last_card` and `moving_selection_scrolls_it_into_view`.
 - [ ] 3.2 Route edit, preview and delete from the keyboard in every view, plus add-below and add-above in the notebook view. Verification: `every_view_edits_previews_and_deletes` and `the_notebook_view_adds_a_card_below`.
 - [ ] 3.3 Reorder the selected card with the move keys through `Command::MoveCardTo`. Verification: `moving_a_card_up_survives_a_restart`.
 - [ ] 3.4 Persist and restore the view per deck. Verification: `a_decks_view_survives_a_restart` and `one_decks_view_leaves_another_alone`.

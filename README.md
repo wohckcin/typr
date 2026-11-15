@@ -272,6 +272,8 @@ points, and the action stays.
 | Library | `c` | New card |
 | Library | `x` | Cram the cards the filter selects |
 | Library | `,` | Open settings |
+| Library | `Down` / `j` | Select the next card |
+| Library | `Up` / `k` | Select the previous card |
 | Editor | `s` | Save the card |
 | Editor | `h` | Show the card's history |
 | Editor | `Alt+N` | Add a rectangle to a diagram |

@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use super::{GAP, Library, WRAP_BELOW, columns_for, deck_tree, tile_width, view};
+use typr_core::keymap::Surface;
 use typr_core::library_view::ViewMode;
 use typr_core::store::{CardMode, Deck, Id};
 
@@ -934,4 +935,134 @@ fn the_whole_library_has_no_view_to_choose() {
         runtime.find("view-grid").is_none(),
         "there is no deck to choose a view for"
     );
+}
+
+/// A key press as the frame loop sees it, so the test proves the binding as well as the move.
+fn key_event(key: rune::Key) -> rune::KeyEvent {
+    rune::KeyEvent {
+        key,
+        mods: rune::Mods::default(),
+    }
+}
+
+/// The command the table binds on the library surface, and the move it makes.
+fn press_on_library(library: &mut Library, key: rune::Key) -> bool {
+    let Some(command) = crate::keymap::command_for(Surface::Library, &key_event(key)) else {
+        return false;
+    };
+    match command {
+        typr_core::keymap::Command::SelectionNext => {
+            library.select_next();
+            true
+        }
+        typr_core::keymap::Command::SelectionPrevious => {
+            library.select_previous();
+            true
+        }
+        _ => false,
+    }
+}
+
+#[test]
+fn the_selection_stops_at_the_first_and_last_card() {
+    let mut library = in_view(3, ViewMode::List);
+    library.selected_card = Some(1);
+
+    press_on_library(&mut library, rune::Key::Text("k".to_string()));
+    assert_eq!(
+        library.selected_card,
+        Some(1),
+        "there is nothing above the first card"
+    );
+
+    press_on_library(&mut library, rune::Key::Down);
+    press_on_library(&mut library, rune::Key::Down);
+    assert_eq!(
+        library.selected_card,
+        Some(3),
+        "down moves through the list"
+    );
+    press_on_library(&mut library, rune::Key::Down);
+    assert_eq!(
+        library.selected_card,
+        Some(3),
+        "there is nothing below the last card"
+    );
+    press_on_library(&mut library, rune::Key::Text("j".to_string()));
+    assert_eq!(library.selected_card, Some(3), "`j` is the same move");
+
+    press_on_library(&mut library, rune::Key::Up);
+    assert_eq!(library.selected_card, Some(2), "up moves back");
+}
+
+#[test]
+fn a_selection_with_no_card_in_it_lands_on_the_first() {
+    let mut library = in_view(2, ViewMode::Grid);
+    library.selected_card = None;
+    press_on_library(&mut library, rune::Key::Down);
+    assert_eq!(
+        library.selected_card,
+        Some(1),
+        "the first press starts the walk"
+    );
+}
+
+#[test]
+fn moving_selection_scrolls_it_into_view() {
+    let mut library = in_view(40, ViewMode::Notebook);
+    library.selected_card = Some(1);
+    library.refresh();
+    let mut runtime = draw(library);
+    // The app's own handler, so this proves the key, the request and the reveal together.
+    runtime.on_key =
+        Some(|s: &mut Library, event: &rune::KeyEvent, tx: &mut rune::Tx| super::key(s, event, tx));
+    let first = rect_of(&runtime, "notebook-1").expect("the first card is drawn");
+    assert!(first[1] < 800.0, "the first card starts in view");
+
+    for _ in 0..30 {
+        runtime.key(key_event(rune::Key::Down));
+        runtime.frame(0.0);
+    }
+    assert_eq!(runtime.state.selected_card, Some(31));
+    let shown = rect_of(&runtime, "notebook-31").expect("the selected card is drawn");
+    assert!(
+        (0.0..800.0).contains(&shown[1]),
+        "the card the selection landed on is inside the window, at y {}",
+        shown[1]
+    );
+}
+
+#[test]
+fn pressing_down_in_the_list_keeps_the_selection_on_screen() {
+    let mut library = in_view(40, ViewMode::List);
+    library.selected_card = Some(1);
+    library.refresh();
+    let mut runtime = draw(library);
+    runtime.on_key =
+        Some(|s: &mut Library, event: &rune::KeyEvent, tx: &mut rune::Tx| super::key(s, event, tx));
+
+    for _ in 0..30 {
+        runtime.key(key_event(rune::Key::Down));
+        runtime.frame(0.0);
+    }
+    assert_eq!(runtime.state.selected_card, Some(31));
+    // The list is drawn only where it is scrolled to: the row holding the card has to be built.
+    let row = rect_of(&runtime, "line-30").expect("the row holding the selected card is drawn");
+    let cards = rect_of(&runtime, "cards").expect("the list is drawn");
+    assert!(
+        row[1] >= cards[1] && row[1] + row[3] <= cards[1] + cards[3] + 1.0,
+        "the selected row sits inside the list, at y {} in {}..{}",
+        row[1],
+        cards[1],
+        cards[1] + cards[3]
+    );
+}
+
+/// The box a keyed element was laid out in, or `None` when it is not drawn.
+fn rect_of(runtime: &rune::Runtime<Library>, key: &str) -> Option<[f32; 4]> {
+    runtime
+        .elements()
+        .iter()
+        .find(|each| !each.exiting && each.key.as_deref() == Some(key))
+        .map(|each| each.rect)
 }

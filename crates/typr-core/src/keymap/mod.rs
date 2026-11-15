@@ -52,6 +52,8 @@ pub enum Command {
     ShorterRectangle,
     CramSession,
     Settings,
+    SelectionNext,
+    SelectionPrevious,
 }
 
 impl Command {
@@ -78,6 +80,8 @@ impl Command {
             Command::ShorterRectangle => "Make the rectangle shorter",
             Command::CramSession => "Cram the cards the filter selects",
             Command::Settings => "Settings",
+            Command::SelectionNext => "Select the next card",
+            Command::SelectionPrevious => "Select the previous card",
         }
     }
 }
@@ -331,6 +335,26 @@ const TABLE: &[Binding] = &[
     ),
     row(
         Surface::Library,
+        Command::SelectionNext,
+        Chord::key(Key::Down),
+    ),
+    row(
+        Surface::Library,
+        Command::SelectionNext,
+        Chord::key(Key::Char('j')),
+    ),
+    row(
+        Surface::Library,
+        Command::SelectionPrevious,
+        Chord::key(Key::Up),
+    ),
+    row(
+        Surface::Library,
+        Command::SelectionPrevious,
+        Chord::key(Key::Char('k')),
+    ),
+    row(
+        Surface::Library,
         Command::Settings,
         Chord::key(Key::Char(',')),
     ),
@@ -527,9 +551,10 @@ mod tests {
 
     #[test]
     fn a_surface_lists_its_own_bindings() {
-        let session = bindings_of(Surface::Session).count();
-        let library = bindings_of(Surface::Library).count();
-        assert!(session > library, "the session has the most bindings");
-        assert!(bindings_of(Surface::Library).all(|binding| binding.surface == Surface::Library));
+        for surface in [Surface::Library, Surface::Session] {
+            let listed: Vec<&Binding> = bindings_of(surface).collect();
+            assert!(!listed.is_empty(), "{surface:?} has no bindings");
+            assert!(listed.iter().all(|binding| binding.surface == surface));
+        }
     }
 }

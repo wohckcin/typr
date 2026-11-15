@@ -1679,6 +1679,14 @@ impl State {
                 self.start_cram();
                 true
             }
+            Command::SelectionNext => {
+                self.library.select_next();
+                true
+            }
+            Command::SelectionPrevious => {
+                self.library.select_previous();
+                true
+            }
             _ => false,
         }
     }
@@ -1850,7 +1858,7 @@ impl keymap::Host for State {
     }
 }
 
-fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
+fn on_key(s: &mut State, event: &rune::KeyEvent, tx: &mut Tx) -> bool {
     // An open overlay owns the keyboard: nothing behind a dialog runs on a keystroke.
     if s.panel.open || s.palette.open {
         return overlay_key(s, event);
@@ -1862,6 +1870,11 @@ fn on_key(s: &mut State, event: &rune::KeyEvent, _tx: &mut Tx) -> bool {
         Screen::Summary => Surface::Summary,
         Screen::Settings => Surface::Settings,
     };
+    // The library moves its own selection: the movement keys decide what to scroll into view, and
+    // that is the one place the answer lives.
+    if s.screen == Screen::Library && typr::library::key(&mut s.library, event, tx) {
+        return true;
+    }
     match typr::keymap::command_for(surface, event) {
         Some(command) => s.run_command(command),
         None => false,
