@@ -245,6 +245,13 @@ pub fn shell_over(
     };
     let slow = signal(Vec::<SlowCommand>::new());
     let result = signal(None::<SharedString>);
+    let tiles = {
+        computed(move || {
+            let snapshot = snapshot_signal.get();
+            let cards = cards_in(&snapshot, state.selected_key().as_deref());
+            tiles_for(&cards, &query.get(), SystemClock.now_ms())
+        })
+    };
 
     // One writer for the store: a command, then the snapshot a view reads. `quiet` skips the
     // re-publish for draft writes, which come once a keystroke and must not rebuild the editor.
@@ -453,6 +460,18 @@ pub fn shell_over(
         });
     }
 
+    // A card can vanish under the open editor (trashed elsewhere, or gone from a refreshed
+    // snapshot). The route follows the snapshot rather than the render that noticed.
+    {
+        effect(move || {
+            if let Route::Editor(id) = route.get()
+                && snapshot_signal.with(|snapshot| !snapshot.cards.iter().any(|card| card.id == id))
+            {
+                route.set(Route::Library);
+            }
+        });
+    }
+
     // Escape returns to the whole library from the grid; while a card is open the editor binds it,
     // and this one lets the key through so both can hear it.
     let route_for_key = route;
@@ -537,15 +556,14 @@ pub fn shell_over(
                     let found = snapshot_signal
                         .with(|snapshot| snapshot.cards.iter().find(|card| card.id == id).cloned());
                     let Some(card) = found else {
-                        // The card went away under the editor: say so, and let Escape return. A
-                        // render never writes the route.
+                        // The card went away under the editor. The effect above moves the route
+                        // back; until that runs, show the library rather than nothing.
                         return view()
+                            .flex_1()
                             .p_4()
-                            .child(
-                                text("That card is no longer in the library.")
-                                    .text_sm()
-                                    .text_color(tokens::muted_foreground),
-                            )
+                            .gap_2()
+                            .child(field_reachable("Search cards", query, &search_handle))
+                            .child(grid(tiles, selection, || {}, open))
                             .into_element();
                     };
                     let template = card.template.as_ref().map(|text| Template {
