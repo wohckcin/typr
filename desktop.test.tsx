@@ -20,8 +20,8 @@ test("the search field is on the library screen and the chord reaches it", async
   await app.waitFor("text:Search cards");
   await app.keyboard.press("/");
   await app.type("text:Search cards", "ga");
-  // The host's native field does not expose its text to selectors, so the text itself cannot be
-  // read back there; the chord and the keystrokes are exercised and the screen must survive them.
+  // The field's contents cannot be read back on the host, so the test proves the field is reachable
+  // and the chord and keystrokes leave the screen standing, not what it then holds.
   expect(app.texts()).toContain("All cards");
 });
 

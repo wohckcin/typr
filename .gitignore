@@ -1,3 +1,6 @@
 /target
 /vendor/rune-kit/target
 .nsh/
+
+# A local `nsh test --junit` report
+/test-results.xml
