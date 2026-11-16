@@ -6,6 +6,7 @@
 
 use std::rc::Rc;
 
+use nsh_core::keymap::When;
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::store::{Command, Db, Id, Snapshot};
@@ -88,6 +89,15 @@ pub fn shell_over(db: Rc<Db>, snapshot: Snapshot, library_open: bool, library: L
         move |id: Id| route.set(Route::Editor(id))
     };
 
+    // Escape returns to the whole library from the grid; while a card is open the editor binds it,
+    // and this one lets the key through so both can hear it.
+    let route_for_key = route;
+    on_key_with("escape", KeyOptions { pass_through: true, when: When::Always, ..KeyOptions::default() }, move |_| {
+        if route_for_key.get() == Route::Library {
+            state.select(&"all".into());
+        }
+    });
+
     view()
         .flex_1()
         .flex_row()
@@ -134,6 +144,14 @@ pub fn shell_over(db: Rc<Db>, snapshot: Snapshot, library_open: bool, library: L
                             write_draft(Command::SetDraft { card: id, text: Some(text.to_owned()) }, true)
                         })
                         .leave(move || leaving.set(Route::Library))
+                        .discard({
+                            let write = write.clone();
+                            move || {
+                                // Discarding drops the stored draft, so the next open is the card.
+                                write(Command::SetDraft { card: id, text: None }, true);
+                                leaving.set(Route::Library);
+                            }
+                        })
                         .attach({
                             let root = attachments.clone();
                             move |path| editor::attach_image(&path, &root)

@@ -200,3 +200,45 @@ fn clearing_a_diagram_turns_the_card_into_text_in_the_library() -> Result<(), St
     assert!(card.image.is_none() && card.masks.is_empty(), "the picture and rectangles are gone");
     Ok(())
 }
+
+#[test]
+fn a_draft_survives_a_restart_until_it_is_discarded() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("draft");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    // Type into the card, then stay, so the draft is written down.
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("gato")?;
+    app.press("role:button[gato]")?;
+    app.wait_for("Card source")?;
+    app.type_text("label:Card source", "!")?;
+    // The focused source keeps Escape for itself; the header's way back asks instead.
+    app.press("role:button[Back]")?;
+    app.wait_for("Save this card before leaving?")?;
+    app.press("role:button[Stay]")?;
+    app.wait_for_gone("Save this card before leaving?", std::time::Duration::from_secs(5))?;
+    drop(app);
+
+    // A second launch opens on the draft it left behind, marked unsaved.
+    let mut again = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    again.wait_for("gato")?;
+    again.press("role:button[gato]")?;
+    again.wait_for("Unsaved")?;
+
+    // Discarding throws it away: the next launch opens the saved card again.
+    again.press("role:button[Back]")?;
+    again.wait_for("Save this card before leaving?")?;
+    again.press("role:button[Discard]")?;
+    again.wait_for_gone("Attach image", std::time::Duration::from_secs(5))?;
+    drop(again);
+
+    let mut once_more = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    once_more.wait_for("gato")?;
+    once_more.press("role:button[gato]")?;
+    once_more.wait_for("Save")?;
+    assert!(
+        !once_more.screen().shows("Unsaved"),
+        "the draft was discarded, so the card opens saved"
+    );
+    Ok(())
+}

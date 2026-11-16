@@ -527,3 +527,76 @@ fn an_empty_card_offers_the_diagram_switch_and_a_written_one_does_not() -> Resul
     );
     Ok(())
 }
+
+#[component]
+fn CaretProbe() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let value = signal("xyz".to_owned());
+    let handle = typr::ui::source::source_handle();
+    view()
+        .flex_1()
+        .gap_2()
+        .child(text(move || value.get()))
+        .child(typr::ui::button::button(
+            typr::ui::button::Variant::Default,
+            "Insert",
+            || false,
+            move || {
+                typr::ui::source::insert_at_caret(&handle, "!");
+            },
+        ))
+        .child(typr::ui::source::source_with(value, |_| {}, Some(&handle)))
+}
+
+#[test]
+fn a_reference_is_typed_at_the_caret_not_appended() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<CaretProbe>())).unwrap();
+    app.wait_for("xyz")?;
+    app.press("role:button[Insert]")?;
+    // The editor opens with its caret at the start, so the text goes in front of what is there.
+    app.wait_for("text:/^!xyz$/")?;
+    Ok(())
+}
+
+#[component]
+fn DynamicHolder() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let tick = signal(String::from(""));
+    let left = signal(String::from("not left"));
+    view()
+        .flex_1()
+        .gap_2()
+        .child(text(move || format!("tick={} left={}", tick.get(), left.get())))
+        .child(dynamic(move || {
+            let _ = tick.get();
+            editor_card(
+                Card { saved: "saved text".to_owned(), draft: Some("saved text!".to_owned()), ..Card::default() },
+                std::path::PathBuf::new(),
+                Actions::new()
+                    .attach(|_| Ok("unused.png".to_owned()))
+                    .leave(move || left.set("yes".to_owned())),
+            )
+            .into_element()
+        }))
+}
+
+#[test]
+fn a_dirty_editor_inside_dynamic_still_asks() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<DynamicHolder>())).unwrap();
+    app.wait_for("Unsaved")?;
+    app.press_key("escape")?;
+    app.wait_for("Save this card before leaving?")?;
+    Ok(())
+}
+
+#[test]
+fn the_way_back_asks_while_the_source_holds_the_keyboard() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<LeavingProbe>())).unwrap();
+    app.wait_for("text:/left=not left/")?;
+    // The focused code editor keeps Escape for itself, so the header's way back is the path that
+    // always works.
+    app.type_text("label:Card source", "?")?;
+    app.press("role:button[Back]")?;
+    app.wait_for("Save this card before leaving?")?;
+    Ok(())
+}

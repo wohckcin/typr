@@ -21,7 +21,7 @@ use crate::ui::{
     input::field_with,
     overlay::decision,
     prose::prose,
-    source::source_with,
+    source::{self, source_with},
     status::badge,
     tokens,
 };
@@ -299,6 +299,8 @@ pub struct Actions {
     pub save: Option<Rc<dyn Fn(String)>>,
     pub draft: Option<Rc<dyn Fn(&str)>>,
     pub leave: Option<Rc<dyn Fn()>>,
+    /// Leaving without the draft: the in-progress text is thrown away.
+    pub discard: Option<Rc<dyn Fn()>>,
     pub attach: Option<Rc<dyn Fn(PathBuf) -> std::io::Result<String>>>,
     pub add_mask: Option<Rc<dyn Fn(u32, MaskRect)>>,
     pub merge_masks: Option<Rc<dyn Fn(u32, Vec<MaskRect>)>>,
@@ -323,6 +325,10 @@ impl Actions {
 
     pub fn leave(self, f: impl Fn() + 'static) -> Actions {
         Actions { leave: Some(Rc::new(f)), ..self }
+    }
+
+    pub fn discard(self, f: impl Fn() + 'static) -> Actions {
+        Actions { discard: Some(Rc::new(f)), ..self }
     }
 
     pub fn attach(self, f: impl Fn(PathBuf) -> std::io::Result<String> + 'static) -> Actions {
@@ -434,9 +440,11 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
             }))
             .into_element();
     }
+    let source_handle = source::source_handle();
     let asking = signal(false);
     let save_and_leave = on_leave.clone();
-    let discard = on_leave.clone();
+    // Discarding is the one answer that lets the stored draft go.
+    let discard = actions.discard.clone().or_else(|| on_leave.clone());
     let draft = signal(draft_text.unwrap_or_else(|| saved_text.clone()));
     let saved = signal(saved_text.clone());
     let preview_template = template.clone();
@@ -475,19 +483,32 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
     });
     view()
         .flex_1()
-        .flex_row()
         .gap_3()
         .p_4()
+        // The header sits above both columns, so nothing the columns draw can cover the way back.
         .child(
             view()
-                .flex_1()
+                .flex_row()
+                .items_center()
                 .gap_2()
-                .child(
-                    view()
-                        .flex_row()
-                        .items_center()
-                        .gap_2()
                         .child(state_badge)
+                        .child({
+                            // The way back, reachable without a key: it asks what the key asks.
+                            let leaving = on_leave.clone();
+                            let asking_again = asking;
+                            let saved_now = saved;
+                            let draft_now = draft;
+                            button(Variant::Ghost, "Back", || false, move || {
+                                if draft_now.with(|d| saved_now.with(|s| d != s)) {
+                                    asking_again.set(true);
+                                    return;
+                                }
+                                if let Some(leave) = &leaving {
+                                    leave();
+                                }
+                            })
+                            .into_element()
+                        })
                         .child(dynamic(move || {
                             let count = prompt_count(&draft.get());
                             let label = match count {
@@ -497,12 +518,25 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
                             };
                             badge(label).into_element()
                         })),
-                )
-                .child(source_with(draft, move |text: &str| {
-                    if let Some(report) = &report_draft {
-                        report(text);
-                    }
-                }))
+        )
+        .child(
+            view()
+                .flex_row()
+                .flex_1()
+                .gap_3()
+                .child(
+                    view()
+                        .flex_1()
+                        .gap_2()
+                .child(source_with(
+                    draft,
+                    move |text: &str| {
+                        if let Some(report) = &report_draft {
+                            report(text);
+                        }
+                    },
+                    Some(&source_handle),
+                ))
                 .child(button(
                     Variant::Primary,
                     "Save",
@@ -563,7 +597,9 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
                                                 path.file_stem().and_then(|s| s.to_str()).unwrap_or("image"),
                                                 &name,
                                             );
-                                            draft.update(|text| *text = format!("{text}\n{reference}"));
+                                            if !source::insert_at_caret(&source_handle, &reference) {
+                                                draft.update(|text| *text = format!("{text}\n{reference}"));
+                                            }
                                             attach_error.set(None);
                                         }
                                         Err(error) => attach_error.set(Some(error.to_string().into())),
@@ -617,6 +653,7 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
                     .into_element(),
                     None => view().into_element(),
                 }))
+        )
         )
         .child(leave_decision(asking, move |answer| match answer {
             Answer::Save => {
