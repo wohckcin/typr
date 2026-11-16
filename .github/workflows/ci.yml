@@ -36,13 +36,13 @@ jobs:
         with:
           persist-credentials: false
 
-      # Native Shell's Linux host is GTK 4 (14 or newer) for its views and GStreamer for its media,
-      # and it needs a display to draw: xvfb gives one. The dev packages are what pkg-config and the
-      # linker need to build the host.
-      - name: Install GTK, GStreamer and a virtual display
+      # Native Shell's Linux host is GTK 4 (14 or newer) for its views and GStreamer for its media.
+      # The dev packages are what pkg-config and the linker need to build the host; the screens
+      # themselves run headless, so no display is needed.
+      - name: Install GTK and GStreamer
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb
+          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
           pkg-config --modversion gtk4 gstreamer-1.0
 
       # rust-toolchain.toml pins the channel, so rustup installs 1.99.1 without being told.
@@ -97,22 +97,7 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
-      # The screens run through the nsh CLI, which this image does not ship. nsh.dev's script
-      # installs a release whole (its runtimes live beside bin/nsh) and links it into ~/.local/bin.
-      - name: Cache the Native Shell CLI
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.nsh
-          key: nsh-${{ runner.os }}-v0.5.1
-
-      - name: Install the Native Shell CLI
-        run: |
-          set -euo pipefail
-          curl -fsSL https://nsh.dev/install.sh | NSH_VERSION=v0.5.1 sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/nsh" --version
-
-      # The screens draw on the GTK host, which needs a display: xvfb supplies one.
-      - name: Test the screens on the Linux host
-        run: xvfb-run -a nsh test --target linux
+      # The screens are Rust tests, so `cargo test` above already ran them (headless, no display).
+      # `nsh test --target linux` is for TSX test files, which this app has none of: it exits with
+      # "no test files in ." and the crates' tests are what it would have run.
 
