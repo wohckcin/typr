@@ -66,10 +66,6 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
-      # A screen that writes .px(24.0) has left the visual language: every dimension is a token.
-      - name: Refuse a dimension literal in a screen
-        run: bash scripts/check-tokens.sh
-
       - name: Lint
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings -W clippy::cast_possible_truncation
 
@@ -90,6 +86,8 @@ jobs:
             exit 1
           fi
 
+      # `tests/tokens.rs` runs `scripts/check-tokens.sh` over the screens and fails on a literal or a
+      # base control, so the suite below is what guards the visual language; no separate step.
       - name: Test
         run: cargo test --workspace --locked
 
