@@ -4,7 +4,7 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr::screens::editor::{attach_image, editor, has_content, image_reference};
+use typr::screens::editor::{attach_image, editor, editor_with_draft, has_content, image_reference};
 
 #[component]
 fn Probe() -> impl IntoElement {
@@ -81,4 +81,28 @@ fn a_picture_that_cannot_be_copied_is_refused() {
     let dir = tempfile::tempdir().expect("temp dir");
     let missing = dir.path().join("nothing.png");
     assert!(attach_image(&missing, &dir.path().join("attachments")).is_err());
+}
+
+#[component]
+fn Restored() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let typed = signal(String::from("nothing typed"));
+    view()
+        .gap_2()
+        .child(text(move || format!("typed={}", typed.get())))
+        .child(editor_with_draft(
+            "saved text".to_owned(),
+            Some("half a card".to_owned()),
+            |_| {},
+            |_| Ok("unused.png".to_owned()),
+            move |text| typed.set(text.to_owned()),
+        ))
+}
+
+#[test]
+fn an_unsaved_draft_opens_marked_unsaved() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Restored>())).unwrap();
+    app.wait_for("half a card")?;
+    app.wait_for("Unsaved")?;
+    Ok(())
 }

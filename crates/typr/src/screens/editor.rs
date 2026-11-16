@@ -12,7 +12,7 @@ use typr_core::sides;
 use crate::ui::{
     button::{Variant, button},
     prose::prose,
-    source::source,
+    source::{source, source_with},
     status::badge,
     tokens,
 };
@@ -72,8 +72,20 @@ pub fn editor(
     on_save: impl Fn(String) + Clone + 'static,
     on_attach: impl Fn(PathBuf) -> std::io::Result<String> + Clone + 'static,
 ) -> impl IntoElement {
-    let draft = signal(initial.clone());
-    let saved = signal(initial);
+    editor_with_draft(initial.clone(), None, on_save, on_attach, |_| {})
+}
+
+/// The editor opening on an unsaved draft when there is one, and reporting each edit so the caller
+/// can write the draft down. A draft that differs from the saved text opens marked "Unsaved".
+pub fn editor_with_draft(
+    saved_text: String,
+    draft_text: Option<String>,
+    on_save: impl Fn(String) + Clone + 'static,
+    on_attach: impl Fn(PathBuf) -> std::io::Result<String> + Clone + 'static,
+    on_draft: impl Fn(&str) + 'static,
+) -> impl IntoElement {
+    let draft = signal(draft_text.unwrap_or_else(|| saved_text.clone()));
+    let saved = signal(saved_text);
     let attach_error = signal(None::<SharedString>);
     let save_text = on_save.clone();
     let attach = on_attach.clone();
@@ -91,7 +103,7 @@ pub fn editor(
                 .flex_1()
                 .gap_2()
                 .child(state_badge)
-                .child(source(draft))
+                .child(source_with(draft, on_draft))
                 .child(button(
                     Variant::Primary,
                     "Save",
