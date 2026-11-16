@@ -12,7 +12,7 @@ use typr_core::sides;
 use crate::ui::{
     button::{Variant, button},
     prose::prose,
-    source::{source, source_with},
+    source::source_with,
     status::badge,
     tokens,
 };
