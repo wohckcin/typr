@@ -151,7 +151,7 @@ fn GridScreen() -> impl IntoElement {
                 pinned: false,
             }]
         }),
-        signal(0),
+        signal(None),
         || {},
         |_| {},
     )

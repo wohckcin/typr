@@ -132,7 +132,7 @@ pub fn shell_with(
     // reader guessing whether the app works.
     let snapshot = Rc::new(snapshot);
     let query = signal(String::new());
-    let chosen = signal(0_usize);
+    let chosen = signal(None::<Id>);
     let tiles = {
         let snapshot = snapshot.clone();
         let with = state;
@@ -203,8 +203,9 @@ pub fn shell_over(
     // The library's search: the sidebar states the chord, and this field takes it.
     let query = signal(String::new());
     let search_handle = element_ref();
-    // The library's keyboard: the card Enter acts on, and the session that may be running.
-    let selection = signal(0_usize);
+    // The library's keyboard: the card in force, by identity, so a filter or a reorder cannot move the
+    // highlight to a different card at the same position.
+    let selection = signal(None::<Id>);
     let reopen = {
         let db = db.clone();
         Rc::new(move || {
@@ -225,14 +226,57 @@ pub fn shell_over(
         })
     };
     let open_selected = {
-        let visible = visible.clone();
         Rc::new(move || {
-            let ids = visible();
-            if let Some(id) = ids.get(selection.get_untracked()) {
-                screen.set(Screen::Editor(*id));
+            if let Some(id) = selection.get_untracked() {
+                screen.set(Screen::Editor(id));
             }
         })
     };
+    // Moving the selection: one step from where the selected card sits in the list as it is shown,
+    // the first card when nothing is selected, and the ends for Home and End.
+    let step = {
+        let visible = visible.clone();
+        Rc::new(move |delta: isize| {
+            let ids = visible();
+            let Some(last) = ids.len().checked_sub(1) else {
+                selection.set(None);
+                return;
+            };
+            let at = selection
+                .get_untracked()
+                .and_then(|id| ids.iter().position(|each| *each == id));
+            let next = match at {
+                Some(at) => (at as isize + delta).clamp(0, last as isize) as usize,
+                None if delta > 0 => 0,
+                None => last,
+            };
+            selection.set(Some(ids[next]));
+        })
+    };
+    let select_end = {
+        let visible = visible.clone();
+        Rc::new(move |first: bool| {
+            let ids = visible();
+            let chosen = if first { ids.first() } else { ids.last() };
+            selection.set(chosen.copied());
+        })
+    };
+    // The selected card leaves the list when a filter stops matching it: nothing stays highlighted.
+    {
+        let visible = visible.clone();
+        effect(move || {
+            let chosen = selection.get();
+            let Some(id) = chosen else {
+                return;
+            };
+            snapshot_signal.get();
+            query.get();
+            state.selected_key();
+            if !visible().contains(&id) {
+                selection.set(None);
+            }
+        });
+    }
     // A session: the store serves the queue, the screen walks it, and each grade goes back through
     // the store quietly, so the session is not rebuilt under the user as it is graded.
     let start_session = {
@@ -389,24 +433,38 @@ pub fn shell_over(
     // A command may be bound to more than one chord (Down and `j`), and every one acts.
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionNext) {
         let here = in_library;
-        let visible = visible.clone();
+        let step = step.clone();
         on_key(&key, move |_| {
-            if !here() {
-                return;
+            if here() {
+                step(1);
             }
-            let last = visible().len().saturating_sub(1);
-            selection.update(|at| *at = (*at + 1).min(last));
         });
     }
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionPrevious) {
         let here = in_library;
-        let visible = visible.clone();
+        let step = step.clone();
         on_key(&key, move |_| {
-            if !here() {
-                return;
+            if here() {
+                step(-1);
             }
-            let last = visible().len().saturating_sub(1);
-            selection.update(|at| *at = at.saturating_sub(1).min(last));
+        });
+    }
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionFirst) {
+        let here = in_library;
+        let select_end = select_end.clone();
+        on_key(&key, move |_| {
+            if here() {
+                select_end(true);
+            }
+        });
+    }
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionLast) {
+        let here = in_library;
+        let select_end = select_end.clone();
+        on_key(&key, move |_| {
+            if here() {
+                select_end(false);
+            }
         });
     }
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::EditCard) {
@@ -483,13 +541,18 @@ pub fn shell_over(
                 return;
             }
             let ids = visible();
-            let Some(id) = ids.get(selection.get_untracked()).copied() else {
+            let Some(id) = selection.get_untracked() else {
+                return;
+            };
+            let Some(at) = ids.iter().position(|each| *each == id) else {
                 return;
             };
             match db.apply(&Command::TrashCard { id }, SystemClock.now_ms()) {
                 Ok(_) => {
-                    selection.update(|at| *at = at.saturating_sub(1));
                     reopen();
+                    // The card that took its place in the list now, or the new last card.
+                    let after = visible();
+                    selection.set(after.get(at).or_else(|| after.last()).copied());
                 }
                 Err(error) => log::error!("trash refused: {}", crate::logging::describe(&error)),
             }

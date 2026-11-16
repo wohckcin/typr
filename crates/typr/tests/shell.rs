@@ -461,3 +461,75 @@ fn choosing_a_deck_leaves_the_open_card() -> Result<(), String> {
     assert_eq!(editor_rows, 0, "the editor is gone");
     Ok(())
 }
+
+/// A library of two decks with one card each, so a row change repaints a different card first.
+fn two_decks_on_disk(name: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("typr-shell-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    for (deck_name, markdown) in [
+        ("Spanish", "gato\n---\ncat"),
+        ("Biology", "perro\n---\ndog"),
+    ] {
+        let deck = match db.apply(
+            &typr_core::store::Command::CreateDeck {
+                parent: None,
+                name: deck_name.to_owned(),
+            },
+            0,
+        ) {
+            Ok(typr_core::store::Outcome::Deck(id)) => id,
+            other => panic!("deck: {other:?}"),
+        };
+        db.apply(
+            &typr_core::store::Command::CreateCard {
+                deck,
+                markdown: markdown.to_owned(),
+            },
+            0,
+        )
+        .unwrap();
+    }
+    root
+}
+
+#[test]
+fn a_filtered_out_card_does_not_leave_the_next_one_selected() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = two_decks_on_disk("filtered");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("gato")?;
+    // Select the first card, then filter it out. Nothing is in force afterwards, so Enter opens
+    // nothing rather than the card that took its place.
+    app.press_key("down")?;
+    app.type_text("text:Search cards", "perro")?;
+    app.wait_for_gone("gato", std::time::Duration::from_secs(5))?;
+    // Escape leaves the field and shows the whole library again, which is where Enter acts.
+    app.press_key("escape")?;
+    app.press_key("enter")?;
+    assert!(
+        !app.screen().shows("Attach image"),
+        "no card opened, because the card that was selected had left the list"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_row_change_keeps_the_selected_card_when_it_still_shows() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = two_decks_on_disk("kept");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("perro")?;
+    // Select the second card, then choose the deck that holds only it: it stays in force, and Enter
+    // opens it rather than acting on a position that no longer exists.
+    app.press_key("down")?;
+    app.press_key("down")?;
+    app.press("role:button[Biology]")?;
+    app.press_key("enter")?;
+    app.wait_for("Attach image")?;
+    app.wait_for("text:perro")?;
+    Ok(())
+}

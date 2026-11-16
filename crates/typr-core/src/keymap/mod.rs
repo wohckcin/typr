@@ -54,6 +54,8 @@ pub enum Command {
     Settings,
     SelectionNext,
     SelectionPrevious,
+    SelectionFirst,
+    SelectionLast,
     FocusSearch,
     EditCard,
     PreviewCard,
@@ -90,6 +92,8 @@ impl Command {
             Command::Settings => "Settings",
             Command::SelectionNext => "Select the next card",
             Command::SelectionPrevious => "Select the previous card",
+            Command::SelectionFirst => "Select the first card",
+            Command::SelectionLast => "Select the last card",
             Command::FocusSearch => "Focus the search field",
             Command::EditCard => "Edit the selected card",
             Command::PreviewCard => "Preview the selected card",
@@ -114,6 +118,8 @@ pub enum Key {
     Right,
     Up,
     Down,
+    Home,
+    End,
     Backspace,
 }
 
@@ -129,6 +135,8 @@ impl fmt::Display for Key {
             Key::Right => f.write_str("Right"),
             Key::Up => f.write_str("Up"),
             Key::Down => f.write_str("Down"),
+            Key::Home => f.write_str("Home"),
+            Key::End => f.write_str("End"),
             Key::Backspace => f.write_str("Backspace"),
         }
     }
@@ -400,6 +408,26 @@ const TABLE: &[Binding] = &[
         Surface::Library,
         Command::SelectionPrevious,
         Chord::key(Key::Char('k')),
+    ),
+    row(
+        Surface::Library,
+        Command::SelectionPrevious,
+        Chord::key(Key::Left),
+    ),
+    row(
+        Surface::Library,
+        Command::SelectionNext,
+        Chord::key(Key::Right),
+    ),
+    row(
+        Surface::Library,
+        Command::SelectionFirst,
+        Chord::key(Key::Home),
+    ),
+    row(
+        Surface::Library,
+        Command::SelectionLast,
+        Chord::key(Key::End),
     ),
     row(
         Surface::Library,

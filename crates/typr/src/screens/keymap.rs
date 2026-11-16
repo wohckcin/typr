@@ -38,6 +38,8 @@ pub fn chord_from_keystroke(stroke: &str, apple: bool) -> Option<Chord> {
             "backspace" => key = Some(Key::Backspace),
             "left" => key = Some(Key::Left),
             "right" => key = Some(Key::Right),
+            "home" => key = Some(Key::Home),
+            "end" => key = Some(Key::End),
             "up" => key = Some(Key::Up),
             "down" => key = Some(Key::Down),
             single if single.chars().count() == 1 => key = single.chars().next().map(Key::Char),

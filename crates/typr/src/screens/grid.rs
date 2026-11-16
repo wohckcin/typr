@@ -6,6 +6,8 @@
 
 use nsh_core::prelude::*;
 
+use typr_core::store::Id;
+
 use crate::ui::{prose::prose, status::badge, surface, tokens};
 
 /// How a card's schedule reads on its tile.
@@ -126,7 +128,7 @@ pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
 /// The grid over `tiles`. An empty deck offers the tile that starts a card.
 pub fn grid(
     tiles: Memo<Vec<Tile>>,
-    chosen: Signal<usize>,
+    chosen: Signal<Option<Id>>,
     on_new: impl Fn() + Clone + 'static,
     on_open: impl Fn(i64) + Clone + 'static,
 ) -> impl IntoElement {
@@ -176,7 +178,7 @@ fn button_new(on_new: impl Fn() + 'static) -> impl IntoElement {
 fn tile_cell(
     tiles: Memo<Vec<Tile>>,
     at: Position,
-    chosen: Signal<usize>,
+    chosen: Signal<Option<Id>>,
     on_open: impl Fn(i64) + Clone + 'static,
 ) -> impl IntoElement {
     let tile = computed(move || tiles.with(|t| t.get(at.index()).cloned()));
@@ -210,10 +212,12 @@ fn tile_cell(
         move || on_open(opened())
     };
     let named = move || -> SharedString { plain_preview(&preview()).into() };
-    // The keyboard's card wears a ring, so Enter's target is never a guess.
-    let index = at.index();
+    // The keyboard's card wears a ring, by identity so a filter or a reorder cannot move it to a
+    // different card at the same position.
     let ring = move || {
-        if chosen.get() == index {
+        let chosen_id = chosen.get();
+        let is_chosen = tile.with(|t| t.as_ref().is_some_and(|t| chosen_id == Some(t.id)));
+        if is_chosen {
             tokens::selection()
         } else {
             tokens::background()

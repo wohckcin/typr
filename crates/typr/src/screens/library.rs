@@ -2,7 +2,7 @@
 //! the tiles. Cards are ordered pinned first, then by their place in the deck.
 
 use nsh_core::prelude::*;
-use typr_core::store::{CardSummary, Snapshot};
+use typr_core::store::{CardSummary, Id, Snapshot};
 
 use super::grid::{Tile, grid, tile_of};
 use super::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
@@ -47,7 +47,7 @@ pub fn library(
     let snapshot = std::rc::Rc::new(snapshot);
     let state = Sidebar::new(items_from(&snapshot, &due), library_open, search_chord());
     let query = signal(String::new());
-    let chosen = signal(0);
+    let chosen = signal(None::<Id>);
     let tiles = computed({
         let snapshot = snapshot.clone();
         move || {
