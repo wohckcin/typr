@@ -3,6 +3,7 @@
 
 use nsh_base::button as base_button;
 use nsh_base::{SelectItem, select, tab, tabs};
+use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
 use super::tokens;
@@ -58,32 +59,43 @@ pub fn choose(
         )
 }
 
+/// A row's props.
+#[derive(Clone, PartialEq, Props)]
+pub struct ListRowProps {
+    /// The words on the row.
+    pub title: Prop<SharedString>,
+    /// Whether it is the row in force.
+    #[prop(default)]
+    pub selected: Prop<bool>,
+}
+
+/// What a row reports.
+#[derive(Event)]
+pub enum ListRowEvent {
+    /// Pressed.
+    Press,
+}
+
 /// A selectable row: its own surface shows the selection, not a marker at the edge.
 ///
 /// The row is a pressable view rather than a base button: a base button made inside the sidebar's
 /// reactive list is disposed with the list's previous render, and its `disabled` prop is then read
 /// from a dead owner (the engine logs "a prop read or written after its owner was disposed").
-pub fn list_row(
-    title: impl IntoReactive<SharedString>,
-    selected: impl Fn() -> bool + 'static,
-    on_press: impl Fn() + 'static,
-) -> impl IntoElement {
+#[component]
+pub fn ListRow(props: ListRowProps, cx: Scope<ListRowEvent>) -> impl IntoElement {
     // A row is a control like any other: it says what it is, answers hover and press, and shows the
     // keyboard's ring while the focus is on it.
-    let selected = std::rc::Rc::new(selected);
-    let is_selected = selected.clone();
-    let fill = selected;
     base_button()
-        .on_press(on_press)
-        .selected(move || is_selected())
+        .on_press(move || cx.emit(ListRowEvent::Press))
+        .selected(move || props.selected.get())
         .w_full()
         .px_2()
         .py_1()
         .rounded(tokens::radius)
-        .bg(move || tokens::row_fill(fill()))
+        .bg(move || tokens::row_fill(props.selected.get()))
         // Hover is a wash weaker than the selected fill, and pressed is the fill a selection uses.
         .hover(|style| style.bg(move || tokens::hover().opacity(0.6)))
         .active(|style| style.bg(tokens::selection))
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
-        .child(text(title).text_sm().text_color(tokens::foreground))
+        .child(text(props.title).text_sm().text_color(tokens::foreground))
 }

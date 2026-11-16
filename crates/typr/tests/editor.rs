@@ -599,14 +599,13 @@ fn CaretProbe() -> impl IntoElement {
         .flex_1()
         .gap_2()
         .child(text(move || value.get()))
-        .child(typr::ui::button::button(
-            typr::ui::button::Variant::Default,
-            "Insert",
-            || false,
-            move || {
-                typr::ui::source::insert_at_caret(&handle, "!");
-            },
-        ))
+        .child(
+            typr::ui::button::button()
+                .label("Insert")
+                .on_press(move || {
+                    typr::ui::source::insert_at_caret(&handle, "!");
+                }),
+        )
         .child(typr::ui::source::source_with(value, |_| {}, Some(&handle)))
 }
 

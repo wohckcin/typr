@@ -57,6 +57,6 @@ pub fn history(records: Vec<Record>) -> impl IntoElement {
         .flex_1()
         .gap_3()
         .p_4()
-        .child(badge(format!("{count} reviews")))
+        .child(badge().label(format!("{count} reviews")))
         .child(list)
 }

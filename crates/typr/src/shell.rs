@@ -168,7 +168,12 @@ pub fn shell_with(
                 .flex_1()
                 .p_4()
                 .gap_2()
-                .child(field("Search cards", query))
+                .child(
+                    field()
+                        .placeholder("Search cards")
+                        .value(move || SharedString::from(query.get()))
+                        .on_change(move |text: &String| query.set(text.to_string())),
+                )
                 .child(grid(tiles, chosen, || {}, |_| {}))
                 .into_element()
         })))

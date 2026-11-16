@@ -11,7 +11,7 @@ use typr_core::keymap::{Command, Surface, chord_of};
 use typr_core::store::{Id, Snapshot};
 
 use crate::ui::{
-    button::{Variant, button_labelled},
+    button::{Variant, button},
     choice::list_row,
     status::badge,
     tokens,
@@ -208,7 +208,7 @@ fn search_row(state: Sidebar) -> impl IntoElement {
         .justify_between()
         .child(text("Search").text_sm().text_color(tokens::foreground))
         .child(dynamic(move || {
-            badge(state.search_chord.get()).into_element()
+            badge().label(state.search_chord.get()).into_element()
         }))
 }
 
@@ -241,44 +241,43 @@ fn row_view(
     let fold = key.clone();
     let folded = key.clone();
     let named_fold = key.clone();
-    let mut row = view()
-        .flex_row()
-        .items_center()
-        .gap_1()
-        .child(view().flex_1().child(list_row(
-            item.label.clone(),
-            move || state.selected.with(|s| s.as_ref() == Some(&in_force)),
-            move || {
-                state.select(&press);
-                pick(&press);
-            },
-        )));
+    let mut row = view().flex_row().items_center().gap_1().child(
+        view().flex_1().child(
+            list_row()
+                .title(item.label.clone())
+                .selected(move || state.selected.with(|s| s.as_ref() == Some(&in_force)))
+                .on_press(move || {
+                    state.select(&press);
+                    pick(&press);
+                }),
+        ),
+    );
     if item.due > 0 {
-        row = row.child(badge(item.due.to_string()));
+        row = row.child(badge().label(item.due.to_string()));
     }
     if item.has_children {
         // The chevron is the one control with no words on it, so it names itself.
         let named = item.label.clone();
-        row = row.child(button_labelled(
-            Variant::Ghost,
-            move || -> SharedString {
-                if state.is_collapsed(&folded) {
-                    "▸".into()
-                } else {
-                    "▾".into()
-                }
-            },
-            move || -> SharedString {
-                let action = if state.is_collapsed(&named_fold) {
-                    "Expand"
-                } else {
-                    "Collapse"
-                };
-                format!("{action} {named}").into()
-            },
-            || false,
-            move || state.toggle_collapsed(&fold),
-        ));
+        row = row.child(
+            button()
+                .variant(Variant::Ghost)
+                .label(move || -> SharedString {
+                    if state.is_collapsed(&folded) {
+                        "▸".into()
+                    } else {
+                        "▾".into()
+                    }
+                })
+                .accessible(move || {
+                    let action = if state.is_collapsed(&named_fold) {
+                        "Expand"
+                    } else {
+                        "Collapse"
+                    };
+                    Some(format!("{action} {named}").into())
+                })
+                .on_press(move || state.toggle_collapsed(&fold)),
+        );
     }
     row
 }

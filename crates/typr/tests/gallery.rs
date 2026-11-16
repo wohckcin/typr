@@ -32,9 +32,24 @@ fn Gallery() -> impl IntoElement {
     view()
         .gap_3()
         .p_4()
-        .child(field("Search", draft))
-        .child(check("Remember", ticked))
-        .child(toggle("Sound", sound))
+        .child(
+            field()
+                .placeholder("Search")
+                .value(move || SharedString::from(draft.get()))
+                .on_change(move |text: &String| draft.set(text.to_string())),
+        )
+        .child(
+            check()
+                .label("Remember")
+                .checked(move || ticked.get())
+                .on_change(move |next: &bool| ticked.set(*next)),
+        )
+        .child(
+            toggle()
+                .label("Sound")
+                .on(move || sound.get())
+                .on_change(move |next: &bool| sound.set(*next)),
+        )
         .child(text(move || {
             format!(
                 "typed={} ticked={} sound={}",
@@ -45,52 +60,68 @@ fn Gallery() -> impl IntoElement {
         }))
         .child(tab_row(TABS, tab))
         .child(text(move || format!("tab={}", tab.get())))
-        .child(list_row(
-            "First row",
-            move || row.get() == 0,
-            move || row.set(0),
-        ))
-        .child(list_row(
-            "Second row",
-            move || row.get() == 1,
-            move || row.set(1),
-        ))
+        .child(
+            list_row()
+                .title("First row")
+                .selected(move || row.get() == 0)
+                .on_press(move || row.set(0)),
+        )
+        .child(
+            list_row()
+                .title("Second row")
+                .selected(move || row.get() == 1)
+                .on_press(move || row.set(1)),
+        )
         .child(text(move || format!("row={}", row.get())))
-        .child(button(
-            Variant::Primary,
-            "Open",
-            || false,
-            move || open.set(true),
-        ))
+        .child(
+            button()
+                .variant(Variant::Primary)
+                .label("Open")
+                .disabled(|| false)
+                .on_press(move || open.set(true)),
+        )
         .child(decision(open, move || {
-            view()
-                .gap_2()
-                .child(text("Confirm the change?"))
-                .child(button(
-                    Variant::Default,
-                    "Close",
-                    || false,
-                    move || open.set(false),
-                ))
+            view().gap_2().child(text("Confirm the change?")).child(
+                button()
+                    .variant(Variant::Default)
+                    .label("Close")
+                    .disabled(|| false)
+                    .on_press(move || open.set(false)),
+            )
         }))
-        .child(button(
-            Variant::Destructive,
-            "Notify",
-            || false,
-            move || message.set(Some("Saved".into())),
-        ))
+        .child(
+            button()
+                .variant(Variant::Destructive)
+                .label("Notify")
+                .disabled(|| false)
+                .on_press(move || message.set(Some("Saved".into()))),
+        )
         .child(toast(message))
         .child(command_menu(
-            button(Variant::Ghost, "More", || false, || {}),
+            button()
+                .variant(Variant::Ghost)
+                .label("More")
+                .disabled(|| false)
+                .on_press(|| {}),
             commands,
         ))
         .child(anchored(
-            button(Variant::Ghost, "Details", || false, || {}),
+            button()
+                .variant(Variant::Ghost)
+                .label("Details")
+                .disabled(|| false)
+                .on_press(|| {}),
             text("Shipped"),
         ))
         .child(choose(&[("apple", "Apple"), ("kiwi", "Kiwi")], chosen))
         .child(text(move || format!("renamed={}", renamed.get())))
-        .child(button(Variant::Default, "Locked", || true, || {}))
+        .child(
+            button()
+                .variant(Variant::Default)
+                .label("Locked")
+                .disabled(|| true)
+                .on_press(|| {}),
+        )
         .child(busy_button(
             Variant::Primary,
             "Save",

@@ -138,17 +138,20 @@ fn path_row(label: &'static str, path: PathBuf) -> impl IntoElement {
                 .items_center()
                 .gap_2()
                 .child(text(shown).text_sm().text_color(tokens::foreground))
-                .child(button(
-                    Variant::Ghost,
-                    move || -> SharedString { format!("Show {label} in the file manager").into() },
-                    || false,
-                    move || {
-                        let path = reveal.clone();
-                        spawn(async move {
-                            let _ = reveal_path(path).await;
-                        });
-                    },
-                )),
+                .child(
+                    button()
+                        .variant(Variant::Ghost)
+                        .label(move || -> SharedString {
+                            format!("Show {label} in the file manager").into()
+                        })
+                        .disabled(|| false)
+                        .on_press(move || {
+                            let path = reveal.clone();
+                            spawn(async move {
+                                let _ = reveal_path(path).await;
+                            });
+                        }),
+                ),
         )
 }
 
@@ -178,7 +181,12 @@ pub fn settings(
             "Review",
             view()
                 .gap_2()
-                .child(field("New cards a day", values.cap_text))
+                .child(
+                    field()
+                        .placeholder("New cards a day")
+                        .value(move || SharedString::from(values.cap_text.get()))
+                        .on_change(move |text: &String| values.cap_text.set(text.to_string())),
+                )
                 .child(dynamic(move || match values.refusal.get() {
                     Some(reason) => text(reason)
                         .text_xs()
@@ -186,16 +194,22 @@ pub fn settings(
                         .into_element(),
                     None => view().into_element(),
                 }))
-                .child(view().flex_row().child(button(
-                    Variant::Default,
-                    "Apply",
-                    || false,
-                    accept,
-                ))),
+                .child(
+                    view().flex_row().child(
+                        button()
+                            .variant(Variant::Default)
+                            .label("Apply")
+                            .disabled(|| false)
+                            .on_press(accept),
+                    ),
+                ),
         ))
         .child(section(
             "Appearance",
-            toggle("Show review counts", values.show_counts),
+            toggle()
+                .label("Show review counts")
+                .on(move || values.show_counts.get())
+                .on_change(move |next: &bool| values.show_counts.set(*next)),
         ))
         .child(section(
             "Library",
@@ -208,15 +222,27 @@ pub fn settings(
                     view()
                         .flex_row()
                         .gap_2()
-                        .child(badge(format!("Schema {schema}")))
-                        .child(badge(format!("{} bytes", bytes))),
+                        .child(badge().label(format!("Schema {schema}")))
+                        .child(badge().label(format!("{} bytes", bytes))),
                 )
                 .child(
                     view()
                         .flex_row()
                         .gap_2()
-                        .child(button(Variant::Default, "Import", || false, on_import))
-                        .child(button(Variant::Default, "Export", || false, on_export)),
+                        .child(
+                            button()
+                                .variant(Variant::Default)
+                                .label("Import")
+                                .disabled(|| false)
+                                .on_press(on_import),
+                        )
+                        .child(
+                            button()
+                                .variant(Variant::Default)
+                                .label("Export")
+                                .disabled(|| false)
+                                .on_press(on_export),
+                        ),
                 ),
         ))
 }

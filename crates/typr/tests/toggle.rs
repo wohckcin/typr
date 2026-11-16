@@ -12,8 +12,18 @@ fn Probe() -> impl IntoElement {
     let switch_on = signal(false);
     view()
         .gap_2()
-        .child(check("Remember", box_on))
-        .child(toggle("Sound", switch_on))
+        .child(
+            check()
+                .label("Remember")
+                .checked(move || box_on.get())
+                .on_change(move |next: &bool| box_on.set(*next)),
+        )
+        .child(
+            toggle()
+                .label("Sound")
+                .on(move || switch_on.get())
+                .on_change(move |next: &bool| switch_on.set(*next)),
+        )
         .child(text(move || {
             format!("box={} switch={}", box_on.get(), switch_on.get())
         }))

@@ -143,7 +143,7 @@ pub fn grid(
             .unwrap_or_default();
             return view()
                 .p_4()
-                .child(badge("New card"))
+                .child(badge().label("New card"))
                 .child(text(chord).text_xs().text_color(tokens::muted_foreground))
                 .child(
                     text("This deck has no cards yet")
@@ -167,12 +167,9 @@ pub fn grid(
 }
 
 fn button_new(on_new: impl Fn() + 'static) -> impl IntoElement {
-    crate::ui::button::button(
-        crate::ui::button::Variant::Default,
-        "New card",
-        || false,
-        on_new,
-    )
+    crate::ui::button::button()
+        .label("New card")
+        .on_press(on_new)
 }
 
 /// A cell of the list. It keeps no state: every binding reads the tile at its current index.
@@ -200,10 +197,10 @@ fn tile_cell(
         let more = tags.len() - shown;
         let mut row = view().flex_row().gap_1();
         for tag in tags.into_iter().take(shown) {
-            row = row.child(badge(tag));
+            row = row.child(badge().label(tag));
         }
         if more > 0 {
-            row = row.child(badge(format!("{more} more")));
+            row = row.child(badge().label(format!("{more} more")));
         }
         row
     };
@@ -212,7 +209,7 @@ fn tile_cell(
         let on_open = on_open.clone();
         move || on_open(opened())
     };
-    let named = move || plain_preview(&preview()).into();
+    let named = move || -> SharedString { plain_preview(&preview()).into() };
     // The keyboard's card wears a ring, so Enter's target is never a guess.
     let index = at.index();
     let ring = move || {
@@ -222,44 +219,45 @@ fn tile_cell(
             tokens::background()
         }
     };
-    crate::ui::button::tile_button(
-        named,
-        press,
-        view()
-            .rounded(tokens::radius)
-            .border_1()
-            .border_color(ring)
-            .child(surface::card(
-                view()
-                    .gap_2()
-                    .child(prose(preview))
-                    .child(dynamic(move || {
-                        if !tile.with(|t| t.as_ref().is_some_and(|t| t.pinned)) {
-                            return view().into_element();
-                        }
-                        badge("Pinned").into_element()
-                    }))
-                    .child(dynamic(move || {
-                        let n = hidden();
-                        if n == 0 {
-                            return view().into_element();
-                        }
-                        let label = if n == 1 {
-                            "1 hidden side".to_owned()
-                        } else {
-                            format!("{n} hidden sides")
-                        };
-                        text(label)
-                            .text_xs()
-                            .text_color(tokens::muted_foreground)
-                            .into_element()
-                    }))
-                    .child(
-                        text(schedule)
-                            .text_xs()
-                            .text_color(tokens::muted_foreground),
-                    )
-                    .child(dynamic(move || tag_row().into_element())),
-            )),
-    )
+    crate::ui::button::tile()
+        .label(named)
+        .on_press(press)
+        .child(
+            view()
+                .rounded(tokens::radius)
+                .border_1()
+                .border_color(ring)
+                .child(surface::card(
+                    view()
+                        .gap_2()
+                        .child(prose(preview))
+                        .child(dynamic(move || {
+                            if !tile.with(|t| t.as_ref().is_some_and(|t| t.pinned)) {
+                                return view().into_element();
+                            }
+                            badge().label("Pinned").into_element()
+                        }))
+                        .child(dynamic(move || {
+                            let n = hidden();
+                            if n == 0 {
+                                return view().into_element();
+                            }
+                            let label = if n == 1 {
+                                "1 hidden side".to_owned()
+                            } else {
+                                format!("{n} hidden sides")
+                            };
+                            text(label)
+                                .text_xs()
+                                .text_color(tokens::muted_foreground)
+                                .into_element()
+                        }))
+                        .child(
+                            text(schedule)
+                                .text_xs()
+                                .text_color(tokens::muted_foreground),
+                        )
+                        .child(dynamic(move || tag_row().into_element())),
+                )),
+        )
 }

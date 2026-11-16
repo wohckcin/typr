@@ -170,7 +170,7 @@ pub fn study(
                 let leave = on_leave.clone();
                 return view()
                     .gap_3()
-                    .child(badge(format!("Session complete · {reviewed} reviewed")))
+                    .child(badge().label(format!("Session complete · {reviewed} reviewed")))
                     .child(
                         text(format!(
                             "Remembered {remembered} · Forgot {forgot} · {due} due when you started"
@@ -178,12 +178,15 @@ pub fn study(
                         .text_sm()
                         .text_color(tokens::foreground),
                     )
-                    .child(view().flex_row().child(button(
-                        Variant::Default,
-                        "Back to the library",
-                        || false,
-                        move || leave.clone()(),
-                    )))
+                    .child(
+                        view().flex_row().child(
+                            button()
+                                .variant(Variant::Default)
+                                .label("Back to the library")
+                                .disabled(|| false)
+                                .on_press(move || leave.clone()()),
+                        ),
+                    )
                     .into_element();
             }
             let lines: Vec<String> = session.with(|s| {
@@ -205,24 +208,32 @@ pub fn study(
             let grading_ok = session.with(|s| s.borrow().gradeable());
             let mut row = view().flex_row().gap_2();
             if reveal_ok {
-                row = row.child(button(Variant::Primary, "Show answer", || false, reveal));
+                row = row.child(
+                    button()
+                        .variant(Variant::Primary)
+                        .label("Show answer")
+                        .disabled(|| false)
+                        .on_press(reveal),
+                );
             }
             if grading_ok {
                 let forgot = grade_forgot.clone();
                 let remembered = grade_remembered.clone();
                 row = row
-                    .child(button(
-                        Variant::Destructive,
-                        "Forgot",
-                        || false,
-                        move || forgot(Grade::Forgot),
-                    ))
-                    .child(button(
-                        Variant::Default,
-                        "Remembered",
-                        || false,
-                        move || remembered(Grade::Remembered),
-                    ));
+                    .child(
+                        button()
+                            .variant(Variant::Destructive)
+                            .label("Forgot")
+                            .disabled(|| false)
+                            .on_press(move || forgot(Grade::Forgot)),
+                    )
+                    .child(
+                        button()
+                            .variant(Variant::Default)
+                            .label("Remembered")
+                            .disabled(|| false)
+                            .on_press(move || remembered(Grade::Remembered)),
+                    );
             }
             row.into_element()
         }))

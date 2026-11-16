@@ -178,7 +178,7 @@ fn row_views(rows: Vec<(&'static str, String)>) -> impl IntoElement {
                 .justify_between()
                 .items_center()
                 .child(text(label).text_sm().text_color(tokens::foreground))
-                .child(keycap(chord)),
+                .child(keycap().chord(chord)),
         ));
     }
     list
@@ -198,7 +198,12 @@ pub fn keymap_panel(surface: Surface) -> impl IntoElement {
         }
         view()
             .gap_3()
-            .child(field("Filter commands", query))
+            .child(
+                field()
+                    .placeholder("Filter commands")
+                    .value(move || SharedString::from(query.get()))
+                    .on_change(move |text: &String| query.set(text.to_string())),
+            )
             .child(dynamic(move || {
                 row_views(visible_rows(surface, &query.get())).into_element()
             }))
@@ -245,7 +250,7 @@ pub fn palette(
                         .justify_between()
                         .items_center()
                         .child(text(label).text_sm().text_color(tokens::foreground))
-                        .child(keycap(chord)),
+                        .child(keycap().chord(chord)),
                 ));
             }
             list.into_element()

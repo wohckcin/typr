@@ -62,14 +62,26 @@ pub fn diagnostics(
                 .into_element(),
             None => view().into_element(),
         }))
-        .child(badge("Slow commands"))
+        .child(badge().label("Slow commands"))
         .child(slow_list)
         .child(
             view()
                 .flex_row()
                 .gap_2()
-                .child(button(Variant::Default, "Import", || false, on_import))
-                .child(button(Variant::Default, "Export", || false, on_export)),
+                .child(
+                    button()
+                        .variant(Variant::Default)
+                        .label("Import")
+                        .disabled(|| false)
+                        .on_press(on_import),
+                )
+                .child(
+                    button()
+                        .variant(Variant::Default)
+                        .label("Export")
+                        .disabled(|| false)
+                        .on_press(on_export),
+                ),
         )
         .child(toast(result))
 }

@@ -45,12 +45,10 @@ fn Probe() -> impl IntoElement {
 }
 
 fn button_refresh(state: Sidebar) -> impl IntoElement {
-    typr::ui::button::button(
-        typr::ui::button::Variant::Ghost,
-        "Refresh",
-        || false,
-        move || state.refresh(fixture()),
-    )
+    typr::ui::button::button()
+        .variant(typr::ui::button::Variant::Ghost)
+        .label("Refresh")
+        .on_press(move || state.refresh(fixture()))
 }
 
 fn start() -> Headless {

@@ -1,18 +1,21 @@
 //! The app's button: one look per variant, one press feedback, one focus ring, one disabled look.
 //!
-//! Screens call [`button`] with a variant and a label; they never style a `nsh_base` button.
+//! Screens place [`button`] with its props and hear its press; they never style a `nsh_base`
+//! button.
 
 use nsh_base::button as base_button;
+use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
 use super::{motion, tokens};
 
-/// What a button is for. The variant sets its colours; the size sets its height and padding.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What a button is for. The variant sets its colours.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PropEnum)]
 pub enum Variant {
     /// The one commitment in a decision area.
     Primary,
     /// An ordinary visible action.
+    #[default]
     Default,
     /// A quiet toolbar or inline action.
     Ghost,
@@ -20,55 +23,50 @@ pub enum Variant {
     Destructive,
 }
 
-/// A button, filled with the variant's colours and sized from the scale.
-pub fn button(
-    variant: Variant,
-    label: impl IntoReactive<SharedString>,
-    disabled: impl Fn() -> bool + 'static,
-    on_press: impl Fn() + 'static,
-) -> impl IntoElement {
-    let (fill, text_color) = match variant {
-        Variant::Primary => (tokens::selection(), tokens::selection_foreground()),
-        Variant::Default => (tokens::card(), tokens::foreground()),
-        Variant::Ghost => (tokens::background().opacity(0.0), tokens::foreground()),
-        Variant::Destructive => (tokens::destructive(), tokens::selection_foreground()),
-    };
-    base_button()
-        .disabled(disabled)
-        .on_press(on_press)
-        .h(px(32.0))
-        .px_4()
-        .items_center()
-        .justify_center()
-        .rounded(tokens::radius)
-        .bg(move || fill)
-        .border_1()
-        .border_color(tokens::border)
-        .active(|s| s.opacity(0.85))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
-        .disabled_style(|s| s.opacity(0.5))
-        .child(text(label).text_sm().text_color(move || text_color))
+impl Variant {
+    /// The fill and the text colour the variant draws with.
+    fn colors(self) -> (AdaptiveColor, AdaptiveColor) {
+        match self {
+            Variant::Primary => (tokens::selection(), tokens::selection_foreground()),
+            Variant::Default => (tokens::card(), tokens::foreground()),
+            Variant::Ghost => (tokens::background().opacity(0.0), tokens::foreground()),
+            Variant::Destructive => (tokens::destructive(), tokens::selection_foreground()),
+        }
+    }
 }
 
-/// A button whose visible mark is not its name: an icon-only control names itself for a screen
-/// reader while it draws a glyph.
-pub fn button_labelled(
-    variant: Variant,
-    label: impl IntoReactive<SharedString>,
-    accessible: impl Fn() -> SharedString + 'static,
-    disabled: impl Fn() -> bool + 'static,
-    on_press: impl Fn() + 'static,
-) -> impl IntoElement {
-    let (fill, text_color) = match variant {
-        Variant::Primary => (tokens::selection(), tokens::selection_foreground()),
-        Variant::Default => (tokens::card(), tokens::foreground()),
-        Variant::Ghost => (tokens::background().opacity(0.0), tokens::foreground()),
-        Variant::Destructive => (tokens::destructive(), tokens::selection_foreground()),
-    };
+/// A button's props.
+#[derive(Clone, PartialEq, Props)]
+pub struct ButtonProps {
+    /// What it is for: the variant sets its colours.
+    #[prop(default)]
+    pub variant: Prop<Variant>,
+    /// The words on it.
+    pub label: Prop<SharedString>,
+    /// The name a screen reader says, when the visible mark is not the name: an icon-only control
+    /// says itself while it draws a glyph.
+    #[prop(default)]
+    pub accessible: Prop<Option<SharedString>>,
+    /// Whether a press does nothing.
+    #[prop(default)]
+    pub disabled: Prop<bool>,
+}
+
+/// What a button reports.
+#[derive(Event)]
+pub enum ButtonEvent {
+    /// Pressed.
+    Press,
+}
+
+/// A button, filled with the variant's colours and sized from the scale.
+#[component]
+pub fn Button(props: ButtonProps, cx: Scope<ButtonEvent>) -> impl IntoElement {
+    let (fill, text_color) = props.variant.get_untracked().colors();
     base_button()
-        .disabled(disabled)
-        .on_press(on_press)
-        .accessibility_label(move || Some(accessible()))
+        .disabled(move || props.disabled.get())
+        .on_press(move || cx.emit(ButtonEvent::Press))
+        .accessibility_label(move || props.accessible.get())
         .h(px(32.0))
         .px_4()
         .items_center()
@@ -77,10 +75,39 @@ pub fn button_labelled(
         .bg(move || fill)
         .border_1()
         .border_color(tokens::border)
-        .active(|s| s.opacity(0.85))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
-        .disabled_style(|s| s.opacity(0.5))
-        .child(text(label).text_sm().text_color(move || text_color))
+        .active(|style| style.opacity(0.85))
+        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
+        .disabled_style(|style| style.opacity(0.5))
+        .child(text(props.label).text_sm().text_color(move || text_color))
+}
+
+/// A press target drawn as its own children, for a card that is more than a label: a grid tile
+/// opens its card, and its name is what a screen reader says instead of its whole content.
+#[derive(Clone, PartialEq, Props)]
+pub struct TileProps {
+    /// What a screen reader says for it.
+    pub label: Prop<SharedString>,
+    /// What it draws.
+    pub children: Children,
+}
+
+/// What a tile reports.
+#[derive(Event)]
+pub enum TileEvent {
+    /// Pressed.
+    Press,
+}
+
+/// A card's tile: its own drawing, its own name for a screen reader.
+#[component]
+pub fn Tile(props: TileProps, cx: Scope<TileEvent>) -> impl IntoElement {
+    base_button()
+        .on_press(move || cx.emit(TileEvent::Press))
+        .accessibility_label(move || Some(props.label.get()))
+        .rounded(tokens::radius)
+        .active(|style| style.opacity(0.9))
+        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
+        .child(props.children)
 }
 
 /// Presses take this long to settle back, from the motion tokens.
@@ -96,28 +123,15 @@ pub fn busy_button(
     busy: impl Fn() -> bool + Copy + 'static,
     on_press: impl Fn() + 'static,
 ) -> impl IntoElement {
-    let label = move || -> SharedString {
-        if busy() {
-            "Working…".into()
-        } else {
-            idle.into()
-        }
-    };
-    button(variant, label, busy, on_press)
-}
-
-/// A press target drawn as its own children, for a card that is more than a label: a grid tile
-/// opens its card, and its name is what a screen reader says instead of its whole content.
-pub fn tile_button(
-    label: impl Fn() -> SharedString + 'static,
-    on_press: impl Fn() + 'static,
-    child: impl IntoElement,
-) -> impl IntoElement {
-    base_button()
+    button()
+        .variant(variant)
+        .label(move || -> SharedString {
+            if busy() {
+                "Working…".into()
+            } else {
+                idle.into()
+            }
+        })
+        .disabled(busy)
         .on_press(on_press)
-        .accessibility_label(move || Some(label()))
-        .rounded(tokens::radius)
-        .active(|s| s.opacity(0.9))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
-        .child(child)
 }

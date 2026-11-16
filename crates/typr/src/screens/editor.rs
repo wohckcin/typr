@@ -18,7 +18,7 @@ use crate::screens::keymap::keystroke_of;
 
 use crate::ui::{
     button::{Variant, button},
-    input::field_with,
+    input::field,
     overlay::decision,
     prose::prose,
     source::{self, source_with},
@@ -198,12 +198,13 @@ pub fn diagram_pane(diagram: Diagram, cx: Scope<EditorEvent>) -> impl IntoElemen
     let remove_rows = rows;
     let mut strip = view().flex_row().gap_2();
     for (index, row) in layer_rows.clone().into_iter().enumerate() {
-        strip = strip.child(button(
-            Variant::Default,
-            format!("group {}", row.group),
-            || false,
-            move || picked.set(Some(index)),
-        ));
+        strip = strip.child(
+            button()
+                .variant(Variant::Default)
+                .label(format!("group {}", row.group))
+                .disabled(|| false)
+                .on_press(move || picked.set(Some(index))),
+        );
     }
     view()
         .flex_1()
@@ -304,34 +305,36 @@ pub fn diagram_pane(diagram: Diagram, cx: Scope<EditorEvent>) -> impl IntoElemen
             view()
                 .flex_row()
                 .gap_2()
-                .child(button(
-                    Variant::Default,
-                    "Merge group",
-                    || false,
-                    move || {
-                        let Some(index) = picked.get_untracked() else {
-                            return;
-                        };
-                        let group = merge_rows[index].group;
-                        let rects: Vec<Rect> = merge_rows
-                            .iter()
-                            .filter(|row| row.group == group)
-                            .map(|row| Rect::of(row.rect()))
-                            .collect();
-                        cx.emit(EditorEvent::MergeMasks(MergedMasks { group, rects }));
-                    },
-                ))
-                .child(button(
-                    Variant::Default,
-                    "Remove group",
-                    || false,
-                    move || {
-                        let Some(index) = picked.get_untracked() else {
-                            return;
-                        };
-                        cx.emit(EditorEvent::RemoveMaskGroup(remove_rows[index].group));
-                    },
-                )),
+                .child(
+                    button()
+                        .variant(Variant::Default)
+                        .label("Merge group")
+                        .disabled(|| false)
+                        .on_press(move || {
+                            let Some(index) = picked.get_untracked() else {
+                                return;
+                            };
+                            let group = merge_rows[index].group;
+                            let rects: Vec<Rect> = merge_rows
+                                .iter()
+                                .filter(|row| row.group == group)
+                                .map(|row| Rect::of(row.rect()))
+                                .collect();
+                            cx.emit(EditorEvent::MergeMasks(MergedMasks { group, rects }));
+                        }),
+                )
+                .child(
+                    button()
+                        .variant(Variant::Default)
+                        .label("Remove group")
+                        .disabled(|| false)
+                        .on_press(move || {
+                            let Some(index) = picked.get_untracked() else {
+                                return;
+                            };
+                            cx.emit(EditorEvent::RemoveMaskGroup(remove_rows[index].group));
+                        }),
+                ),
         )
 }
 
@@ -438,12 +441,13 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
             .p_4()
             .gap_2()
             .child(diagram_pane(diagram, cx))
-            .child(button(
-                Variant::Default,
-                "Clear the diagram",
-                || false,
-                move || asking_clear.set(true),
-            ))
+            .child(
+                button()
+                    .variant(Variant::Default)
+                    .label("Clear the diagram")
+                    .disabled(|| false)
+                    .on_press(move || asking_clear.set(true)),
+            )
             .child(clear_question(asking_clear, move || {
                 cx.emit(EditorEvent::ClearDiagram);
             }))
@@ -489,7 +493,9 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
     }
     let state_badge = dynamic(move || {
         let dirty = draft.with(|d| saved.with(|s| d != s));
-        badge(if dirty { "Unsaved" } else { "Saved" }).into_element()
+        badge()
+            .label(if dirty { "Unsaved" } else { "Saved" })
+            .into_element()
     });
     view()
         .flex_1()
@@ -507,19 +513,18 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                     let asking_again = asking;
                     let saved_now = saved;
                     let draft_now = draft;
-                    button(
-                        Variant::Ghost,
-                        "Back",
-                        || false,
-                        move || {
+                    button()
+                        .variant(Variant::Ghost)
+                        .label("Back")
+                        .disabled(|| false)
+                        .on_press(move || {
                             if draft_now.with(|d| saved_now.with(|s| d != s)) {
                                 asking_again.set(true);
                                 return;
                             }
                             cx.emit(EditorEvent::Leave);
-                        },
-                    )
-                    .into_element()
+                        })
+                        .into_element()
                 })
                 .child(dynamic(move || {
                     let count = prompt_count(&draft.get());
@@ -528,7 +533,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                         1 => "1 prompt".to_owned(),
                         n => format!("{n} prompts"),
                     };
-                    badge(label).into_element()
+                    badge().label(label).into_element()
                 })),
         )
         .child(
@@ -545,16 +550,17 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                             move |text: &str| cx.emit(EditorEvent::Draft(text.to_owned())),
                             Some(&source_handle),
                         ))
-                        .child(button(
-                            Variant::Primary,
-                            "Save",
-                            move || draft.with(|d| !has_content(d)),
-                            move || {
-                                let text = draft.get_untracked();
-                                saved.set(text.clone());
-                                cx.emit(EditorEvent::Save(text));
-                            },
-                        ))
+                        .child(
+                            button()
+                                .variant(Variant::Primary)
+                                .label("Save")
+                                .disabled(move || draft.with(|d| !has_content(d)))
+                                .on_press(move || {
+                                    let text = draft.get_untracked();
+                                    saved.set(text.clone());
+                                    cx.emit(EditorEvent::Save(text));
+                                }),
+                        )
                         .child(dynamic({
                             let drawn_root = root.clone();
                             move || {
@@ -562,11 +568,11 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                     return view().into_element();
                                 }
                                 let pressed_root = drawn_root.clone();
-                                button(
-                                    Variant::Default,
-                                    "Make it a diagram",
-                                    || false,
-                                    move || {
+                                button()
+                                    .variant(Variant::Default)
+                                    .label("Make it a diagram")
+                                    .disabled(|| false)
+                                    .on_press(move || {
                                         let root = pressed_root.clone();
                                         spawn(async move {
                                             let answer =
@@ -582,51 +588,53 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                                 cx.emit(EditorEvent::DiagramFromImage(name));
                                             }
                                         });
-                                    },
-                                )
-                                .into_element()
+                                    })
+                                    .into_element()
                             }
                         }))
-                        .child(button(
-                            Variant::Default,
-                            "Attach image",
-                            || false,
-                            move || {
-                                let root = attach_root.clone();
-                                spawn(async move {
-                                    let answer =
-                                        pick_paths(OpenDialog::files().multiple(true)).await;
-                                    let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
-                                    let Some(path) =
-                                        paths.and_then(|paths| paths.into_iter().next())
-                                    else {
-                                        return;
-                                    };
-                                    match attach_image(&path, root.as_path()) {
-                                        Ok(name) => {
-                                            let reference = image_reference(
-                                                path.file_stem()
-                                                    .and_then(|stem| stem.to_str())
-                                                    .unwrap_or("image"),
-                                                &name,
-                                            );
-                                            if !source::insert_at_caret(&source_handle, &reference)
-                                            {
-                                                draft.update(|text| {
-                                                    *text = format!("{text}\n{reference}")
-                                                });
-                                                let text = draft.get_untracked();
-                                                cx.emit(EditorEvent::Draft(text));
+                        .child(
+                            button()
+                                .variant(Variant::Default)
+                                .label("Attach image")
+                                .disabled(|| false)
+                                .on_press(move || {
+                                    let root = attach_root.clone();
+                                    spawn(async move {
+                                        let answer =
+                                            pick_paths(OpenDialog::files().multiple(true)).await;
+                                        let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
+                                        let Some(path) =
+                                            paths.and_then(|paths| paths.into_iter().next())
+                                        else {
+                                            return;
+                                        };
+                                        match attach_image(&path, root.as_path()) {
+                                            Ok(name) => {
+                                                let reference = image_reference(
+                                                    path.file_stem()
+                                                        .and_then(|stem| stem.to_str())
+                                                        .unwrap_or("image"),
+                                                    &name,
+                                                );
+                                                if !source::insert_at_caret(
+                                                    &source_handle,
+                                                    &reference,
+                                                ) {
+                                                    draft.update(|text| {
+                                                        *text = format!("{text}\n{reference}")
+                                                    });
+                                                    let text = draft.get_untracked();
+                                                    cx.emit(EditorEvent::Draft(text));
+                                                }
+                                                attach_error.set(None);
                                             }
-                                            attach_error.set(None);
+                                            Err(error) => {
+                                                attach_error.set(Some(error.to_string().into()))
+                                            }
                                         }
-                                        Err(error) => {
-                                            attach_error.set(Some(error.to_string().into()))
-                                        }
-                                    }
-                                });
-                            },
-                        ))
+                                    });
+                                }),
+                        )
                         .child(dynamic(move || match attach_error.get() {
                             Some(reason) => text(reason)
                                 .text_xs()
@@ -748,21 +756,23 @@ pub fn clear_question(
                 view()
                     .flex_row()
                     .gap_2()
-                    .child(button(
-                        Variant::Destructive,
-                        "Clear",
-                        || false,
-                        move || {
-                            confirmed.clone()();
-                            asked.set(false);
-                        },
-                    ))
-                    .child(button(
-                        Variant::Default,
-                        "Stay",
-                        || false,
-                        move || asked.set(false),
-                    )),
+                    .child(
+                        button()
+                            .variant(Variant::Destructive)
+                            .label("Clear")
+                            .disabled(|| false)
+                            .on_press(move || {
+                                confirmed.clone()();
+                                asked.set(false);
+                            }),
+                    )
+                    .child(
+                        button()
+                            .variant(Variant::Default)
+                            .label("Stay")
+                            .disabled(|| false)
+                            .on_press(move || asked.set(false)),
+                    ),
             )
     })
 }
@@ -789,30 +799,33 @@ pub fn leave_decision(
                 view()
                     .flex_row()
                     .gap_2()
-                    .child(button(
-                        Variant::Primary,
-                        "Save and leave",
-                        || false,
-                        move || {
-                            save(Answer::Save);
-                            stay.set(false);
-                        },
-                    ))
-                    .child(button(
-                        Variant::Default,
-                        "Discard",
-                        || false,
-                        move || {
-                            discard(Answer::Discard);
-                            stay.set(false);
-                        },
-                    ))
-                    .child(button(
-                        Variant::Ghost,
-                        "Stay",
-                        || false,
-                        move || stay.set(false),
-                    )),
+                    .child(
+                        button()
+                            .variant(Variant::Primary)
+                            .label("Save and leave")
+                            .disabled(|| false)
+                            .on_press(move || {
+                                save(Answer::Save);
+                                stay.set(false);
+                            }),
+                    )
+                    .child(
+                        button()
+                            .variant(Variant::Default)
+                            .label("Discard")
+                            .disabled(|| false)
+                            .on_press(move || {
+                                discard(Answer::Discard);
+                                stay.set(false);
+                            }),
+                    )
+                    .child(
+                        button()
+                            .variant(Variant::Ghost)
+                            .label("Stay")
+                            .disabled(|| false)
+                            .on_press(move || stay.set(false)),
+                    ),
             )
     })
 }
@@ -832,7 +845,7 @@ pub fn field_table(
     fields: Vec<Field>,
     on_edit: impl Fn(&str, &str) + Clone + 'static,
 ) -> impl IntoElement {
-    let mut column = view().gap_2().child(badge("Fields"));
+    let mut column = view().gap_2().child(badge().label("Fields"));
     for row in fields {
         let name = row.name.clone();
         let edit = on_edit.clone();
@@ -848,7 +861,7 @@ pub fn field_table(
                             .text_color(tokens::muted_foreground),
                     )
                     .child(text(row.value).text_sm().text_color(tokens::foreground))
-                    .child(badge("computed")),
+                    .child(badge().label("computed")),
             );
         } else {
             let value = signal(row.value);
@@ -857,7 +870,15 @@ pub fn field_table(
                 view()
                     .gap_1()
                     .child(text(name).text_xs().text_color(tokens::muted_foreground))
-                    .child(field_with("Value", value, move |text| edit(&edited, text))),
+                    .child(
+                        field()
+                            .placeholder("Value")
+                            .value(move || SharedString::from(value.get()))
+                            .on_change(move |text: &String| {
+                                value.set(text.clone());
+                                edit(&edited, text);
+                            }),
+                    ),
             );
         }
     }
