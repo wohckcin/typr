@@ -28,8 +28,8 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Fast feedback: the checks read sources and compile the workspace, and need no display or system
-  # library beyond what the image has.
+  # Fast feedback: the checks read sources and compile the whole workspace, which on Linux builds
+  # nsh-platform-linux, so it needs GTK and GStreamer's dev packages exactly as the app job does.
   checks:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -38,6 +38,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Native Shell's Linux host is GTK 4 (14 or newer) for its views and GStreamer for its media:
+      # building the workspace links both, cache or no cache.
+      - name: Install GTK and GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          pkg-config --modversion gtk4 gstreamer-1.0
 
       # rust-toolchain.toml pins the channel, so rustup installs 1.99.1 without being told.
       - name: Install the pinned toolchain
@@ -49,7 +57,9 @@ jobs:
       - name: Cache the build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          shared-key: linux
+          # A key of its own: two jobs saving one entry race, and the winner would seed the loser
+          # with a build it never made.
+          shared-key: linux-checks
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -105,11 +115,11 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup show
 
-      # The same cache the checks job writes, restored: the crate it builds is the same crate.
+      # A cache of its own: this job builds the Linux development host as well as the crate.
       - name: Cache the build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          shared-key: linux
+          shared-key: linux-app
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
