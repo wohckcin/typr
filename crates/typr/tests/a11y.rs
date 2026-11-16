@@ -160,3 +160,24 @@ fn escape_dismisses_the_leave_question_without_leaving() -> Result<(), String> {
     app.wait_for("role:button[Back]")?;
     Ok(())
 }
+
+#[test]
+fn a_larger_text_size_reaches_every_screen_without_losing_a_control() -> Result<(), String> {
+    // The window cannot be asked for a larger text size on macOS (the platform pins it to 1), so
+    // the check runs the app's own layout at 1.5 as a platform would report it.
+    let mut app = Headless::start(EngineConfig::new(Root::of::<LibraryScreen>())).unwrap();
+    app.wait_for("role:button[Spanish]")?;
+    let normal = app.screen().span_style("text:Spanish")?.font_size;
+    app.set_environment("a larger text size", |environment| environment.font_scale = 1.5)?;
+    app.wait_for("role:button[Spanish]")?;
+    let larger = app.screen().span_style("text:Spanish")?.font_size;
+    assert!(
+        larger > normal,
+        "the sidebar's text grew with the setting: {normal:?} then {larger:?}"
+    );
+    // Every control is still reachable at that size.
+    for control in ["All cards", "Spanish", "Settings", "Diagnostics"] {
+        app.wait_for(&format!("role:button[{control}]"))?;
+    }
+    Ok(())
+}

@@ -143,7 +143,11 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - **Platforms**: desktop only in this port; the web and mobile columns do not apply.
 - **Content states**: empty (Diagnostics states "No slow commands recorded"; the grid states an empty deck with the new-card action), long content truncates in tiles and scrolls in the source. Larger text and a scripted minimum window were not exercised.
 
-**This is a partial pass, not a pass.** Two checklist groups are marked blocking and were not completed on the running app: the screen reader on one target, and larger text; the "platforms and states of content" group's minimum window was not scripted either. 4.10 stays unticked until a person runs those three on a real window.
+**This is a partial pass, not a pass.** Since the first write-up:
+
+- **Minimum window**: checked at 520×420 with the tiler off. It exposed a real bug — `grid_columns` counted from the window width, so two 140 pt tiles were squeezed beside a 220 pt sidebar. The grid now counts from the space beside the sidebar (`content_width`), so a narrow window shows one full-width tile. Screenshot at 520×420 confirms it.
+- **Larger text**: macOS NSH pins `font_scale` to 1.0 and `run_app` exposes no hook to set it, so the window cannot show larger text. Checked headlessly at 1.5: the sidebar's text grows and every control stays reachable (`tests/a11y.rs`, `a_larger_text_size_reaches_every_screen_without_losing_a_control`).
+- **Screen reader**: VoiceOver was launched; its item chooser listed the app's window, and the accessibility tree a reader consumes carries role, name and state for every control (read directly). The speech was not captured, so this is evidence a reader *can* read the app, not proof of what it said. It stays the one unpassed blocking item.
 
 Fixed from this audit: input text/placeholder/caret colour (none reached the field before), section names drawn as chips, the missing library search field, raw markdown in tile names, no default selection, rows without role/hover/pressed/focus, `Apply` at full width, and the library's keymap (selection, Enter, `s`/`n`, `c`, Backspace) with the session, its grades and a summary behind them.
 

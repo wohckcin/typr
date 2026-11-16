@@ -20,9 +20,16 @@ pub enum Schedule {
 }
 
 /// The width a tile is given: the window less the page's padding, shared across its columns.
+/// The width the grid has to work with: the window less the sidebar and the page's padding. The
+/// tile count and each tile's width come from this, so a narrow window shows one full tile rather
+/// than two squeezed ones.
+fn content_width() -> f32 {
+    (window().width.0 - tokens::sidebar_width().0 - 32.0).max(0.0)
+}
+
 fn tile_width() -> f32 {
-    let columns = tokens::grid_columns(window().width.0) as f32;
-    (window().width.0 - 32.0) / columns
+    let columns = tokens::grid_columns(content_width()) as f32;
+    content_width() / columns
 }
 
 /// One card's tile: what it shows, read from the snapshot.
@@ -138,7 +145,7 @@ pub fn grid(
         }
         let open = open.clone();
         virtual_list(move || tiles.with(Vec::len), move |at| tile_cell(tiles, at, chosen, open.clone()))
-            .columns(move || tokens::grid_columns(window().width.0))
+            .columns(move || tokens::grid_columns(content_width()))
             .keys(move || tiles.with(|t| t.iter().map(|t| t.id).collect::<Vec<_>>()))
             .estimated_item_size(tokens::tile_estimate())
             .flex_1()
