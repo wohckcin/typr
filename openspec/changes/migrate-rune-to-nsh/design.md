@@ -155,3 +155,9 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - `crates/typr` keeps `screens/`, `ui/`, `shell.rs`, `paths.rs` and the desktop runner; the Rune modules (`main.rs`, `editor/`, `library/`, `sidebar/`, `sidebar.rs`, `design/`, `attachments/`, `history/`, `keymap/`, `logging/`, `markdown/`, `study/`, `screen.rs`, `settings.rs`, `day_offset.rs`, `src/tests/`) and `vendor/` are gone.
 - `paths.rs` uses `nsh_core::prelude::data_dir()` with `TYPR_DATA_DIR` overriding it, replacing `rune::dirs::AppDirs`.
 - `cargo tree --workspace | grep -ci rune` is 0 and `Cargo.lock` names no rune package; the workspace suite (308 core + screen tests) passes.
+
+## Task 6.4 README
+
+- `README.md` now documents the Native Shell app: two-crate layout, prerequisites (Rust pin, `nsh` CLI, GTK 4.14 on Linux), `cargo run -p typr`, `nsh run`, `cargo test`, `nsh test`, `nsh check`, card syntax, scheduling keys and the data folder, with `TYPR_DATA_DIR` as the override.
+- Verified: `cargo build -p typr`, `nsh check .`, `nsh test .` (96 passed), `nsh run --target tui` for 25 s with no panic. `cargo run -p typr` starts; the `owner was disposed` panic seen only appears when the process is killed by a timeout.
+- `nsh.json` needs both `"root": "App"` and `"rust": "crates/typr"`, so `crates/typr/src/lib.rs` carries a `#[native_module("typr/native")]` (registering nothing) — without it `nsh check`/`nsh test` fail on the generated describe crate.

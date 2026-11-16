@@ -37,15 +37,13 @@ jobs:
         with:
           persist-credentials: false
 
-      # Rune draws through wgpu, so the runner needs Vulkan and the X11/wayland client libraries
-      # even for headless snapshots: the tooling path still creates a surface for the frames it
-      # renders. Development packages build and link, runtime packages load when a window opens.
-      - name: Install Rune's Linux dependencies
+      # Native Shell's Linux host is GTK 4 (14 or newer) and needs a display to draw: xvfb gives
+      # one, and the dev packages build and link the host.
+      - name: Install GTK and a virtual display
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libxkbcommon-dev libwayland-dev \
-            libxkbcommon-x11-0 mesa-vulkan-drivers
+          sudo apt-get install -y libgtk-4-dev xvfb
+          pkg-config --modversion gtk4
 
       # rust-toolchain.toml pins the channel, so rustup installs 1.99.1 without being told.
       - name: Install the pinned toolchain
@@ -81,9 +79,9 @@ jobs:
         run: |
           set -euo pipefail
           graph=$(cargo tree -p typr-core --edges normal)
-          if echo "$graph" | grep -Eq '(^|[^a-z-])(rune|rune-kit|rune-extras|wgpu|wgpu-hal|winit|parley|parley_engine|accesskit)( |$)'; then
-            echo "typr-core depends on a desktop toolkit:" >&2
-            echo "$graph" | grep -E 'rune|wgpu|winit|parley|accesskit' >&2
+          if echo "$graph" | grep -Eq '(^|[^a-z-])(nsh-core|nsh-base|nsh-engine|nsh-testing|nsh-platform)( |$)'; then
+            echo "typr-core depends on Native Shell:" >&2
+            echo "$graph" | grep -E 'nsh-' >&2
             exit 1
           fi
           # The backend reports failures through events; writing them down belongs to the app.
@@ -98,4 +96,8 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --locked
+
+      # The screens draw on the GTK host, which needs a display: xvfb supplies one.
+      - name: Test the screens on the Linux host
+        run: xvfb-run -a nsh test --target linux
 
