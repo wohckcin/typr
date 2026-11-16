@@ -32,8 +32,12 @@
 - [x] 4.6 Settings/preferences; verify `preferences` scenarios and persistence across a restart with a temp library
 - [x] 4.7 Keymap panel and palette, with `Chord::from_event` rewritten for NSH key events; verify `keymap-panel` scenarios
 - [x] 4.8 Embeds and markdown rendering per the spike's decision; verify `card-embeds` scenarios
-- [ ] 4.9 Diagnostics and import/export entry points; verify `diagnostics` and `transfer` UI scenarios
+- [x] 4.9 Diagnostics and import/export entry points; verify `diagnostics` and `transfer` UI scenarios
+  - Diagnostics is a Utilities row: it states a stoppage, lists slow commands, and offers Import and Export through the system dialogs. `shell::export_to`/`import_from` hold the work, tested for a re-openable export, a refused overwrite and a foreign file named in the refusal.
 - [ ] 4.10 Run the Finishing checklist and accessibility checklist on each screen in light and dark with `nsh run`, keyboard-only; record per-group results in the PR
+  - run so far: the runner builds and launches against a seeded library (windows 960×640; log "schema 12 -> 12, 0 migrations"); the window audit was then blocked — macOS gives the harness neither Screen Recording nor Accessibility, so no screenshot, AX tree or key input reaches the app
+  - automated stand-ins added: `tests/a11y.rs` (every screen names its controls, survives a Tab/Shift-Tab/Enter pass, and an overlay closes on Escape's back press), `tests/appearance.rs` (light and dark), `scripts/check-tokens.sh` (no colour, radius, spacing or literal in a screen)
+  - still needs a person at the window: radius concentricity, spacing spines at real sizes, hover/pressed feel, platform focus order, a screen reader on one target, light and dark screenshots, minimum window and larger text
 
 ## 5. Screenshot baselines
 

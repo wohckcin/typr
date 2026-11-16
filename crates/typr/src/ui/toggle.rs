@@ -15,6 +15,7 @@ pub fn check(label: impl IntoReactive<SharedString>, checked: Signal<bool>) -> i
         .flex_row()
         .items_center()
         .gap_2()
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
         .indicator_style(|s| {
             s.size(px(16.0))
                 .items_center()
@@ -35,6 +36,7 @@ pub fn toggle(label: impl IntoReactive<SharedString>, on: Signal<bool>) -> impl 
         .flex_row()
         .items_center()
         .gap_3()
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
         .track_style(|s| {
             s.w(px(36.0))
                 .h(px(20.0))

@@ -242,3 +242,56 @@ fn a_draft_survives_a_restart_until_it_is_discarded() -> Result<(), String> {
     );
     Ok(())
 }
+
+#[test]
+fn the_diagnostics_row_opens_the_screen_with_both_transfer_entry_points() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("diagnostics");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("Settings")?;
+    app.press("Diagnostics")?;
+    app.wait_for("Slow commands")?;
+    app.wait_for("No slow commands recorded")?;
+    app.wait_for("Import")?;
+    app.wait_for("Export")?;
+    app.press_key("escape")?;
+    app.wait_for_gone("No slow commands recorded", std::time::Duration::from_secs(5))?;
+    Ok(())
+}
+
+#[test]
+fn an_export_opens_as_a_library_and_a_foreign_file_is_refused_by_name() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let db = typr_core::store::Db::open(&dir.path().join("typr.sqlite3")).expect("the library");
+    let deck = match db
+        .apply(&typr_core::store::Command::CreateDeck { parent: None, name: "Spanish".to_owned() }, 0)
+        .expect("deck")
+    {
+        typr_core::store::Outcome::Deck(id) => id,
+        other => panic!("deck: {other:?}"),
+    };
+    db.apply(
+        &typr_core::store::Command::CreateCard { deck, markdown: "gato\n---\ncat".to_owned() },
+        0,
+    )
+    .expect("card");
+
+    let target = dir.path().join("export.sqlite3");
+    let line = typr::shell::export_to(&db, &target);
+    assert_eq!(line, format!("Exported to {}", target.display()));
+    assert_eq!(
+        typr_core::store::Db::open(&target).expect("the export opens").snapshot().expect("snapshot").cards.len(),
+        1,
+        "the export reopens as a library with the card in it"
+    );
+    // Exporting again to the same path is refused rather than overwriting the earlier export.
+    assert!(typr::shell::export_to(&db, &target).contains("already exists") || typr::shell::export_to(&db, &target).contains("exists"));
+
+    // A file the transfer cannot recognise is refused, and the line names it.
+    let foreign = dir.path().join("holiday.zip");
+    std::fs::write(&foreign, b"not an archive").expect("the file");
+    let refused = typr::shell::import_from(&db, &foreign, dir.path());
+    assert!(refused.contains("holiday.zip"), "the line names the file: {refused}");
+    assert_eq!(db.snapshot().expect("snapshot").cards.len(), 1, "nothing was written");
+}

@@ -30,6 +30,7 @@ pub fn field_with(
         .border_1()
         .border_color(move || tokens::border())
         .focus(|s| s.border_color(move || tokens::ring()))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
 }
 
 /// A text field that runs `on_submit` when Return is pressed in it, for a field that commits a
@@ -52,4 +53,5 @@ pub fn submit_field(
         .border_1()
         .border_color(move || tokens::border())
         .focus(|s| s.border_color(move || tokens::ring()))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
 }

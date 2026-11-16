@@ -127,7 +127,13 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - `chord_from_keystroke` maps NSH keystroke strings to typr-core `Chord`; `keystroke_of` turns a table chord into the keystroke `on_key` takes, writing Shifted characters as the key they are typed on (`?` is `shift+/`). `keymap_panel` opens and closes on the surface's shortcut chord and its list narrows as the user types; `palette` narrows the surface's commands and Enter (the field's submit) runs the first left. A command the surface does not bind is never offered.
 - `tests/keymap.rs` verifies the mapping, the shifted form, the listing, the open/close toggle, filtering, and the palette's Enter run. The palette indicator is drawn before the row list: a row list of cards following it is drawn into its own subtree.
 
-## Task 4.9 diagnostics
+## Task 4.9 diagnostics and transfer entry points
+
+- The sidebar's Utilities now holds Diagnostics beside Settings. `shell_over` mounts `diagnostics` with three signals it owns: `stopped` (set at launch when the library did not open, and by every refused command), `slow` (a command that took `SLOW_COMMAND_MS` = 100 ms or more, by name and cost) and `result`.
+- Export asks `pick_save_path` and runs `Command::ExportLibrary`; import asks `pick_paths` and runs `Command::ImportArchive` into the library's attachments folder. Both report through `shell::export_to` / `shell::import_from`, which return the line the screen shows, so the work is testable apart from the dialogs.
+- Tests: `tests/shell.rs` opens Diagnostics from the row and sees both entry points; `export_to` writes a file that reopens as a library with its cards, refuses to overwrite an earlier export, and `import_from` names a foreign file and writes nothing. The `diagnostics` screen's own scenarios stay in `tests/diagnostics.rs`; the transfer round trip's details stay in typr-core's `tests/transfer.rs` (19).
+
+## Task 4.9 diagnostics (first pass, kept)
 
 - `screens/diagnostics.rs` states a stoppage once, lists slow commands or an empty state, and runs import/export callbacks with a result line. `tests/diagnostics.rs` verifies all of these. The spec's file-log, schema-facts and quit-recording requirements are typr-core/logging behaviour with their own code paths.
 

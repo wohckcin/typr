@@ -274,6 +274,14 @@ pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
         due: 0,
         has_children: false,
     });
+    items.push(Item {
+        key: "diagnostics".into(),
+        label: "Diagnostics".into(),
+        group: Group::Utilities,
+        parent: None,
+        due: 0,
+        has_children: false,
+    });
     items
 }
 

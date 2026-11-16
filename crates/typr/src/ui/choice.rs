@@ -1,6 +1,7 @@
 //! Choosing among things: tabs for sections, a select for one value from a list, a list row for
 //! a selectable item.
 
+use nsh_base::button as base_button;
 use nsh_base::{SelectItem, select, tab, tabs};
 use nsh_core::prelude::*;
 
@@ -19,6 +20,7 @@ pub fn tab_row(labels: &'static [&'static str], selected: Signal<usize>) -> impl
                 .py_1()
                 .rounded(tokens::radius)
                 .selected_style(|s| s.bg(move || tokens::card()))
+                .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
                 .child(text(label).text_sm().text_color(move || tokens::foreground())),
         );
     }
@@ -51,9 +53,21 @@ pub fn choose(options: &'static [(&'static str, &'static str)], chosen: Signal<O
 /// reactive list is disposed with the list's previous render, and its `disabled` prop is then read
 /// from a dead owner (the engine logs "a prop read or written after its owner was disposed").
 pub fn list_row(title: impl IntoReactive<SharedString>, selected: impl Fn() -> bool + 'static, on_press: impl Fn() + 'static) -> impl IntoElement {
-    view()
-        .w_full()
-        .bg(move || tokens::row_fill(selected()))
+    // A row is a control like any other: it says what it is, answers hover and press, and shows the
+    // keyboard's ring while the focus is on it.
+    let selected = std::rc::Rc::new(selected);
+    let is_selected = selected.clone();
+    let fill = selected;
+    base_button()
         .on_press(on_press)
+        .selected(move || is_selected())
+        .w_full()
+        .px_2()
+        .py_1()
+        .rounded(tokens::radius)
+        .bg(move || tokens::row_fill(fill()))
+        .hover(|style| style.bg(move || tokens::hover()))
+        .active(|style| style.bg(move || tokens::selection()).opacity(0.9))
+        .focus_visible(|style| style.outline(px(2.0)).outline_color(move || tokens::ring()))
         .child(text(title).text_sm().text_color(move || tokens::foreground()))
 }
