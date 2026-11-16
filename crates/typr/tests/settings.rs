@@ -11,13 +11,13 @@ use typr::screens::settings::{
 };
 
 fn library() -> LibraryInfo {
-    LibraryInfo {
-        database: PathBuf::from("/tmp/typr/typr.sqlite3"),
-        schema: 12,
-        bytes: 4096,
-        attachments: PathBuf::from("/tmp/typr/attachments"),
-        logs: PathBuf::from("/tmp/typr/logs"),
-    }
+    let mut info = LibraryInfo::default();
+    info.database = PathBuf::from("/tmp/typr/typr.sqlite3");
+    info.schema = 12;
+    info.bytes = 4096;
+    info.attachments = PathBuf::from("/tmp/typr/attachments");
+    info.logs = PathBuf::from("/tmp/typr/logs");
+    info
 }
 
 #[component]

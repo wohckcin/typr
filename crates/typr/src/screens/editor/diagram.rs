@@ -15,6 +15,7 @@ use crate::ui::{
 
 /// A rectangle as fractions of the picture.
 #[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct Rect {
     pub x: f32,
     pub y: f32,
@@ -40,6 +41,7 @@ impl Rect {
 /// One cover on a diagram's picture: the group it belongs to, and its rectangle as fractions of
 /// the picture.
 #[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct Cover {
     pub group: u32,
     pub x: f32,
@@ -49,6 +51,17 @@ pub struct Cover {
 }
 
 impl Cover {
+    /// The cover `group` draws over `rect`, both as fractions of the picture.
+    pub fn new(group: u32, rect: MaskRect) -> Cover {
+        Cover {
+            group,
+            x: rect.x,
+            y: rect.y,
+            w: rect.w,
+            h: rect.h,
+        }
+    }
+
     /// A store row as the pane draws it.
     pub fn of(row: &MaskRow) -> Cover {
         Cover {

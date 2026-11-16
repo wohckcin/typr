@@ -38,7 +38,11 @@ pub fn check_new_card_cap(text: &str) -> Result<u32, String> {
 }
 
 /// The values the screen edits. Each is a signal the caller owns.
+///
+/// Built by [`Values::new`] alone: its fields are signals created under the caller's owner, so a
+/// `Default` would make values nobody created.
 #[derive(Clone, Copy)]
+#[non_exhaustive]
 pub struct Values {
     /// The typed cap, as the user wrote it.
     pub cap_text: Signal<String>,
@@ -79,6 +83,7 @@ impl Values {
 
 /// Where the library keeps its files, and what the file records about itself.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct LibraryInfo {
     /// The SQLite file the library lives in.
     pub database: PathBuf,

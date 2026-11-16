@@ -28,7 +28,7 @@ mod fields;
 
 pub use diagram::{Cover, Diagram, Rect, cover_box, diagram_pane, rect_from_corners};
 pub use dialogs::{Answer, Leaving, clear_question, leave_decision, leaving_choice};
-pub use fields::{Field, field_table, template_preview};
+pub use fields::{TemplateField, field_table, template_preview};
 
 /// Whether the text holds anything once trimmed; an empty card is not saved.
 pub fn has_content(markdown: &str) -> bool {
@@ -133,10 +133,21 @@ pub fn preview_of(side: &str) -> String {
 
 /// A template in force on the card: its text, the fields it fills from, and the deck's name.
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct Template {
     pub text: String,
-    pub fields: Vec<Field>,
+    pub fields: Vec<TemplateField>,
     pub deck: Option<String>,
+}
+
+impl Template {
+    /// A template whose text is `text`, with no fields filled and no deck named.
+    pub fn new(text: impl Into<String>) -> Template {
+        Template {
+            text: text.into(),
+            ..Template::default()
+        }
+    }
 }
 
 /// What the editor opens with: the card as the store has it.

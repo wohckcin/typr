@@ -116,14 +116,7 @@ fn SidebarScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     sidebar(
         Sidebar::new(
-            vec![Item {
-                key: "all".into(),
-                label: "All cards".into(),
-                group: Group::Navigation,
-                parent: None,
-                due: 0,
-                has_children: false,
-            }],
+            vec![Item::new("all", "All cards", Group::Navigation)],
             true,
             "search",
         ),
@@ -193,9 +186,10 @@ fn SettingsScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     settings(
         Values::new(20, true),
-        LibraryInfo {
-            database: PathBuf::from("/tmp/typr/typr.sqlite3"),
-            ..LibraryInfo::default()
+        {
+            let mut info = LibraryInfo::default();
+            info.database = PathBuf::from("/tmp/typr/typr.sqlite3");
+            info
         },
         |_| {},
         || {},

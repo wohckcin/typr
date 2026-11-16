@@ -7,14 +7,7 @@ use nsh_testing::Headless;
 use typr::screens::sidebar::{Group, Item, Sidebar, sidebar};
 
 fn item(key: &'static str, label: &'static str, group: Group) -> Item {
-    Item {
-        key: key.into(),
-        label: label.into(),
-        group,
-        parent: None,
-        due: 0,
-        has_children: false,
-    }
+    Item::new(key, label, group)
 }
 
 fn fixture() -> Vec<Item> {

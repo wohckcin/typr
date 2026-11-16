@@ -5,9 +5,10 @@ use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::screens::editor::{
-    Answer, CardText, Cover, Diagram, Field, GroupMerge, Leaving, MaskAdded, MaskGroup, Template,
-    attach_image, cover_box, editor, field_table, has_content, image_reference, leave_decision,
-    leaving_choice, prompt_count, rect_from_corners, resolve_images, template_preview,
+    Answer, CardText, Cover, Diagram, GroupMerge, Leaving, MaskAdded, MaskGroup, Template,
+    TemplateField, attach_image, cover_box, editor, field_table, has_content, image_reference,
+    leave_decision, leaving_choice, prompt_count, rect_from_corners, resolve_images,
+    template_preview,
 };
 
 #[component]
@@ -216,21 +217,9 @@ fn Fields() -> impl IntoElement {
         .child(text(move || format!("edited={}", edited.get())))
         .child(field_table(
             vec![
-                Field {
-                    name: "Word".to_owned(),
-                    value: "gato".to_owned(),
-                    computed: false,
-                },
-                Field {
-                    name: "Name".to_owned(),
-                    value: "gato".to_owned(),
-                    computed: true,
-                },
-                Field {
-                    name: "Deck".to_owned(),
-                    value: "Spanish".to_owned(),
-                    computed: true,
-                },
+                TemplateField::new("Word", "gato"),
+                TemplateField::computed("Name", "gato"),
+                TemplateField::computed("Deck", "Spanish"),
             ],
             move |name, value| edited.set(format!("{name}={value}")),
         ))
@@ -301,26 +290,15 @@ fn Templated() -> impl IntoElement {
     view().child(
         editor()
             .saved("stored")
-            .template(Template {
-                text: "<<Word>>\n---\n<<Meaning>>".to_owned(),
-                fields: vec![
-                    Field {
-                        name: "Word".to_owned(),
-                        value: "gato".to_owned(),
-                        computed: false,
-                    },
-                    Field {
-                        name: "Meaning".to_owned(),
-                        value: "cat".to_owned(),
-                        computed: false,
-                    },
-                    Field {
-                        name: "Name".to_owned(),
-                        value: "gato".to_owned(),
-                        computed: true,
-                    },
-                ],
-                deck: Some("Spanish".to_owned()),
+            .template({
+                let mut template = Template::new("<<Word>>\n---\n<<Meaning>>");
+                template.fields = vec![
+                    TemplateField::new("Word", "gato"),
+                    TemplateField::new("Meaning", "cat"),
+                    TemplateField::computed("Name", "gato"),
+                ];
+                template.deck = Some("Spanish".to_owned());
+                template
             })
             .attachments("/tmp/typr-edit/attachments"),
     )
@@ -458,20 +436,8 @@ fn DiagramCard() -> impl IntoElement {
                     image: "cat.png".to_owned(),
                     caption: "the cat".to_owned(),
                     rows: vec![
-                        Cover {
-                            group: 1,
-                            x: 0.1,
-                            y: 0.1,
-                            w: 0.2,
-                            h: 0.2,
-                        },
-                        Cover {
-                            group: 2,
-                            x: 0.6,
-                            y: 0.6,
-                            w: 0.2,
-                            h: 0.2,
-                        },
+                        Cover::new(1, typr_core::store::MaskRect::new(0.1, 0.1, 0.2, 0.2)),
+                        Cover::new(2, typr_core::store::MaskRect::new(0.6, 0.6, 0.2, 0.2)),
                     ],
                 })
                 .on_add_mask(move |added_mask: &MaskAdded| {

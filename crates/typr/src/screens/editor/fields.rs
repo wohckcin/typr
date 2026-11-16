@@ -8,16 +8,36 @@ use crate::ui::{input::field, status::badge, tokens};
 /// One row of a card's field table: the name a template uses, the value typed for it, and whether
 /// the app computes it (which makes it read-only).
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
-pub struct Field {
+#[non_exhaustive]
+pub struct TemplateField {
     pub name: String,
     pub value: String,
     pub computed: bool,
 }
 
+impl TemplateField {
+    /// A field the user fills.
+    pub fn new(name: impl Into<String>, value: impl Into<String>) -> TemplateField {
+        TemplateField {
+            name: name.into(),
+            value: value.into(),
+            computed: false,
+        }
+    }
+
+    /// A field the app works out, drawn read-only.
+    pub fn computed(name: impl Into<String>, value: impl Into<String>) -> TemplateField {
+        TemplateField {
+            computed: true,
+            ..TemplateField::new(name, value)
+        }
+    }
+}
+
 /// The fields a card's template fills from, as the editor shows them: a value per name, computed
 /// rows read-only, and `on_edit(name, value)` when the user types one.
 pub fn field_table(
-    fields: Vec<Field>,
+    fields: Vec<TemplateField>,
     on_edit: impl Fn(&str, &str) + Clone + 'static,
 ) -> impl IntoElement {
     let mut column = view().gap_2().child(badge().label("Fields"));

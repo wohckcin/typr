@@ -18,9 +18,10 @@ use crate::ui::{
 };
 
 /// The groups of rows, drawn in this order. A group with no visible row draws nothing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Group {
     /// The way out of a deck: the whole library.
+    #[default]
     Navigation,
     /// The decks, each with the prompts due in its subtree.
     Decks,
@@ -55,7 +56,8 @@ impl Group {
 }
 
 /// One row of the column.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct Item {
     /// Identifies the row; a press reports it and collapsing refers to it.
     pub key: SharedString,
@@ -69,6 +71,20 @@ pub struct Item {
     pub due: usize,
     /// Whether any row is nested under this one, so it offers a fold control.
     pub has_children: bool,
+}
+
+impl Item {
+    /// A row of `group` with `key` and `label`, nested under nothing and holding no work.
+    pub fn new(key: impl Into<SharedString>, label: impl Into<SharedString>, group: Group) -> Item {
+        Item {
+            key: key.into(),
+            label: label.into(),
+            group,
+            parent: None,
+            due: 0,
+            has_children: false,
+        }
+    }
 }
 
 /// The sidebar's state: the data it shows, and what the user has done to it.

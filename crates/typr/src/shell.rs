@@ -15,7 +15,7 @@ use typr_core::session::{Entry, Session};
 use typr_core::store::{Command, Db, Grade, Id, Outcome, Snapshot};
 
 use crate::screens::diagnostics::{SlowCommand, diagnostics};
-use crate::screens::editor::{self, Cover, Diagram, Field, Template};
+use crate::screens::editor::{self, Cover, Diagram, Template, TemplateField};
 use crate::screens::grid::grid;
 use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
@@ -664,7 +664,7 @@ pub fn shell_over(
                         fields: card
                             .fields
                             .iter()
-                            .map(|(name, value)| Field {
+                            .map(|(name, value)| TemplateField {
                                 name: name.clone(),
                                 value: value.clone(),
                                 computed: false,

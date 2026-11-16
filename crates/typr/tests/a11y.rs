@@ -19,13 +19,13 @@ use typr_core::session::{Entry, Session};
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 fn library_info() -> LibraryInfo {
-    LibraryInfo {
-        database: "/tmp/typr/typr.sqlite3".into(),
-        schema: 12,
-        bytes: 4096,
-        attachments: "/tmp/typr/attachments".into(),
-        logs: "/tmp/typr/logs".into(),
-    }
+    let mut info = LibraryInfo::default();
+    info.database = "/tmp/typr/typr.sqlite3".into();
+    info.schema = 12;
+    info.bytes = 4096;
+    info.attachments = "/tmp/typr/attachments".into();
+    info.logs = "/tmp/typr/logs".into();
+    info
 }
 
 fn snapshot() -> Snapshot {

@@ -26,18 +26,18 @@
 
 ## 3. Public structs widen safely
 
-- [ ] 3.1 Add `#[non_exhaustive]` to `Item`, `Cover`, `Rect`, `MergedMasks`, `Field`, `Template` and
+- [x] 3.1 Add `#[non_exhaustive]` to `Item`, `Cover`, `Rect`, `MergedMasks`, `Field`, `Template` and
       `LibraryInfo`, add `Default` for `Item`, and add a constructor for each type that is built from required
       parts (`Item::new`, `Template::new`, `Cover::new`, `Field::new`). Verify: `cargo check --workspace
       --all-targets` passes.
-- [ ] 3.2 Replace every struct literal and every `..Default::default()` update of those types, in the app and in
+- [x] 3.2 Replace every struct literal and every `..Default::default()` update of those types, in the app and in
       the integration tests, with the constructor or with `Default` plus field assignment, since
       `#[non_exhaustive]` forbids both forms outside the crate. Verify: `cargo test --workspace --locked` passes
       and a search of the tests for those type names followed by `{` finds none.
-- [ ] 3.3 Rename the editor's template field type to `TemplateField`, since `ui::input::Field` is the text
+- [x] 3.3 Rename the editor's template field type to `TemplateField`, since `ui::input::Field` is the text
       field and one word must name one concept, and update the app and the tests that import it. Verify:
       `cargo test --workspace --locked` passes and `Field` appears only as the text-field control and its event.
-- [ ] 3.4 Mark `Values` `#[non_exhaustive]` and keep `Values::new` as its only constructor, with a doc comment
+- [x] 3.4 Mark `Values` `#[non_exhaustive]` and keep `Values::new` as its only constructor, with a doc comment
       saying why it has no `Default` (its signals belong to the caller's owner). Verify: `cargo test -p typr
       --test settings --test appearance` passes.
 
