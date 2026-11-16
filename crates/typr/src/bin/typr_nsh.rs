@@ -28,5 +28,17 @@ fn main() -> std::process::ExitCode {
         },
     );
     typr::logging::shutdown();
+    finish(code)
+}
+
+/// The platform's exit status as this process's: the GTK host answers with GLib's code, which is
+/// the same number in a different type.
+#[cfg(target_os = "macos")]
+fn finish(code: std::process::ExitCode) -> std::process::ExitCode {
     code
+}
+
+#[cfg(target_os = "linux")]
+fn finish(code: nsh_platform_linux::gtk4::glib::ExitCode) -> std::process::ExitCode {
+    std::process::ExitCode::from(u8::try_from(code.into_raw()).unwrap_or(1))
 }
