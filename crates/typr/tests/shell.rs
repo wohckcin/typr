@@ -179,3 +179,24 @@ fn a_drag_on_a_diagram_card_writes_its_rectangle_to_the_library() -> Result<(), 
     assert!(!masks.is_empty(), "the rectangle reached the library");
     Ok(())
 }
+
+#[test]
+fn clearing_a_diagram_turns_the_card_into_text_in_the_library() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = diagram_on_disk("clear");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("the cell")?;
+    app.press("role:button[the cell]")?;
+    app.press("role:button[Clear the diagram]")?;
+    app.wait_for("Clear this diagram?")?;
+    app.press("role:button[Clear]")?;
+    // The card is text again, so the editor offers its source and the diagram's tag is gone.
+    app.wait_for("Save")?;
+    app.wait_for_gone("Clear the diagram", std::time::Duration::from_secs(5))?;
+    let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let card = reader.snapshot().unwrap().cards.first().cloned().expect("the card");
+    assert_eq!(card.kind, typr_core::store::CardKind::Text, "the library holds a text card now");
+    assert!(card.image.is_none() && card.masks.is_empty(), "the picture and rectangles are gone");
+    Ok(())
+}

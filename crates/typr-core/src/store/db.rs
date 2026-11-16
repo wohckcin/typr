@@ -292,6 +292,39 @@ impl Db {
                 self.sync_prompts(*card, &self.shape_of(*card)?)?;
                 Ok(Outcome::Changed(changed))
             }
+            Command::RemoveMaskGroup { card, group } => {
+                let changed = self.conn.execute(
+                    "DELETE FROM mask WHERE card_id = ?1 AND group_no = ?2",
+                    params![card, group],
+                )?;
+                if changed == 0 {
+                    return Err(StoreError::Missing {
+                        what: "group",
+                        id: *card,
+                    });
+                }
+                self.sync_prompts(*card, &self.shape_of(*card)?)?;
+                Ok(Outcome::Changed(changed))
+            }
+            Command::ClearDiagram { card } => {
+                if self.kind_of(*card)? != "diagram" {
+                    return Err(StoreError::Missing {
+                        what: "diagram",
+                        id: *card,
+                    });
+                }
+                // The picture, its rectangles and the caption go; the file stays in the attachments
+                // folder, and the prompt rows are retired rather than deleted, so history reads.
+                self.conn.execute("DELETE FROM mask WHERE card_id = ?1", params![card])?;
+                self.conn.execute(
+                    "UPDATE card SET kind = 'text', image = NULL, caption = NULL, markdown = '',
+                        sides = 0, search_text = '', updated_at = ?2
+                     WHERE id = ?1",
+                    params![card, now_ms],
+                )?;
+                self.sync_prompts(*card, &hidden::shape(""))?;
+                Ok(Outcome::Changed(1))
+            }
             Command::MergeMasks { card, rects, group } => {
                 let mut changed = 0;
                 for rect in rects {

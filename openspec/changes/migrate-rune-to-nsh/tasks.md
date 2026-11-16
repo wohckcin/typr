@@ -25,8 +25,8 @@
 - [x] 4.1 Sidebar (Decks/Tags/Views, counts, filtering); verify `sidebar` scenarios via `Headless`
 - [x] 4.2 Library and card grid/tiles on `virtual_list` with keyed rows; verify `card-library`, `card-grid`, `deck-views` scenarios including a recycling scroll test
 - [ ] 4.3 Card editor and attachments (`pick_paths`, image tiles); verify `card-editor` scenarios
-  - done: source/preview, image action and resolution, prompt caption, field table with a template, Save/Discard/Stay, draft restore, empty save refused, diagram pane with drag-to-rectangle, per-group covers, merge
-  - remaining: the text↔diagram switch (a card cannot be created as a diagram, nor switched, from the editor); a way to remove a whole group (only one rectangle can be removed; the store has no group-removal command); proof that covers state their group without the button strip (their labels sit inside absolutely placed views and never appeared in the accessibility tree in any test)
+  - done: source/preview, image action and resolution, prompt caption, field table with a template, Save/Discard/Stay, draft restore, empty save refused, diagram pane with drag-to-rectangle, per-group covers that say their group, merge, `Remove group` (`RemoveMaskGroup`), and the text↔diagram switch (`SetDiagram` on an empty text card through the picture picker, `ClearDiagram` behind a question)
+  - remaining: the attached image's reference is appended to the text, not inserted at the cursor — the code editor exposes no caret to the app (`nsh_base::editor` has `insert` only on a handle the builder cannot reach), so the clause "inserts its reference at the cursor" is unmet
 - [x] 4.4 Study session and review canvas with keyboard grading via `on_key`; verify `study-session` and `review-scheduling` UI scenarios
 - [x] 4.5 History; verify its flow tests
 - [x] 4.6 Settings/preferences; verify `preferences` scenarios and persistence across a restart with a temp library

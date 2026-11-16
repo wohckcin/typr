@@ -367,11 +367,18 @@ fn DiagramCard() -> impl IntoElement {
     let added = signal(String::from("none"));
     let merged = signal(String::from("none"));
     let removed = signal(String::from("none"));
+    let cleared = signal(String::from("none"));
     view()
         .flex_1()
         .gap_2()
         .child(text(move || {
-            format!("added={} merged={} removed={}", added.get(), merged.get(), removed.get())
+            format!(
+                "added={} merged={} removed={} cleared={}",
+                added.get(),
+                merged.get(),
+                removed.get(),
+                cleared.get()
+            )
         }))
         .child(editor_card(
             Card {
@@ -387,11 +394,17 @@ fn DiagramCard() -> impl IntoElement {
                 ..Card::default()
             },
             std::path::PathBuf::new(),
-            Actions::new().masks(
-                move |group, rect| added.set(format!("{group} w={:.2} x={:.2}", rect.w, rect.x)),
-                move |group, rects| merged.set(format!("{group} n={}", rects.len())),
-                move |rect| removed.set(format!("w={:.2}", rect.w)),
-            ),
+            Actions::new()
+                .masks(
+                    move |group, rect| added.set(format!("{group} w={:.2} x={:.2}", rect.w, rect.x)),
+                    move |group, rects| merged.set(format!("{group} n={}", rects.len())),
+                    move |rect| removed.set(format!("w={:.2}", rect.w)),
+                )
+                .kinds(
+                    move |group| removed.set(format!("group={group}")),
+                    move || cleared.set("yes".to_owned()),
+                    |_| {},
+                ),
         ))
 }
 
@@ -427,15 +440,15 @@ fn a_click_on_the_pane_adds_nothing() -> Result<(), String> {
 }
 
 #[test]
-fn merging_a_picked_group_reports_its_rectangles_and_removing_reports_one() -> Result<(), String> {
+fn merging_a_picked_group_reports_its_rectangles_and_removing_it_reports_the_group() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
     app.wait_for("the cat")?;
     app.press("role:button[group 1]")?;
     app.press("role:button[Merge group]")?;
     app.wait_for("text:/merged=1 n=1/")?;
     app.press("role:button[group 2]")?;
-    app.press("role:button[Remove]")?;
-    app.wait_for("text:/removed=w=0.20/")?;
+    app.press("role:button[Remove group]")?;
+    app.wait_for("text:/removed=group=2/")?;
     Ok(())
 }
 
@@ -446,5 +459,71 @@ fn scratch_roles2() -> Result<(), String> {
     for query in ["role:image", "[the picture]", "image", "label:the picture", "role:img[the picture]"] {
         println!("{query}={:?}", app.screen().count(query));
     }
+    Ok(())
+}
+
+#[test]
+fn a_cover_says_which_group_it_belongs_to() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
+    app.wait_for("the cat")?;
+    assert_eq!(
+        app.screen().count("label:rectangle in group 1")?,
+        1,
+        "the cover on group one says so"
+    );
+    assert_eq!(app.screen().count("label:rectangle in group 2")?, 1);
+    Ok(())
+}
+
+#[test]
+fn the_diagram_clears_only_after_the_question() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
+    app.wait_for("the cat")?;
+    app.press("role:button[Clear the diagram]")?;
+    app.wait_for("Clear this diagram?")?;
+    app.press("role:button[Stay]")?;
+    app.wait_for_gone("Clear this diagram?", std::time::Duration::from_secs(5))?;
+    app.wait_for("text:/cleared=none/")?;
+    app.press("role:button[Clear the diagram]")?;
+    app.wait_for("Clear this diagram?")?;
+    app.press("role:button[Clear]")?;
+    app.wait_for("text:/cleared=yes/")?;
+    Ok(())
+}
+
+#[component]
+fn EmptyCard() -> impl IntoElement {
+    typr::ui::tokens::install();
+    view().flex_1().child(editor_card(
+        Card::new(""),
+        std::path::PathBuf::new(),
+        Actions::new()
+            .attach(|_| Ok("unused.png".to_owned()))
+            .kinds(|_| {}, || {}, |_| {}),
+    ))
+}
+
+#[component]
+fn WrittenCard() -> impl IntoElement {
+    typr::ui::tokens::install();
+    view().flex_1().child(editor_card(
+        Card::new("gato"),
+        std::path::PathBuf::new(),
+        Actions::new()
+            .attach(|_| Ok("unused.png".to_owned()))
+            .kinds(|_| {}, || {}, |_| {}),
+    ))
+}
+
+#[test]
+fn an_empty_card_offers_the_diagram_switch_and_a_written_one_does_not() -> Result<(), String> {
+    let mut empty = Headless::start(EngineConfig::new(Root::of::<EmptyCard>())).unwrap();
+    empty.wait_for("Make it a diagram")?;
+    let mut written = Headless::start(EngineConfig::new(Root::of::<WrittenCard>())).unwrap();
+    written.wait_for("Save")?;
+    assert!(
+        !written.screen().shows("Make it a diagram"),
+        "switching a card with text would hide the text"
+    );
     Ok(())
 }

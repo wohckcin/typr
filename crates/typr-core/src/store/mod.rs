@@ -601,6 +601,17 @@ pub enum Command {
         card: Id,
         rect: MaskRect,
     },
+    /// Remove every rectangle of one group. Its prompt is retired and its review history stays
+    /// readable, the way editing a card's sides never resets its schedule.
+    RemoveMaskGroup {
+        card: Id,
+        group: u32,
+    },
+    /// Turn a diagram card back into an empty text card: the picture, its caption and every
+    /// rectangle go, and the card is edited as markdown again. Only a diagram can be cleared.
+    ClearDiagram {
+        card: Id,
+    },
     /// Put every listed rectangle into one group, which is how a rectangle that is one answer is
     /// made from several.
     MergeMasks {

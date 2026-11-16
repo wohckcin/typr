@@ -142,6 +142,31 @@ pub fn shell_over(db: Rc<Db>, snapshot: Snapshot, library_open: bool, library: L
                             move |group, rect| write_mask(Command::AddMask { card: id, group, rect }, false),
                             move |group, rects| write_merge(Command::MergeMasks { card: id, group, rects }, false),
                             move |rect| write_remove(Command::RemoveMask { card: id, rect }, false),
+                        )
+                        .kinds(
+                            {
+                                let write = write.clone();
+                                move |group| {
+                                    write(Command::RemoveMaskGroup { card: id, group }, false)
+                                }
+                            },
+                            {
+                                let write = write.clone();
+                                move || write(Command::ClearDiagram { card: id }, false)
+                            },
+                            {
+                                let write = write.clone();
+                                move |image| {
+                                    write(
+                                        Command::SetDiagram {
+                                            card: id,
+                                            image,
+                                            caption: String::new(),
+                                        },
+                                        false,
+                                    )
+                                }
+                            },
                         );
                     editor::editor_card(
                         Card { saved: card.markdown.clone(), draft, template, diagram },

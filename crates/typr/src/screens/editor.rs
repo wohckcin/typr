@@ -153,7 +153,7 @@ pub fn diagram_pane(diagram: Diagram, actions: Actions) -> impl IntoElement {
     let group = groups.last().copied().unwrap_or(1);
     let add = actions.add_mask.clone();
     let merge = actions.merge_masks.clone();
-    let remove = actions.remove_mask.clone();
+    let remove_group = actions.remove_group.clone();
     let layer_rows = rows.clone();
     let merge_rows = rows.clone();
     let remove_rows = rows;
@@ -242,6 +242,8 @@ pub fn diagram_pane(diagram: Diagram, actions: Actions) -> impl IntoElement {
                                 .bg(fill)
                                 .border_1()
                                 .border_color(move || tokens::selection())
+                                .accessible(true)
+                                .label(format!("rectangle in group {}", row.group))
                                 .child(text(format!("group {}", row.group)).text_xs()),
                         );
                     }
@@ -266,11 +268,11 @@ pub fn diagram_pane(diagram: Diagram, actions: Actions) -> impl IntoElement {
                         .collect();
                     merge(group, rects);
                 }))
-                .child(button(Variant::Default, "Remove", || false, move || {
-                    let (Some(index), Some(remove)) = (picked.get_untracked(), &remove) else {
+                .child(button(Variant::Default, "Remove group", || false, move || {
+                    let (Some(index), Some(remove)) = (picked.get_untracked(), &remove_group) else {
                         return;
                     };
-                    remove(remove_rows[index].rect);
+                    remove(remove_rows[index].group);
                 })),
         )
 }
@@ -301,6 +303,9 @@ pub struct Actions {
     pub add_mask: Option<Rc<dyn Fn(u32, MaskRect)>>,
     pub merge_masks: Option<Rc<dyn Fn(u32, Vec<MaskRect>)>>,
     pub remove_mask: Option<Rc<dyn Fn(MaskRect)>>,
+    pub remove_group: Option<Rc<dyn Fn(u32)>>,
+    pub clear_diagram: Option<Rc<dyn Fn()>>,
+    pub switch_to_diagram: Option<Rc<dyn Fn(String)>>,
 }
 
 impl Actions {
@@ -334,6 +339,21 @@ impl Actions {
             add_mask: Some(Rc::new(add)),
             merge_masks: Some(Rc::new(merge)),
             remove_mask: Some(Rc::new(remove)),
+            ..self
+        }
+    }
+
+    /// Removing a whole group, and switching a card between text and diagram.
+    pub fn kinds(
+        self,
+        remove_group: impl Fn(u32) + 'static,
+        clear_diagram: impl Fn() + 'static,
+        switch_to_diagram: impl Fn(String) + 'static,
+    ) -> Actions {
+        Actions {
+            remove_group: Some(Rc::new(remove_group)),
+            clear_diagram: Some(Rc::new(clear_diagram)),
+            switch_to_diagram: Some(Rc::new(switch_to_diagram)),
             ..self
         }
     }
@@ -396,10 +416,22 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
     let on_draft = actions.draft.clone();
     let masks = actions.clone();
     if let Some(diagram) = diagram {
+        // A diagram clears back to a text card, which is the only way its picture is let go; the
+        // question keeps one press from throwing the rectangles away.
+        let asking_clear = signal(false);
+        let clear = actions.clear_diagram.clone();
+        let asked = asking_clear;
         return view()
             .flex_1()
             .p_4()
+            .gap_2()
             .child(diagram_pane(diagram, masks))
+            .child(button(Variant::Default, "Clear the diagram", || false, move || asked.set(true)))
+            .child(clear_question(asking_clear, move || {
+                if let Some(clear) = &clear {
+                    clear();
+                }
+            }))
             .into_element();
     }
     let asking = signal(false);
@@ -483,6 +515,33 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
                         }
                     },
                 ))
+                .child(dynamic({
+                    let switch = actions.switch_to_diagram.clone();
+                    let attach = attach_fn.clone();
+                    move || {
+                        let (Some(switch), Some(attach)) = (switch.clone(), attach.clone()) else {
+                            return view().into_element();
+                        };
+                        if has_content(&draft.get()) {
+                            return view().into_element();
+                        }
+                        button(Variant::Default, "Make it a diagram", || false, move || {
+                            let switch = switch.clone();
+                            let attach = attach.clone();
+                            spawn(async move {
+                                let answer = pick_paths(OpenDialog::files().multiple(false)).await;
+                                let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
+                                let Some(path) = paths.and_then(|paths| paths.into_iter().next()) else {
+                                    return;
+                                };
+                                if let Ok(name) = attach(path) {
+                                    switch(name);
+                                }
+                            });
+                        })
+                        .into_element()
+                    }
+                }))
                 .child({
                     let attach = attach_fn.clone();
                     button(
@@ -600,6 +659,37 @@ pub enum Answer {
 /// Whether leaving needs the user's answer first.
 pub fn leaving_choice(dirty: bool) -> Leaving {
     if dirty { Leaving::Ask } else { Leaving::Leave }
+}
+
+/// The question before a diagram is cleared: every rectangle is thrown away and the card becomes
+/// empty text.
+pub fn clear_question(open: Signal<bool>, on_clear: impl Fn() + Clone + 'static) -> impl IntoElement {
+    let keep = open;
+    let clear = on_clear;
+    let asked = keep;
+    let confirmed = clear;
+    decision(open, move || {
+        let asked = asked;
+        let confirmed = confirmed.clone();
+        view()
+            .gap_3()
+            .child(text("Clear this diagram?").text_sm().text_color(move || tokens::foreground()))
+            .child(
+                text("Its picture and every rectangle go; it is edited as text afterwards.")
+                    .text_xs()
+                    .text_color(move || tokens::muted_foreground()),
+            )
+            .child(
+                view()
+                    .flex_row()
+                    .gap_2()
+                    .child(button(Variant::Destructive, "Clear", || false, move || {
+                        confirmed.clone()();
+                        asked.set(false);
+                    }))
+                    .child(button(Variant::Default, "Stay", || false, move || asked.set(false))),
+            )
+    })
 }
 
 /// The question a dirty editor asks: save, discard, or stay. `open` false hides it; Stay closes it.
