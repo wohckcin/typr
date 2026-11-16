@@ -32,7 +32,12 @@ pub fn tiles_for(cards: &[CardSummary], query: &str, now_ms: i64) -> Vec<Tile> {
 }
 
 /// The library screen over `snapshot`, with the sidebar's selection choosing the cards.
-pub fn library(snapshot: Snapshot, library_open: bool, now_ms: i64) -> impl IntoElement {
+pub fn library(
+    snapshot: Snapshot,
+    library_open: bool,
+    now_ms: i64,
+    on_open: impl Fn(i64) + Clone + 'static,
+) -> impl IntoElement {
     let due = due_counts(&snapshot, now_ms);
     let snapshot = std::rc::Rc::new(snapshot);
     let state = Sidebar::new(items_from(&snapshot, &due), library_open, search_chord());
@@ -56,6 +61,6 @@ pub fn library(snapshot: Snapshot, library_open: bool, now_ms: i64) -> impl Into
                 .p_4()
                 .gap_3()
                 .child(field("Search cards", query))
-                .child(grid(tiles, || {})),
+                .child(grid(tiles, || {}, on_open)),
         )
 }

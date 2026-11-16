@@ -88,3 +88,94 @@ fn the_settings_row_opens_settings_and_escape_returns() -> Result<(), String> {
     app.wait_for("Spanish")?;
     Ok(())
 }
+
+/// A library in a temporary folder: one deck with one card, so `App` opens it from the environment.
+fn library_on_disk(name: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("typr-shell-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let deck = match db.apply(
+        &typr_core::store::Command::CreateDeck { parent: None, name: "Spanish".to_owned() },
+        0,
+    ) {
+        Ok(typr_core::store::Outcome::Deck(id)) => id,
+        other => panic!("deck: {other:?}"),
+    };
+    db.apply(
+        &typr_core::store::Command::CreateCard { deck, markdown: "gato\n---\ncat".to_owned() },
+        0,
+    )
+    .unwrap();
+    root
+}
+
+/// The environment is process-wide, so the tests that set it take turns.
+static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[test]
+fn a_tile_opens_the_card_and_escape_returns_to_the_grid() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("open");
+    // `App` opens the library the environment names, which the engine thread shares.
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("gato")?;
+    app.press("role:button[gato]")?;
+    app.wait_for("Attach image")?;
+    app.press_key("escape")?;
+    app.wait_for_gone("Attach image", std::time::Duration::from_secs(5))?;
+    Ok(())
+}
+
+/// A library with one diagram card, whose picture is named and captioned.
+fn diagram_on_disk(name: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("typr-shell-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let deck = match db.apply(
+        &typr_core::store::Command::CreateDeck { parent: None, name: "Biology".to_owned() },
+        0,
+    ) {
+        Ok(typr_core::store::Outcome::Deck(id)) => id,
+        other => panic!("deck: {other:?}"),
+    };
+    db.apply(
+        &typr_core::store::Command::CreateDiagram {
+            deck,
+            image: "cell.png".to_owned(),
+            caption: "the cell".to_owned(),
+        },
+        0,
+    )
+    .unwrap();
+    root
+}
+
+#[test]
+fn a_drag_on_a_diagram_card_writes_its_rectangle_to_the_library() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = diagram_on_disk("mask");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("the cell")?;
+    app.press("role:button[the cell]")?;
+    app.wait_for("diagram")?;
+    let by = Point { x: px(80.0), y: px(60.0) };
+    app.drag("text:diagram", by)?;
+    app.wait_for("group 1")?;
+    // The editor writes through the store, so a second look at the library file sees the rectangle.
+    let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let mut masks = Vec::new();
+    for _ in 0..40 {
+        let cards = reader.snapshot().unwrap().cards;
+        masks = cards.first().map(|card| card.masks.clone()).unwrap_or_default();
+        if !masks.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(!masks.is_empty(), "the rectangle reached the library");
+    Ok(())
+}

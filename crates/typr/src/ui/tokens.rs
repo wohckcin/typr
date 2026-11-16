@@ -132,3 +132,8 @@ pub fn tags_that_fit(width: f32, tags: &[&str]) -> usize {
     }
     fit
 }
+
+/// No inset: a layer that covers its parent exactly.
+pub fn flush() -> nsh_core::prelude::Points {
+    nsh_core::prelude::px(0.0)
+}

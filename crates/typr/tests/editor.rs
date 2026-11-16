@@ -4,9 +4,10 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
+use typr_core::store::{MaskRect, MaskRow};
 use typr::screens::editor::{
     Answer, Field, Leaving, attach_image, editor, editor_with_draft, field_table, has_content,
-    cover_box, editor_full, image_reference, leave_decision, leaving_choice, prompt_count, rect_from_drag, Template,
+    Actions, Card, Diagram, cover_box, editor_card, image_reference, leave_decision, leaving_choice, prompt_count, rect_from_corners, Template,
     resolve_images, template_preview,
 };
 
@@ -223,44 +224,44 @@ fn the_field_table_types_a_value_and_shows_computed_rows_read_only() -> Result<(
 
 #[test]
 fn a_drag_across_the_picture_makes_a_fraction_rectangle() {
-    let rect = rect_from_drag((400.0, 200.0), (100.0, 50.0)).expect("a rectangle");
+    let rect = rect_from_corners((400.0, 200.0), (200.0, 100.0), (300.0, 150.0)).expect("a rectangle");
     assert_eq!((rect.x, rect.y), (0.5, 0.5));
     assert_eq!((rect.w, rect.h), (0.25, 0.25));
     // The same fractions hold when the pane is drawn larger.
     assert_eq!(cover_box((800.0, 400.0), rect), (400.0, 200.0, 200.0, 100.0));
-    // A drag up and left covers the region on that side of the middle, the same size.
-    let up_left = rect_from_drag((400.0, 200.0), (-100.0, -50.0)).expect("a rectangle");
+    // A drag up and left from the same place covers the region on that side of it.
+    let up_left = rect_from_corners((400.0, 200.0), (200.0, 100.0), (100.0, 50.0)).expect("a rectangle");
     assert_eq!((up_left.x, up_left.y, up_left.w, up_left.h), (0.25, 0.25, 0.25, 0.25));
 }
 
 #[test]
 fn a_click_or_a_twitch_adds_nothing() {
-    assert_eq!(rect_from_drag((400.0, 200.0), (0.0, 0.0)), None, "a click");
-    assert_eq!(rect_from_drag((400.0, 200.0), (2.0, 100.0)), None, "narrower than one percent");
-    assert_eq!(rect_from_drag((400.0, 200.0), (100.0, 1.0)), None, "shorter than one percent");
-    assert_eq!(rect_from_drag((0.0, 0.0), (100.0, 100.0)), None, "no pane yet");
+    assert_eq!(rect_from_corners((400.0, 200.0), (100.0, 100.0), (100.0, 100.0)), None, "a click");
+    assert_eq!(rect_from_corners((400.0, 200.0), (100.0, 0.0), (102.0, 100.0)), None, "narrower than one percent");
+    assert_eq!(rect_from_corners((400.0, 200.0), (0.0, 100.0), (100.0, 101.0)), None, "shorter than one percent");
+    assert_eq!(rect_from_corners((0.0, 0.0), (0.0, 0.0), (100.0, 100.0)), None, "no pane yet");
 }
 
 #[component]
 fn Templated() -> impl IntoElement {
     typr::ui::tokens::install();
-    view().child(editor_full(
-        "stored".to_owned(),
-        None,
+    view().child(editor_card(
+        Card {
+            saved: "stored".to_owned(),
+            template: Some(Template {
+                text: "<<Word>>\n---\n<<Meaning>>".to_owned(),
+                fields: vec![
+                    Field { name: "Word".to_owned(), value: "gato".to_owned(), computed: false },
+                    Field { name: "Meaning".to_owned(), value: "cat".to_owned(), computed: false },
+                    Field { name: "Name".to_owned(), value: "gato".to_owned(), computed: true },
+                ],
+                deck: Some("Spanish".to_owned()),
+            }),
+            ..Card::default()
+        },
         std::path::PathBuf::from("/tmp/typr-edit/attachments"),
-        Some(Template {
-            text: "<<Word>>\n---\n<<Meaning>>".to_owned(),
-            fields: vec![
-                Field { name: "Word".to_owned(), value: "gato".to_owned(), computed: false },
-                Field { name: "Meaning".to_owned(), value: "cat".to_owned(), computed: false },
-                Field { name: "Name".to_owned(), value: "gato".to_owned(), computed: true },
-            ],
-            deck: Some("Spanish".to_owned()),
-        }),
-        |_| {},
-        |_| Ok("unused.png".to_owned()),
-        |_| {},
-        || {},
+        Actions::new()
+            .attach(|_| Ok("unused.png".to_owned())),
     ))
 }
 
@@ -290,15 +291,13 @@ fn LeavingProbe() -> impl IntoElement {
     view()
         .gap_2()
         .child(text(move || format!("left={} saved={}", left.get(), saved.get())))
-        .child(editor_full(
-            "saved text".to_owned(),
-            Some("saved text!".to_owned()),
+        .child(editor_card(
+            Card { saved: "saved text".to_owned(), draft: Some("saved text!".to_owned()), ..Card::default() },
             std::path::PathBuf::new(),
-            None,
-            move |text| saved.set(text),
-            |_| Ok("unused.png".to_owned()),
-            |_| {},
-            move || left.set("yes".to_owned()),
+            Actions::new()
+                .save(move |text| saved.set(text))
+                .attach(|_| Ok("unused.png".to_owned()))
+                .leave(move || left.set("yes".to_owned())),
         ))
 }
 
@@ -343,15 +342,12 @@ fn CleanLeaving() -> impl IntoElement {
     view()
         .gap_2()
         .child(text(move || format!("left={}", left.get())))
-        .child(editor_full(
-            "saved text".to_owned(),
-            None,
+        .child(editor_card(
+            Card::new("saved text"),
             std::path::PathBuf::new(),
-            None,
-            |_| {},
-            |_| Ok("unused.png".to_owned()),
-            |_| {},
-            move || left.set("yes".to_owned()),
+            Actions::new()
+                .attach(|_| Ok("unused.png".to_owned()))
+                .leave(move || left.set("yes".to_owned())),
         ))
 }
 
@@ -362,5 +358,93 @@ fn leaving_a_clean_editor_does_not_ask() -> Result<(), String> {
     app.press_key("escape")?;
     app.wait_for("left=yes")?;
     assert!(!app.screen().shows("Save this card before leaving?"));
+    Ok(())
+}
+
+#[component]
+fn DiagramCard() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let added = signal(String::from("none"));
+    let merged = signal(String::from("none"));
+    let removed = signal(String::from("none"));
+    view()
+        .flex_1()
+        .gap_2()
+        .child(text(move || {
+            format!("added={} merged={} removed={}", added.get(), merged.get(), removed.get())
+        }))
+        .child(editor_card(
+            Card {
+                saved: String::new(),
+                diagram: Some(Diagram {
+                    image: "cat.png".to_owned(),
+                    caption: "the cat".to_owned(),
+                    rows: vec![
+                        MaskRow { group: 1, rect: MaskRect::new(0.1, 0.1, 0.2, 0.2) },
+                        MaskRow { group: 2, rect: MaskRect::new(0.6, 0.6, 0.2, 0.2) },
+                    ],
+                }),
+                ..Card::default()
+            },
+            std::path::PathBuf::new(),
+            Actions::new().masks(
+                move |group, rect| added.set(format!("{group} w={:.2} x={:.2}", rect.w, rect.x)),
+                move |group, rects| merged.set(format!("{group} n={}", rects.len())),
+                move |rect| removed.set(format!("w={:.2}", rect.w)),
+            ),
+        ))
+}
+
+#[test]
+fn a_diagram_card_shows_its_picture_its_caption_and_its_groups() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
+    app.wait_for("the cat")?;
+    assert!(app.screen().shows("group 1"), "the first group's cover");
+    assert!(app.screen().shows("group 2"), "the second group's cover");
+    Ok(())
+}
+
+#[test]
+fn a_drag_across_the_pane_adds_a_rectangle_to_the_last_group() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
+    app.wait_for("the cat")?;
+    let by = Point { x: px(80.0), y: px(60.0) };
+    app.drag("text:diagram", by)?;
+    app.wait_for("text:/added=2 /")?;
+    let drawn = app.screen().texts().join(" ");
+    assert!(!drawn.contains("w=0.00"), "the rectangle has size: {drawn}");
+    Ok(())
+}
+
+#[test]
+fn a_click_on_the_pane_adds_nothing() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
+    app.wait_for("the cat")?;
+    let nowhere = Point { x: px(0.0), y: px(0.0) };
+    app.drag("text:diagram", nowhere)?;
+    app.wait_for("text:/added=none/")?;
+    Ok(())
+}
+
+#[test]
+fn merging_a_picked_group_reports_its_rectangles_and_removing_reports_one() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
+    app.wait_for("the cat")?;
+    app.press("role:button[group 1]")?;
+    app.press("role:button[Merge group]")?;
+    app.wait_for("text:/merged=1 n=1/")?;
+    app.press("role:button[group 2]")?;
+    app.press("role:button[Remove]")?;
+    app.wait_for("text:/removed=w=0.20/")?;
+    Ok(())
+}
+
+#[test]
+fn scratch_roles2() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
+    app.wait_for("the cat")?;
+    for query in ["role:image", "[the picture]", "image", "label:the picture", "role:img[the picture]"] {
+        println!("{query}={:?}", app.screen().count(query));
+    }
     Ok(())
 }

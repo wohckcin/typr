@@ -70,9 +70,14 @@ pub fn first_side(markdown: &str) -> String {
 
 /// The tile a card draws, from its snapshot row.
 pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
+    // A diagram has no text: its tile says what the picture shows.
+    let preview = match card.kind {
+        typr_core::store::CardKind::Diagram => card.caption.clone().unwrap_or_default(),
+        _ => first_side(&card.markdown),
+    };
     Tile {
         id: card.id,
-        preview: first_side(&card.markdown).into(),
+        preview: preview.into(),
         hidden_sides: (card.sides as usize).saturating_sub(1),
         tags: card.tags.iter().map(|t| SharedString::from(t.clone())).collect(),
         schedule: schedule_of(card.reviews, card.due_at, now_ms),
@@ -81,8 +86,13 @@ pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
 }
 
 /// The grid over `tiles`. An empty deck offers the tile that starts a card.
-pub fn grid(tiles: Memo<Vec<Tile>>, on_new: impl Fn() + Clone + 'static) -> impl IntoElement {
+pub fn grid(
+    tiles: Memo<Vec<Tile>>,
+    on_new: impl Fn() + Clone + 'static,
+    on_open: impl Fn(i64) + Clone + 'static,
+) -> impl IntoElement {
     let empty_new = on_new.clone();
+    let open = on_open.clone();
     view().flex_1().child(dynamic(move || {
         if tiles.with(Vec::is_empty) {
             let on_new = empty_new.clone();
@@ -97,7 +107,8 @@ pub fn grid(tiles: Memo<Vec<Tile>>, on_new: impl Fn() + Clone + 'static) -> impl
                 .child(button_new(on_new))
                 .into_element();
         }
-        virtual_list(move || tiles.with(Vec::len), move |at| tile_cell(tiles, at))
+        let open = open.clone();
+        virtual_list(move || tiles.with(Vec::len), move |at| tile_cell(tiles, at, open.clone()))
             .columns(move || tokens::grid_columns(window().width.0))
             .keys(move || tiles.with(|t| t.iter().map(|t| t.id).collect::<Vec<_>>()))
             .estimated_item_size(tokens::tile_estimate())
@@ -111,7 +122,7 @@ fn button_new(on_new: impl Fn() + 'static) -> impl IntoElement {
 }
 
 /// A cell of the list. It keeps no state: every binding reads the tile at its current index.
-fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position) -> impl IntoElement {
+fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position, on_open: impl Fn(i64) + Clone + 'static) -> impl IntoElement {
     let tile = computed(move || tiles.with(|t| t.get(at.index()).cloned()));
     let preview = move || tile.with(|t| t.as_ref().map(|t| t.preview.clone()).unwrap_or_default());
     let hidden = move || tile.with(|t| t.as_ref().map_or(0, |t| t.hidden_sides));
@@ -138,7 +149,12 @@ fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position) -> impl IntoElement {
         }
         row
     };
-    surface::card(
+    let opened = move || tile.with(|t| t.as_ref().map(|t| t.id).unwrap_or_default());
+    let press = {
+        let on_open = on_open.clone();
+        move || on_open(opened())
+    };
+    crate::ui::button::tile_button(preview, move || press(), surface::card(
         view()
             .gap_2()
             .child(prose(preview))
@@ -158,5 +174,5 @@ fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position) -> impl IntoElement {
             }))
             .child(text(schedule).text_xs().text_color(move || tokens::muted_foreground()))
             .child(dynamic(move || tag_row().into_element())),
-    )
+    ))
 }

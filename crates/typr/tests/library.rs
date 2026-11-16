@@ -35,7 +35,7 @@ fn fixture() -> Snapshot {
 #[component]
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
-    library(fixture(), true, 0)
+    library(fixture(), true, 0, |_| {})
 }
 
 fn start() -> Headless {

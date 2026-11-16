@@ -66,3 +66,19 @@ pub fn busy_button(
     let label = move || -> SharedString { if busy() { "Working…".into() } else { idle.into() } };
     button(variant, label, busy, on_press)
 }
+
+/// A press target drawn as its own children, for a card that is more than a label: a grid tile
+/// opens its card, and its name is what a screen reader says instead of its whole content.
+pub fn tile_button(
+    label: impl Fn() -> SharedString + 'static,
+    on_press: impl Fn() + 'static,
+    child: impl IntoElement,
+) -> impl IntoElement {
+    base_button()
+        .on_press(on_press)
+        .accessibility_label(move || Some(label()))
+        .rounded(tokens::radius)
+        .active(|s| s.opacity(0.9))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
+        .child(child)
+}

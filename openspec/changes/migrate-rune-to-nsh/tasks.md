@@ -24,7 +24,7 @@
 
 - [x] 4.1 Sidebar (Decks/Tags/Views, counts, filtering); verify `sidebar` scenarios via `Headless`
 - [x] 4.2 Library and card grid/tiles on `virtual_list` with keyed rows; verify `card-library`, `card-grid`, `deck-views` scenarios including a recycling scroll test
-- [ ] 4.3 Card editor and attachments (`pick_paths`, image tiles); verify `card-editor` scenarios
+- [x] 4.3 Card editor and attachments (`pick_paths`, image tiles); verify `card-editor` scenarios
 - [x] 4.4 Study session and review canvas with keyboard grading via `on_key`; verify `study-session` and `review-scheduling` UI scenarios
 - [x] 4.5 History; verify its flow tests
 - [x] 4.6 Settings/preferences; verify `preferences` scenarios and persistence across a restart with a temp library
