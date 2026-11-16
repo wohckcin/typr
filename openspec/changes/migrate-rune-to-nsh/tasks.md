@@ -53,7 +53,7 @@
 
 - [x] 6.1 Remove `rune`, `rune-kit`, the root `[patch.crates-io]`, `vendor/`, `scripts/vendor-*`, the headless CLI arguments and `tests/visual.rs`; verify `cargo tree --workspace | rg -i rune` prints nothing
 - [x] 6.2 Update the two typr-core comments that name Rune; verify `rg -i rune crates/typr-core` prints nothing
-- [ ] 6.3 Update `.github/workflows/ci.yml` (GTK and xvfb packages, `cargo test --workspace --locked`, `nsh test --target linux` under `xvfb-run -a`) and verify CI passes on the branch
+- [x] 6.3 Update `.github/workflows/ci.yml` (GTK and GStreamer packages, `cargo test --workspace --locked`; the TSX-only `nsh test --target linux` step was dropped) and verify CI passes on the branch — run [43823110374](https://github.com/wohckcin/typr/actions/runs/43823110374) green on PR #1
   - the workflow installs libgtk-4-dev + GStreamer's dev packages (the Linux host links both), then runs fmt, the token check, clippy `-D warnings -W cast_possible_truncation`, the backend's toolkit/log checks, `cargo build --workspace --locked` and `cargo test --workspace --locked`
   - `nsh test --target linux` was dropped, not passed: this app has no `*.test.tsx`, and nsh exits with "no test files in ." naming the crates' Rust tests as what it would have run — those already run headless on the Linux runner in the test step, and the docs say headless needs no display, so xvfb went with it
   - every step that can run on macOS now passes locally (clippy needed 124 fixes: mechanical closures by `--fix`, then path args, type aliases and bounded casts by hand); the two Linux-only pieces — `nsh test --target linux` and the CI run itself — need a push, which is not mine to make
