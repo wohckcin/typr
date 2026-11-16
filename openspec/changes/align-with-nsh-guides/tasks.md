@@ -43,13 +43,13 @@
 
 ## 4. One size per control
 
-- [ ] 4.1 Add a `Size` prop enum with `Sm`, `Md` and `Lg`, and a `metrics()` that returns height, horizontal
+- [x] 4.1 Add a `Size` prop enum with `Sm`, `Md` and `Lg`, and a `metrics()` that returns height, horizontal
       padding, text size and radius, then give `Button`, `Field`, `SubmitField` and `Tile` a `size` prop that
       uses it. Verify: `cargo test -p typr --test button --test grid` passes and the default size is 32 points.
-- [ ] 4.2 Replace fixed control heights with minimum heights so a larger text size does not clip, and move any
+- [x] 4.2 Replace fixed control heights with minimum heights so a larger text size does not clip, and move any
       remaining control geometry into one documented constants block. Verify: a test renders a button at a raised
       text size and asserts its frame grew; `cargo test -p typr --test appearance` passes.
-- [ ] 4.3 Give `Field` a `label` prop drawn above the input, and use it on the settings daily-cap field.
+- [x] 4.3 Give `Field` a `label` prop drawn above the input, and use it on the settings daily-cap field.
       Verify: `cargo test -p typr --test settings` waits for the label text, and the appearance test still
       renders both themes.
 

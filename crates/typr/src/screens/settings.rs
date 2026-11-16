@@ -188,7 +188,8 @@ pub fn settings(
                 .gap_2()
                 .child(
                     field()
-                        .placeholder("New cards a day")
+                        .label("New cards a day")
+                        .placeholder("20")
                         .value(move || SharedString::from(values.cap_text.get()))
                         .on_change(move |text: &String| values.cap_text.set(text.to_string())),
                 )

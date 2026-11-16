@@ -7,7 +7,7 @@ use nsh_base::button as base_button;
 use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
-use super::{motion, tokens};
+use super::{motion, size::Size, tokens};
 
 /// What a button is for. The variant sets its colours.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PropEnum)]
@@ -50,6 +50,9 @@ pub struct ButtonProps {
     /// Whether a press does nothing.
     #[prop(default)]
     pub disabled: Prop<bool>,
+    /// How large it is: height, padding, text and radius together.
+    #[prop(default)]
+    pub size: Prop<Size>,
 }
 
 /// What a button reports.
@@ -63,22 +66,24 @@ pub enum ButtonEvent {
 #[component]
 pub fn Button(props: ButtonProps, cx: Scope<ButtonEvent>) -> impl IntoElement {
     let (fill, text_color) = props.variant.get_untracked().colors();
+    let sized = props.size.get_untracked();
     base_button()
         .disabled(move || props.disabled.get())
         .on_press(move || cx.emit(ButtonEvent::Press))
         .accessibility_label(move || props.accessible.get())
-        .h(px(32.0))
-        .px_4()
+        .min_h(sized.min_height())
+        .px(sized.pad_x())
+        .py(sized.pad_y())
         .items_center()
         .justify_center()
-        .rounded(tokens::radius)
+        .rounded(sized.radius())
         .bg(move || fill)
         .border_1()
         .border_color(tokens::border)
         .active(|style| style.opacity(0.85))
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
         .disabled_style(|style| style.opacity(0.5))
-        .child(text(props.label).text_sm().text_color(move || text_color))
+        .child(sized.text(props.label).text_color(move || text_color))
 }
 
 /// A press target drawn as its own children, for a card that is more than a label: a grid tile
@@ -89,6 +94,9 @@ pub struct TileProps {
     pub label: Prop<SharedString>,
     /// What it draws.
     pub children: Children,
+    /// How large it is: its radius follows the size.
+    #[prop(default)]
+    pub size: Prop<Size>,
 }
 
 /// What a tile reports.
@@ -101,10 +109,11 @@ pub enum TileEvent {
 /// A card's tile: its own drawing, its own name for a screen reader.
 #[component]
 pub fn Tile(props: TileProps, cx: Scope<TileEvent>) -> impl IntoElement {
+    let sized = props.size.get_untracked();
     base_button()
         .on_press(move || cx.emit(TileEvent::Press))
         .accessibility_label(move || Some(props.label.get()))
-        .rounded(tokens::radius)
+        .rounded(sized.radius())
         .active(|style| style.opacity(0.9))
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
         .child(props.children)
