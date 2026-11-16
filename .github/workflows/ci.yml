@@ -6,8 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Only a pull request's own newer run replaces it. A dispatch is recording a set and a push is
-# answering a commit; cancelling either throws away work the other run will not redo.
+# Only a pull request's own newer run replaces it: a push answers a commit, and cancelling it would
+# throw away the answer for that commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -26,9 +26,8 @@ env:
 
 jobs:
   test:
-    # The label selects the Ubuntu 26 image family, not one build of it. Measured so far, the pool serves
-    # two builds (20261111.196.1 and 20261111.82.6), and both drew the committed pictures byte for byte.
-    # A build that changes the pictures fails Compare; re-record from a dispatch run.
+    # The label selects the Ubuntu 26 image family; any build of it runs these steps, which compare
+    # nothing against recorded pictures.
     runs-on: ubuntu-26.04
     timeout-minutes: 40
     steps:
