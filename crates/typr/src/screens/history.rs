@@ -38,20 +38,22 @@ pub fn history(records: Vec<Record>) -> impl IntoElement {
         );
     }
     for record in records.iter().rev() {
-        list = list.child(surface::card(
-            view()
-                .gap_1()
-                .child(
-                    text(format!("{} · {}", record.phase, record.grade))
-                        .text_sm()
-                        .text_color(tokens::foreground),
-                )
-                .child(
-                    text(format!("{} · due {}", record.at, record.due))
-                        .text_xs()
-                        .text_color(tokens::muted_foreground),
-                ),
-        ));
+        list = list.child(
+            surface::surface().child(
+                view()
+                    .gap_1()
+                    .child(
+                        text(format!("{} · {}", record.phase, record.grade))
+                            .text_sm()
+                            .text_color(tokens::foreground),
+                    )
+                    .child(
+                        text(format!("{} · due {}", record.at, record.due))
+                            .text_xs()
+                            .text_color(tokens::muted_foreground),
+                    ),
+            ),
+        );
     }
     view()
         .flex_1()

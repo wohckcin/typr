@@ -1,14 +1,23 @@
 //! Markdown content: a card's text, rendered as the app draws prose.
 
 use nsh_base::text_view;
+use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
 use super::tokens;
 
+/// A prose block's props.
+#[derive(Clone, PartialEq, Props)]
+pub struct ProseProps {
+    /// The markdown it draws.
+    pub source: Prop<SharedString>,
+}
+
 /// The markdown `source` drawn as prose, in the foreground colour, at the body size.
-pub fn prose(source: impl Fn() -> SharedString + 'static) -> impl IntoElement {
+#[component]
+pub fn Prose(props: ProseProps) -> impl IntoElement {
     text_view()
-        .markdown(move || Some(source()))
+        .markdown(move || Some(props.source.get()))
         .text_sm()
         .text_color(tokens::foreground)
 }

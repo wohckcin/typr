@@ -172,14 +172,16 @@ fn row_views(rows: Vec<(&'static str, String)>) -> impl IntoElement {
         );
     }
     for (label, chord) in rows {
-        list = list.child(surface::card(
-            view()
-                .flex_row()
-                .justify_between()
-                .items_center()
-                .child(text(label).text_sm().text_color(tokens::foreground))
-                .child(keycap().chord(chord)),
-        ));
+        list = list.child(
+            surface::surface().child(
+                view()
+                    .flex_row()
+                    .justify_between()
+                    .items_center()
+                    .child(text(label).text_sm().text_color(tokens::foreground))
+                    .child(keycap().chord(chord)),
+            ),
+        );
     }
     list
 }
@@ -244,14 +246,16 @@ pub fn palette(
                 );
             }
             for (label, chord) in rows {
-                list = list.child(surface::card(
-                    view()
-                        .flex_row()
-                        .justify_between()
-                        .items_center()
-                        .child(text(label).text_sm().text_color(tokens::foreground))
-                        .child(keycap().chord(chord)),
-                ));
+                list = list.child(
+                    surface::surface().child(
+                        view()
+                            .flex_row()
+                            .justify_between()
+                            .items_center()
+                            .child(text(label).text_sm().text_color(tokens::foreground))
+                            .child(keycap().chord(chord)),
+                    ),
+                );
             }
             list.into_element()
         }))

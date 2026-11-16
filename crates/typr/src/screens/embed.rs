@@ -29,31 +29,36 @@ pub fn embedded(markdown: &str, cards: Cards, this: String) -> impl IntoElement 
     prose_with_blocks(source.into(), move |block: &CodeBlock| {
         let name = block.code.trim().to_owned();
         match block.language.as_deref() {
-            Some(INFO) if name == render_this => surface::card(
-                text(format!("“{name}” embeds itself"))
-                    .text_sm()
-                    .text_color(tokens::muted_foreground),
-            )
-            .into_element(),
+            Some(INFO) if name == render_this => surface::surface()
+                .child(
+                    text(format!("“{name}” embeds itself"))
+                        .text_sm()
+                        .text_color(tokens::muted_foreground),
+                )
+                .into_element(),
             Some(INFO) => {
                 let body = body_of(&render_cards, &name).unwrap_or("").to_owned();
                 // One level only: a body that embeds another card is named, not drawn.
                 if !typr_core::markdown_ext::embeds(&body).is_empty() {
-                    return surface::card(
-                        text(format!("“{name}” embeds another card"))
-                            .text_sm()
-                            .text_color(tokens::muted_foreground),
-                    )
-                    .into_element();
+                    return surface::surface()
+                        .child(
+                            text(format!("“{name}” embeds another card"))
+                                .text_sm()
+                                .text_color(tokens::muted_foreground),
+                        )
+                        .into_element();
                 }
-                surface::card(prose(move || body.clone().into())).into_element()
+                surface::surface()
+                    .child(prose().source(move || SharedString::from(body.clone())))
+                    .into_element()
             }
-            Some(MISSING) => surface::card(
-                text(format!("No card named {name}"))
-                    .text_sm()
-                    .text_color(tokens::destructive),
-            )
-            .into_element(),
+            Some(MISSING) => surface::surface()
+                .child(
+                    text(format!("No card named {name}"))
+                        .text_sm()
+                        .text_color(tokens::destructive),
+                )
+                .into_element(),
             _ => view().child(text(block.code.clone())).into_element(),
         }
     })

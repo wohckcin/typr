@@ -227,37 +227,39 @@ fn tile_cell(
                 .rounded(tokens::radius)
                 .border_1()
                 .border_color(ring)
-                .child(surface::card(
-                    view()
-                        .gap_2()
-                        .child(prose(preview))
-                        .child(dynamic(move || {
-                            if !tile.with(|t| t.as_ref().is_some_and(|t| t.pinned)) {
-                                return view().into_element();
-                            }
-                            badge().label("Pinned").into_element()
-                        }))
-                        .child(dynamic(move || {
-                            let n = hidden();
-                            if n == 0 {
-                                return view().into_element();
-                            }
-                            let label = if n == 1 {
-                                "1 hidden side".to_owned()
-                            } else {
-                                format!("{n} hidden sides")
-                            };
-                            text(label)
-                                .text_xs()
-                                .text_color(tokens::muted_foreground)
-                                .into_element()
-                        }))
-                        .child(
-                            text(schedule)
-                                .text_xs()
-                                .text_color(tokens::muted_foreground),
-                        )
-                        .child(dynamic(move || tag_row().into_element())),
-                )),
+                .child(
+                    surface::surface().child(
+                        view()
+                            .gap_2()
+                            .child(prose().source(preview))
+                            .child(dynamic(move || {
+                                if !tile.with(|t| t.as_ref().is_some_and(|t| t.pinned)) {
+                                    return view().into_element();
+                                }
+                                badge().label("Pinned").into_element()
+                            }))
+                            .child(dynamic(move || {
+                                let n = hidden();
+                                if n == 0 {
+                                    return view().into_element();
+                                }
+                                let label = if n == 1 {
+                                    "1 hidden side".to_owned()
+                                } else {
+                                    format!("{n} hidden sides")
+                                };
+                                text(label)
+                                    .text_xs()
+                                    .text_color(tokens::muted_foreground)
+                                    .into_element()
+                            }))
+                            .child(
+                                text(schedule)
+                                    .text_xs()
+                                    .text_color(tokens::muted_foreground),
+                            )
+                            .child(dynamic(move || tag_row().into_element())),
+                    ),
+                ),
         )
 }

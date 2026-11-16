@@ -198,7 +198,7 @@ pub fn study(
             });
             let mut column = view().gap_3();
             for line in lines {
-                column = column.child(prose(move || line.clone().into()));
+                column = column.child(prose().source(move || SharedString::from(line.clone())));
             }
             column.into_element()
         }))

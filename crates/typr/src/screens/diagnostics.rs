@@ -45,11 +45,13 @@ pub fn diagnostics(
         );
     }
     for command in slow {
-        slow_list = slow_list.child(surface::card(
-            text(format!("{} · {} ms", command.name, command.millis))
-                .text_sm()
-                .text_color(tokens::foreground),
-        ));
+        slow_list = slow_list.child(
+            surface::surface().child(
+                text(format!("{} · {} ms", command.name, command.millis))
+                    .text_sm()
+                    .text_color(tokens::foreground),
+            ),
+        );
     }
     view()
         .flex_1()

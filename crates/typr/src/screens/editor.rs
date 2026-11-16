@@ -270,7 +270,7 @@ pub fn diagram_pane(diagram: Diagram, cx: Scope<EditorEvent>) -> impl IntoElemen
                         .text_xs()
                         .text_color(tokens::muted_foreground),
                 )
-                .child(prose(move || format!("![]({image})").into()))
+                .child(prose().source(move || SharedString::from(format!("![]({image})"))))
                 .child(dynamic(move || {
                     let dims = size.get();
                     let selected = picked.get();
@@ -670,7 +670,9 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                             let mut column = view().gap_3();
                             for side in sides_of {
                                 let drawn = resolve_images(&preview_of(&side), root.as_path());
-                                column = column.child(prose(move || drawn.clone().into()));
+                                column = column.child(
+                                    prose().source(move || SharedString::from(drawn.clone())),
+                                );
                             }
                             column.into_element()
                         }))
