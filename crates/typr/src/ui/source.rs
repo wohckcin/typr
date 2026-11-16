@@ -24,6 +24,7 @@ pub fn source_with(
     editor()
         .value(move || Some(value.get().into()))
         .language("markdown")
+        .accessibility_label("Card source")
         .on_change(move |text: &SharedString| {
             value.set(text.to_string());
             on_change(text);

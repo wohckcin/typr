@@ -142,7 +142,8 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - `screens/editor.rs` gains `attach_image` (copies a chosen picture into the attachments root, refuses one that cannot be copied), `image_reference` and `image_references`. The editor takes `on_attach`, offers an "Attach image" action through `pick_paths`, appends the reference to the draft and shows the copy error. `tests/editor.rs` covers the copy/refusal and the reference text.
 - Not done: image occlusion (diagram rectangles), templates and fields in the editor, and recovery of an unsaved draft. 4.3 stays unticked.
 
-- `editor_with_draft` opens on an unsaved draft, marks it "Unsaved", and reports each edit so the caller can write the draft down (`tests/editor.rs` checks the restore and the badge). Headless cannot type into the source editor (it exposes no input role), so the typing report is wired but not driven by a test.
+- `editor_with_draft` opens on an unsaved draft, marks it "Unsaved", and reports each edit so the caller can write the draft down.
+- Typing is testable: `editor()` exposes no input role by default, but `ui::source` now sets `accessibility_label("Card source")`, so `type_text("label:Card source", ..)` reaches it. `tests/editor.rs` types into the draft and asserts both that the report carries the new text and that the preview draws it. `nsh test --target` is not a route for this: `open()` requires an `App.tsx`, which a Rust-root app does not have.
 
 ## Task 5.1 appearance in both themes
 

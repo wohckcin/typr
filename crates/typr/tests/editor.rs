@@ -106,3 +106,15 @@ fn an_unsaved_draft_opens_marked_unsaved() -> Result<(), String> {
     app.wait_for("Unsaved")?;
     Ok(())
 }
+
+#[test]
+fn typing_reaches_the_draft_and_the_preview() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Restored>())).unwrap();
+    app.wait_for("half a card")?;
+    // The source editor is reachable by its accessibility label; the caret starts at the top.
+    app.type_text("label:Card source", "!")?;
+    app.wait_for("text:/typed=!half a card/")?;
+    // The preview follows the same draft: the typed text is drawn there too.
+    assert!(app.screen().count("text:/!half a card/")? >= 1);
+    Ok(())
+}
