@@ -17,7 +17,7 @@ fn Probe() -> impl IntoElement {
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
     study(
         std::rc::Rc::new(std::cell::RefCell::new(Session::new(Queue::Due, entries))),
-        |_, _, _| true,
+        |_, _, _| Ok(()),
         || {},
         || {},
     )
@@ -118,7 +118,7 @@ fn Refusing() -> impl IntoElement {
             Queue::Due,
             vec![Entry::sides(1, ["Question", "Answer"], 0)],
         ))),
-        |_, _, _| false,
+        |_, _, _| Err(typr::screens::study::GradeRefused),
         || {},
         || {},
     )
@@ -159,7 +159,7 @@ fn Leaving() -> impl IntoElement {
                 Queue::Due,
                 vec![Entry::sides(1, ["Question", "Answer"], 0)],
             ))),
-            |_, _, _| true,
+            |_, _, _| Ok(()),
             move || left.set(true),
             || {},
         ))
@@ -183,7 +183,7 @@ fn Reverse() -> impl IntoElement {
             Queue::Due,
             vec![Entry::reverse(1, ["Question", "Answer"], 0)],
         ))),
-        |_, _, _| true,
+        |_, _, _| Ok(()),
         || {},
         || {},
     )
@@ -206,7 +206,7 @@ fn Cramming() -> impl IntoElement {
             ["Front", "Back"],
             0,
         )]))),
-        |_, _, _| true,
+        |_, _, _| Ok(()),
         || {},
         || {},
     )
@@ -230,7 +230,7 @@ fn SettingsKey() -> impl IntoElement {
                 Queue::Due,
                 vec![Entry::sides(7, ["Question", "Answer"], 0)],
             ))),
-            |_, _, _| true,
+            |_, _, _| Ok(()),
             || {},
             move || {
                 card.set("card 7".to_owned());

@@ -147,7 +147,9 @@ pub fn Button(props: ButtonProps, cx: Scope<ButtonEvent>) -> impl IntoElement {
             if reduce_motion() {
                 style.bg(move || resolve(variant.fill(State::Press)))
             } else {
-                style.bg(move || resolve(variant.fill(State::Press))).scale(PRESS_SCALE)
+                style
+                    .bg(move || resolve(variant.fill(State::Press)))
+                    .scale(PRESS_SCALE)
             }
         })
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))

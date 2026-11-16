@@ -164,7 +164,7 @@ fn StudyScreen() -> impl IntoElement {
             Queue::Due,
             vec![Entry::sides(1, ["Question", "Answer"], 0)],
         ))),
-        |_, _, _| true,
+        |_, _, _| Ok(()),
         || {},
         || {},
     )

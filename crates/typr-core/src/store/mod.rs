@@ -795,6 +795,67 @@ pub enum Command {
     },
 }
 
+impl Command {
+    /// The command's name, for the diagnostics list of slow writes.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Command::CreateDeck { .. } => "CreateDeck",
+            Command::RenameDeck { .. } => "RenameDeck",
+            Command::ArchiveDeck { .. } => "ArchiveDeck",
+            Command::MoveDeck { .. } => "MoveDeck",
+            Command::CreateCard { .. } => "CreateCard",
+            Command::CreateDiagram { .. } => "CreateDiagram",
+            Command::SetDiagram { .. } => "SetDiagram",
+            Command::AddMask { .. } => "AddMask",
+            Command::SetMaskGroup { .. } => "SetMaskGroup",
+            Command::RemoveMask { .. } => "RemoveMask",
+            Command::RemoveMaskGroup { .. } => "RemoveMaskGroup",
+            Command::ClearDiagram { .. } => "ClearDiagram",
+            Command::MergeMasks { .. } => "MergeMasks",
+            Command::MaskGroups { .. } => "MaskGroups",
+            Command::Masks { .. } => "Masks",
+            Command::SaveCard { .. } => "SaveCard",
+            Command::SetFields { .. } => "SetFields",
+            Command::SetCardTemplate { .. } => "SetCardTemplate",
+            Command::SetDeckTemplate { .. } => "SetDeckTemplate",
+            Command::MoveCard { .. } => "MoveCard",
+            Command::ArchiveCard { .. } => "ArchiveCard",
+            Command::EmptyTrash => "EmptyTrash",
+            Command::SetTags { .. } => "SetTags",
+            Command::TrashCard { .. } => "TrashCard",
+            Command::RestoreCard { .. } => "RestoreCard",
+            Command::SetDraft { .. } => "SetDraft",
+            Command::Draft { .. } => "Draft",
+            Command::Grade { .. } => "Grade",
+            Command::ResetHistory { .. } => "ResetHistory",
+            Command::DuePrompts { .. } => "DuePrompts",
+            Command::NewPrompts { .. } => "NewPrompts",
+            Command::SetSetting { .. } => "SetSetting",
+            Command::SetScheduler { .. } => "SetScheduler",
+            Command::SetRetention { .. } => "SetRetention",
+            Command::SetWeights { .. } => "SetWeights",
+            Command::SetCardReverse { .. } => "SetCardReverse",
+            Command::SetDeckReverse { .. } => "SetDeckReverse",
+            Command::SetDeckView { .. } => "SetDeckView",
+            Command::MoveCardTo { .. } => "MoveCardTo",
+            Command::CreateView { .. } => "CreateView",
+            Command::RenameView { .. } => "RenameView",
+            Command::DeleteView { .. } => "DeleteView",
+            Command::UpdateView { .. } => "UpdateView",
+            Command::SetPinned { .. } => "SetPinned",
+            Command::ImportArchive { .. } => "ImportArchive",
+            Command::ExportLibrary { .. } => "ExportLibrary",
+            Command::ImportCsv { .. } => "ImportCsv",
+            Command::ExportCsv { .. } => "ExportCsv",
+            Command::ImportMarkdown { .. } => "ImportMarkdown",
+            Command::ExportMarkdown { .. } => "ExportMarkdown",
+            Command::History { .. } => "History",
+            Command::Stats { .. } => "Stats",
+            Command::CardsForView { .. } => "CardsForView",
+        }
+    }
+}
+
 /// What a command did.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Outcome {

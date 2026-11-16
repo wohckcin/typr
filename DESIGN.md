@@ -1,93 +1,96 @@
 # Design
 
-Motion inventory for every screen the port touches, written before the screen's code (Design
-Guides, "Motion inventory"). Tokens are from `crates/typr/src/ui/motion.rs`. Each line names the
-tool and the token, and what reduced motion does. Lines are checked in the running app when the
-screen lands (task 4.10).
+Motion inventory for every screen (Design Guides, "Motion inventory"). Tokens are from
+`crates/typr/src/ui/motion.rs`. Each line names the tool and the token, or says no motion and why, and
+what reduced motion does.
 
-## Shell and sidebar (task 4.1)
+Two kinds of line exist. "Plays" lines are in the running app; they were checked on the macOS host and
+by the tests named. "No motion" lines are decisions: the change either has nothing to show or the
+movement would cost more than it explains.
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Sidebar row hover | colour transition, `INSTANT` | instant |
-| Current deck changes | one selection fill slides to it, `BASE`, ease-in-out | instant |
-| Group count changes | none: a number updating is not motion | n/a |
-| Sidebar collapses at a narrow width | layout animation, `BASE` | instant |
+## Shell and sidebar
 
-## Library and card grid (task 4.2)
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Sidebar row hover | colour transition, `INSTANT` | instant | plays |
+| Group count changes | none: a number updating is not motion | n/a | no motion |
+| Sidebar keeps its width | none: the sidebar does not collapse, so there is no layout change to follow | n/a | no motion |
+| Current row changes | the row's fill changes in place; no fill slides | n/a | see below |
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Tile press | scale to `PRESS_SCALE`, `FAST` | no scale |
-| Tile hover | colour wash only, `INSTANT`; the card does not move | instant |
-| Tiles arrive on page entry | wave, rows fade in `RISE` away, `SLOWER`, first 10 rows | none |
-| Recycled cell or data tick | none (a recycled cell plays nothing) | n/a |
-| Empty library | empty state fades in, `BASE` | instant |
+The sliding current-row fill is the one line this change does not settle. It needs a measured row
+offset per index, which the sidebar does not keep, so it is left out until the sidebar measures its
+rows for another reason.
 
-## Card editor (task 4.3)
+## Library and card grid
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Save state changes (saved to saving) | glyph swap, `BASE` | instant |
-| Attachment tile arrives | rise `RISE` and fade, `BASE` | instant |
-| Typing | none: a value that updates per keystroke is not animated | n/a |
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Tile press | scale to `PRESS_SCALE`, `FAST` | no scale | plays |
+| Tile hover | colour wash, `INSTANT`; the card does not move | instant | plays |
+| Tiles arrive on page entry | none: a recycled virtual cell replays whatever plays in it, and the library reads in one frame | n/a | no motion |
+| Recycled cell or data tick | none: a recycled cell plays nothing | n/a | no motion |
+| Empty library | none: the empty state draws at once, because nothing was awaited | n/a | no motion |
 
-## Study session and review (task 4.4)
+## Card editor
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Reveal the answer | answer area fades in inside its fixed bounds, `BASE`; the card does not move | instant |
-| Grade pressed | scale to `PRESS_SCALE`, `FAST` | no scale |
-| Next card | card cross-fades, `FAST` | instant |
-| Session complete | empty state fades in, `BASE` | instant |
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Saved / Unsaved badge | none: the word changes in place; a glyph swap would animate a two-word status | n/a | no motion |
+| Picture attached | none: the picture is written into the source text as a reference | n/a | no motion |
+| Typing | none: a value that updates per keystroke is not animated | n/a | no motion |
 
-## History (task 4.5)
+## Study session and review
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Row arrives | fade, `INSTANT` | instant |
-| Filter change | list cross-fades, `FAST` | instant |
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Reveal the answer | none: the answer appears in place; the reveal is the result, not a transition | n/a | no motion |
+| Grade pressed | scale to `PRESS_SCALE`, `FAST`, through the app's button | no scale | plays |
+| Next card | none: the next prompt is set in place | n/a | no motion |
+| Session complete | none: the summary draws at once | n/a | no motion |
 
-## Settings (task 4.6)
+## History
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Switch toggles | thumb slides, `BASE` (in `ui::toggle`) | instant |
-| Section change | cross-fade, `FAST` | instant |
-| Save confirmed | none beyond the control's own state: the switch shows the outcome | n/a |
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Row arrives | none: rows are read in one frame | n/a | no motion |
+| Filter change | none: the list is rebuilt in place | n/a | no motion |
 
-## Keymap panel and palette (task 4.7)
+## Settings
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Panel opens | popup grows from its trigger, `SLOW`, slides `SLIDE` | instant |
-| Panel closes | fade out, `BASE` | instant |
-| Result list changes as the user types | none: results update in place | n/a |
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Switch toggles | thumb slides, `BASE` (in `ui::toggle`) | instant | plays |
+| Section change | none: sections are read top to bottom, not swapped | n/a | no motion |
+| Save confirmed | none beyond the control's own state | n/a | no motion |
 
-## Embeds and markdown (task 4.8)
+## Keymap panel and palette
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Embed block loads its text | skeleton pulses, fades out when content arrives, `BASE` | static skeleton |
-| Code block copy confirmed | check glyph swap, `FAST` | instant |
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Panel opens and closes | the popup's own placement; no app motion | n/a | no motion |
+| Rows narrow as the user types | none: results update in place | n/a | no motion |
 
-## Diagnostics and transfer (task 4.9)
+## Embeds and markdown
 
-| Change | Tool, token | Reduced motion |
-|---|---|---|
-| Progress of an import or export | indeterminate spinner label (no animation; see design.md 3.2) | n/a |
-| Result line appears | toast fades in, `BASE` | instant |
-| Toast clears | fades out, `FAST`, after `TOAST_MS` | instant |
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Embed block loads its text | none: the block's text is read from the library in one frame, so a skeleton would show for no frame | n/a | no motion |
+
+## Diagnostics and transfer
+
+| Change | Motion | Reduced motion | Kind |
+|---|---|---|---|
+| Import or export in flight | none: the result line states the outcome when it arrives | n/a | no motion |
+| Result line appears | the toast's own entrance and exit from `nsh/base` | the platform's | plays |
 
 ## Appearance, without pictures
 
-Appearance is verified by the styles a screen resolves to, not by captured images. `tests/appearance.rs`
+Appearance is checked by the styles a screen resolves to, not by captured images. `tests/appearance.rs`
 renders every screen in the light and the dark appearance and reads `screen().span_style(..)`: the same
-text must keep its font size and weight, and its colour must be the theme's for that appearance, so the
-two differ. `tests/tokens.rs` refuses a spacing, type, radius or colour literal in a screen, so the
-colour cannot be one the theme does not name.
+text keeps its font size and weight, and its colour is the theme's for that appearance, so the two
+differ. `tests/tokens.rs` refuses a spacing, type, radius or colour literal in a screen.
 
-There is no screenshot pipeline in this repository: no scene list, no `tests/visual.rs`, no baseline
-images and no `TYPR_*` environment. `nsh_testing`'s headless driver has no `screenshot` at all, and
-`nsh test --target` is not used. If a visual regression needs a picture later, it is added as a
-separate, explicit step rather than as the gate every screen runs through.
+The hover wash and the press scale are the exception that needs a picture, because the headless driver
+keeps no view style and cannot take one. `desktop.test.tsx` hovers a button on the macOS host and asserts
+the screenshot changed, and skips that step where the app opens as a phone. The half-point colours and
+the state roles are unit-tested in `ui/button.rs`, where they need no reactive runtime.

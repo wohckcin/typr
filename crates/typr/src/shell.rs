@@ -336,11 +336,12 @@ pub fn shell_over(
         })
     };
 
-    // One writer for the store: a command, then the snapshot a view reads. `quiet` skips the
-    // re-publish for draft writes, which come once a keystroke and must not rebuild the editor.
-    let write = {
+    // One writer for the store: a command, then the snapshot a view reads. Draft writes go through
+    // `quiet_apply`, which skips the re-publish because they come once a keystroke and must not
+    // rebuild the editor.
+    let apply = {
         let db = db.clone();
-        Rc::new(move |command: Command, quiet: bool, name: &'static str| {
+        Rc::new(move |command: Command| {
             let started = std::time::Instant::now();
             match db.apply(&command, SystemClock.now_ms()) {
                 Ok(_) => {
@@ -348,13 +349,39 @@ pub fn shell_over(
                     if millis >= SLOW_COMMAND_MS {
                         slow.update(|list| {
                             list.push(SlowCommand {
-                                name: name.into(),
+                                name: command.name().into(),
                                 millis,
                             })
                         });
                     }
-                    if !quiet && let Ok(next) = db.snapshot() {
+                    if let Ok(next) = db.snapshot() {
                         snapshot_signal.set(next);
+                    }
+                }
+                Err(error) => {
+                    stopped.set(true);
+                    log::error!(
+                        "store refused a command: {}",
+                        crate::logging::describe(&error)
+                    );
+                }
+            }
+        })
+    };
+    let quiet_apply = {
+        let db = db.clone();
+        Rc::new(move |command: Command| {
+            let started = std::time::Instant::now();
+            match db.apply(&command, SystemClock.now_ms()) {
+                Ok(_) => {
+                    let millis = u32::try_from(started.elapsed().as_millis()).unwrap_or(u32::MAX);
+                    if millis >= SLOW_COMMAND_MS {
+                        slow.update(|list| {
+                            list.push(SlowCommand {
+                                name: command.name().into(),
+                                millis,
+                            })
+                        });
                     }
                 }
                 Err(error) => {
@@ -615,11 +642,11 @@ pub fn shell_over(
                             },
                             SystemClock.now_ms(),
                         ) {
-                            Ok(_) => true,
+                            Ok(_) => Ok(()),
                             Err(error) => {
                                 grade_stopped.set(true);
                                 log::error!("grade refused: {}", crate::logging::describe(&error));
-                                false
+                                Err(crate::screens::study::GradeRefused)
                             }
                         },
                         move || {
@@ -679,8 +706,8 @@ pub fn shell_over(
                             rows: card.masks.iter().map(Cover::of).collect(),
                         });
                     let draft = db.draft(id).ok().flatten();
-                    let write_save = write.clone();
-                    let write_draft = write.clone();
+                    let write_save = apply.clone();
+                    let write_draft = quiet_apply.clone();
                     let leaving = screen;
                     editor::editor()
                         .saved(card.markdown.clone())
@@ -689,117 +716,85 @@ pub fn shell_over(
                         .diagram(diagram)
                         .attachments(attachments.to_string_lossy().to_string())
                         .on_save(move |saved: &editor::CardText| {
-                            write_save(
-                                Command::SaveCard {
-                                    id,
-                                    markdown: saved.text.clone(),
-                                },
-                                false,
-                                "SaveCard",
-                            );
-                            write_save(
-                                Command::SetDraft {
-                                    card: id,
-                                    text: None,
-                                },
-                                true,
-                                "SetDraft",
-                            );
+                            write_save(Command::SaveCard {
+                                id,
+                                markdown: saved.text.clone(),
+                            });
+                            write_save(Command::SetDraft {
+                                card: id,
+                                text: None,
+                            });
                         })
                         .on_draft(move |draft: &editor::CardText| {
-                            write_draft(
-                                Command::SetDraft {
-                                    card: id,
-                                    text: Some(draft.text.clone()),
-                                },
-                                true,
-                                "SetDraft",
-                            )
+                            write_draft(Command::SetDraft {
+                                card: id,
+                                text: Some(draft.text.clone()),
+                            })
                         })
                         .on_leave(move || leaving.set(Screen::Library))
                         .on_discard({
-                            let write = write.clone();
+                            let write = quiet_apply.clone();
                             move || {
                                 // Discarding drops the stored draft, so the next open is the card.
-                                write(
-                                    Command::SetDraft {
-                                        card: id,
-                                        text: None,
-                                    },
-                                    true,
-                                    "SetDraft",
-                                );
+                                write(Command::SetDraft {
+                                    card: id,
+                                    text: None,
+                                });
                                 screen.set(Screen::Library);
                             }
                         })
                         .on_add_mask({
-                            let write = write.clone();
+                            let write = apply.clone();
                             move |added: &editor::MaskAdded| {
                                 let mask = added.mask;
-                                write(
-                                    Command::AddMask {
-                                        card: id,
-                                        group: mask.group,
-                                        rect: typr_core::store::MaskRect::new(
-                                            mask.x, mask.y, mask.w, mask.h,
-                                        ),
-                                    },
-                                    false,
-                                    "AddMask",
-                                )
+                                write(Command::AddMask {
+                                    card: id,
+                                    group: mask.group,
+                                    rect: typr_core::store::MaskRect::new(
+                                        mask.x, mask.y, mask.w, mask.h,
+                                    ),
+                                })
                             }
                         })
                         .on_merge_masks({
-                            let write = write.clone();
+                            let write = apply.clone();
                             move |merged: &editor::GroupMerge| {
-                                write(
-                                    Command::MergeMasks {
-                                        card: id,
-                                        group: merged.group,
-                                        rects: merged
-                                            .rects
-                                            .iter()
-                                            .map(|rect| {
-                                                typr_core::store::MaskRect::new(
-                                                    rect.x, rect.y, rect.w, rect.h,
-                                                )
-                                            })
-                                            .collect(),
-                                    },
-                                    false,
-                                    "MergeMasks",
-                                )
+                                write(Command::MergeMasks {
+                                    card: id,
+                                    group: merged.group,
+                                    rects: merged
+                                        .rects
+                                        .iter()
+                                        .map(|rect| {
+                                            typr_core::store::MaskRect::new(
+                                                rect.x, rect.y, rect.w, rect.h,
+                                            )
+                                        })
+                                        .collect(),
+                                })
                             }
                         })
                         .on_remove_mask_group({
-                            let write = write.clone();
+                            let write = apply.clone();
                             move |masked: &editor::MaskGroup| {
-                                write(
-                                    Command::RemoveMaskGroup {
-                                        card: id,
-                                        group: masked.group,
-                                    },
-                                    false,
-                                    "RemoveMaskGroup",
-                                )
+                                write(Command::RemoveMaskGroup {
+                                    card: id,
+                                    group: masked.group,
+                                })
                             }
                         })
                         .on_clear_diagram({
-                            let write = write.clone();
-                            move || write(Command::ClearDiagram { card: id }, false, "ClearDiagram")
+                            let write = apply.clone();
+                            move || write(Command::ClearDiagram { card: id })
                         })
                         .on_start_diagram({
-                            let write = write.clone();
+                            let write = apply.clone();
                             move |started: &editor::DiagramStart| {
-                                write(
-                                    Command::SetDiagram {
-                                        card: id,
-                                        image: started.name.clone(),
-                                        caption: String::new(),
-                                    },
-                                    false,
-                                    "SetDiagram",
-                                )
+                                write(Command::SetDiagram {
+                                    card: id,
+                                    image: started.name.clone(),
+                                    caption: String::new(),
+                                })
                             }
                         })
                         .into_element()

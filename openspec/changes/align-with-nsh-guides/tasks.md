@@ -69,27 +69,27 @@
 - [ ] 6.1 Build the sidebar's moving selection from the motion tokens and gate it on `reduce_motion()`, or
       rewrite that inventory line as instant with a reason if it does not land cleanly. Verify: the line in
       `DESIGN.md` matches what the running app does in `nsh test desktop.test.tsx`.
-- [ ] 6.2 Rewrite the tile wave and skeleton cross-fade lines in `DESIGN.md` as no motion with their reasons, and
+- [x] 6.2 Rewrite the tile wave and skeleton cross-fade lines in `DESIGN.md` as no motion with their reasons, and
       mark which inventory lines were checked in the running app. Verify: every section of `DESIGN.md` states a
       tool and token or a reason, and no line promises motion the code does not have.
-- [ ] 6.3 Paint the popup surface in `ui/overlay.rs` with the theme's popover background, border and radius.
+- [x] 6.3 Paint the popup surface in `ui/overlay.rs` with the theme's popover background, border and radius.
       Verify: `cargo test -p typr --test appearance` passes and a search for the card token inside
       `overlay.rs` finds none.
 
 ## 7. Command copy
 
-- [ ] 7.1 End the labels of the three dialog-opening editor commands with an ellipsis character. Verify:
+- [x] 7.1 End the labels of the three dialog-opening editor commands with an ellipsis character. Verify:
       `cargo test -p typr --test editor` finds the labels with the ellipsis, and a test asserts Save has none.
 
 ## 8. The seams the review left open
 
-- [ ] 8.1 Split the shell's writer into `apply` and `quiet_apply`, with the slow-command name taken from the
+- [x] 8.1 Split the shell's writer into `apply` and `quiet_apply`, with the slow-command name taken from the
       command instead of passed by the caller. Verify: `cargo test -p typr --test diagnostics --test shell`
       passes and no call site passes a command name.
-- [ ] 8.2 Report a refused grade from the study screen through an event or a `Result` rather than a `bool`
+- [x] 8.2 Report a refused grade from the study screen through an event or a `Result` rather than a `bool`
       return, and update the shell's handler. Verify: `cargo test -p typr --test study --test shell` passes and
       the refusal path still leaves the card ungraded.
-- [ ] 8.3 Move the tile-name flattening out of `screens/grid.rs` into `typr-core`'s markdown module. Verify:
+- [x] 8.3 Move the tile-name flattening out of `screens/grid.rs` into `typr-core`'s markdown module. Verify:
       `cargo test -p typr-core --test markdown` and `cargo test -p typr --test grid` pass.
 
 ## Workflow follow-up

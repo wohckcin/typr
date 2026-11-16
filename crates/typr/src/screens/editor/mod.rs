@@ -253,7 +253,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
             .child(
                 button()
                     .variant(Variant::Default)
-                    .label("Clear the diagram")
+                    .label("Clear the diagram…")
                     .disabled(|| false)
                     .on_press(move || asking_clear.set(true)),
             )
@@ -383,7 +383,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                 let pressed_root = drawn_root.clone();
                                 button()
                                     .variant(Variant::Default)
-                                    .label("Make it a diagram")
+                                    .label("Make it a diagram…")
                                     .disabled(|| false)
                                     .on_press(move || {
                                         let root = pressed_root.clone();
@@ -410,7 +410,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                         .child(
                             button()
                                 .variant(Variant::Default)
-                                .label("Attach image")
+                                .label("Attach image…")
                                 .disabled(|| false)
                                 .on_press(move || {
                                     let root = attach_root.clone();

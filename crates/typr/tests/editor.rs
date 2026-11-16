@@ -522,12 +522,12 @@ fn a_cover_says_which_group_it_belongs_to() -> Result<(), String> {
 fn the_diagram_clears_only_after_the_question() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
     app.wait_for("the cat")?;
-    app.press("role:button[Clear the diagram]")?;
+    app.press("role:button[Clear the diagram…]")?;
     app.wait_for("Clear this diagram?")?;
     app.press("role:button[Stay]")?;
     app.wait_for_gone("Clear this diagram?", std::time::Duration::from_secs(5))?;
     app.wait_for("text:/cleared=none/")?;
-    app.press("role:button[Clear the diagram]")?;
+    app.press("role:button[Clear the diagram…]")?;
     app.wait_for("Clear this diagram?")?;
     app.press("role:button[Clear]")?;
     app.wait_for("text:/cleared=yes/")?;
@@ -549,11 +549,11 @@ fn WrittenCard() -> impl IntoElement {
 #[test]
 fn an_empty_card_offers_the_diagram_switch_and_a_written_one_does_not() -> Result<(), String> {
     let mut empty = Headless::start(EngineConfig::new(Root::of::<EmptyCard>())).unwrap();
-    empty.wait_for("Make it a diagram")?;
+    empty.wait_for("Make it a diagram…")?;
     let mut written = Headless::start(EngineConfig::new(Root::of::<WrittenCard>())).unwrap();
     written.wait_for("Save")?;
     assert!(
-        !written.screen().shows("Make it a diagram"),
+        !written.screen().shows("Make it a diagram…"),
         "switching a card with text would hide the text"
     );
     Ok(())

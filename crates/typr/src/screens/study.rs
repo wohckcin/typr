@@ -24,9 +24,13 @@ pub fn can_reveal(session: &Session) -> bool {
     !session.finished() && !session.gradeable()
 }
 
+/// Why a grade was not written: the store refused it, so the card stays answerable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GradeRefused;
+
 /// The study screen over `session`, which the caller builds for the queue it wants (due, new,
-/// reverse or cram). `on_grade` writes each grade for its card and
-/// reports whether the store took it; a refused grade leaves the card answerable.
+/// reverse or cram). `on_grade` writes each grade for its card; a refusal leaves the card answerable
+/// and says so in its error.
 /// The entry one prompt walks: a hidden-text group masked until revealed, a diagram group covered
 /// until uncovered, or the sides of a card asked forwards or backwards. `None` for a key the card
 /// no longer holds (a prompt retired after an edit).
@@ -84,7 +88,7 @@ pub fn entries_for(cards: &[CardSummary], prompts: &[(Id, String, i64)]) -> Vec<
 
 pub fn study(
     session: std::rc::Rc<std::cell::RefCell<Session>>,
-    on_grade: impl Fn(Id, String, Grade) -> bool + Clone + 'static,
+    on_grade: impl Fn(Id, String, Grade) -> Result<(), GradeRefused> + Clone + 'static,
     on_leave: impl Fn() + Clone + 'static,
     on_settings: impl Fn() + Clone + 'static,
 ) -> impl IntoElement {
@@ -104,7 +108,7 @@ pub fn study(
             let key = session
                 .with(|s| s.borrow().prompt_of(id).map(str::to_owned))
                 .unwrap_or_default();
-            let taken = grade_out(id, key, grade);
+            let taken = grade_out(id, key, grade).is_ok();
             refused.set(!taken);
             session.with(|s| {
                 if taken {

@@ -201,3 +201,51 @@ mod tests {
         assert_eq!(expand(&once, resolve), once);
     }
 }
+
+/// A card's text as a name read aloud: image references become their alt text, emphasis and code
+/// marks come out, and the lines join into one sentence. A tile says "ser means to be", not the
+/// asterisks around it.
+pub fn plain(markdown: &str) -> String {
+    let mut out = String::with_capacity(markdown.len());
+    let mut rest = markdown;
+    while let Some(at) = rest.find("![") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 2..];
+        let Some(close) = after.find("](") else {
+            out.push_str(rest);
+            return out;
+        };
+        out.push_str(&after[..close]);
+        let Some(end) = after[close + 2..].find(')') else {
+            out.push_str(rest);
+            return out;
+        };
+        rest = &after[close + 2 + end + 1..];
+    }
+    out.push_str(rest);
+    out.replace("**", "")
+        .replace(['`', '*'], "")
+        .replace("\n", " ")
+        .trim()
+        .to_owned()
+}
+
+#[cfg(test)]
+mod plain_tests {
+    use super::plain;
+
+    #[test]
+    fn an_image_reads_as_its_alt_text() {
+        assert_eq!(plain("see ![the cat](cat.png) here"), "see the cat here");
+    }
+
+    #[test]
+    fn emphasis_and_code_marks_come_out() {
+        assert_eq!(plain("**ser** means `to be`"), "ser means to be");
+    }
+
+    #[test]
+    fn lines_join_into_one_sentence() {
+        assert_eq!(plain("first line\nsecond line"), "first line second line");
+    }
+}

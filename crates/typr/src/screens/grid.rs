@@ -77,33 +77,6 @@ pub fn first_side(markdown: &str) -> String {
     }
 }
 
-/// A tile's name for screen readers: its markdown preview with the syntax that would be read aloud
-/// taken out, so a tile says "ser means to be", not the asterisks around it.
-pub fn plain_preview(markdown: &str) -> String {
-    let mut out = String::with_capacity(markdown.len());
-    let mut rest = markdown;
-    while let Some(at) = rest.find("![") {
-        out.push_str(&rest[..at]);
-        let after = &rest[at + 2..];
-        let Some(close) = after.find("](") else {
-            out.push_str(rest);
-            return out;
-        };
-        out.push_str(&after[..close]);
-        let Some(end) = after[close + 2..].find(')') else {
-            out.push_str(rest);
-            return out;
-        };
-        rest = &after[close + 2 + end + 1..];
-    }
-    out.push_str(rest);
-    out.replace("**", "")
-        .replace(['`', '*'], "")
-        .replace("\n", " ")
-        .trim()
-        .to_owned()
-}
-
 /// The tile a card draws, from its snapshot row.
 pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
     // A diagram has no text: its tile says what the picture shows.
@@ -211,7 +184,7 @@ fn tile_cell(
         let on_open = on_open.clone();
         move || on_open(opened())
     };
-    let named = move || -> SharedString { plain_preview(&preview()).into() };
+    let named = move || -> SharedString { typr_core::markdown_ext::plain(&preview()).into() };
     // The keyboard's card wears a ring, by identity so a filter or a reorder cannot move it to a
     // different card at the same position.
     let ring = move || {

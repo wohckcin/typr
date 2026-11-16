@@ -141,9 +141,9 @@ fn a_tile_opens_the_card_and_escape_returns_to_the_grid() -> Result<(), String> 
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
     app.wait_for("gato")?;
     app.press("role:button[gato]")?;
-    app.wait_for("Attach image")?;
+    app.wait_for("Attach image…")?;
     app.press_key("escape")?;
-    app.wait_for_gone("Attach image", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone("Attach image…", std::time::Duration::from_secs(5))?;
     Ok(())
 }
 
@@ -216,12 +216,12 @@ fn clearing_a_diagram_turns_the_card_into_text_in_the_library() -> Result<(), St
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
     app.wait_for("the cell")?;
     app.press("role:button[the cell]")?;
-    app.press("role:button[Clear the diagram]")?;
+    app.press("role:button[Clear the diagram…]")?;
     app.wait_for("Clear this diagram?")?;
     app.press("role:button[Clear]")?;
     // The card is text again, so the editor offers its source and the diagram's tag is gone.
     app.wait_for("Save")?;
-    app.wait_for_gone("Clear the diagram", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone("Clear the diagram…", std::time::Duration::from_secs(5))?;
     let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
     let card = reader
         .snapshot()
@@ -273,7 +273,7 @@ fn a_draft_survives_a_restart_until_it_is_discarded() -> Result<(), String> {
     again.press("role:button[Back]")?;
     again.wait_for("Save this card before leaving?")?;
     again.press("role:button[Discard]")?;
-    again.wait_for_gone("Attach image", std::time::Duration::from_secs(5))?;
+    again.wait_for_gone("Attach image…", std::time::Duration::from_secs(5))?;
     drop(again);
 
     let mut once_more = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
@@ -377,7 +377,7 @@ fn the_keyboard_walks_the_library_and_opens_the_chosen_card() -> Result<(), Stri
     // Down walks the grid; Enter edits the card in force, which opens the editor on it.
     app.press_key("down")?;
     app.press_key("enter")?;
-    app.wait_for("Attach image")?;
+    app.wait_for("Attach image…")?;
     Ok(())
 }
 
@@ -435,10 +435,10 @@ fn the_librarys_keys_do_nothing_while_a_card_is_open() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
     app.wait_for("role:button[gato]")?;
     app.press("role:button[gato]")?;
-    app.wait_for("Attach image")?;
+    app.wait_for("Attach image…")?;
     // `c` makes a card on the library screen; here it must make nothing and leave the editor alone.
     app.press_key("c")?;
-    app.wait_for("Attach image")?;
+    app.wait_for("Attach image…")?;
     let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
     let cards = reader.snapshot().unwrap().cards.len();
     assert_eq!(cards, 1, "no card was made while the editor was open");
@@ -453,11 +453,11 @@ fn choosing_a_deck_leaves_the_open_card() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
     app.wait_for("role:button[gato]")?;
     app.press("role:button[gato]")?;
-    app.wait_for("Attach image")?;
+    app.wait_for("Attach image…")?;
     // A row in the sidebar opens the grid for that row, so the card on screen goes away.
     app.press("role:button[Spanish]")?;
     app.wait_for("Search cards")?;
-    let editor_rows = app.screen().count("Attach image")?;
+    let editor_rows = app.screen().count("Attach image…")?;
     assert_eq!(editor_rows, 0, "the editor is gone");
     Ok(())
 }
@@ -510,7 +510,7 @@ fn a_filtered_out_card_does_not_leave_the_next_one_selected() -> Result<(), Stri
     app.press_key("escape")?;
     app.press_key("enter")?;
     assert!(
-        !app.screen().shows("Attach image"),
+        !app.screen().shows("Attach image…"),
         "no card opened, because the card that was selected had left the list"
     );
     Ok(())
@@ -529,7 +529,7 @@ fn a_row_change_keeps_the_selected_card_when_it_still_shows() -> Result<(), Stri
     app.press_key("down")?;
     app.press("role:button[Biology]")?;
     app.press_key("enter")?;
-    app.wait_for("Attach image")?;
+    app.wait_for("Attach image…")?;
     app.wait_for("text:perro")?;
     Ok(())
 }

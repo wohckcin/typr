@@ -14,7 +14,7 @@ fn popup() -> nsh_core::element::StyleRefinement {
         .rounded(tokens::radius)
         .border_1()
         .border_color(tokens::border)
-        .bg(tokens::card)
+        .bg(tokens::popover())
 }
 
 /// A menu opened from `trigger`, with commands as its items.
@@ -46,7 +46,7 @@ pub fn anchored(trigger: impl IntoElement, content: impl IntoElement) -> impl In
         view()
             .p_3()
             .child(content)
-            .bg(tokens::card)
+            .bg(tokens::popover())
             .rounded(tokens::radius),
     )
 }
@@ -82,7 +82,7 @@ pub fn toast(message: Signal<Option<SharedString>>) -> impl IntoElement {
             view()
                 .p_3()
                 .rounded(tokens::radius)
-                .bg(tokens::card)
+                .bg(tokens::popover())
                 .border_1()
                 .border_color(tokens::border)
                 .child(

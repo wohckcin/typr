@@ -36,6 +36,11 @@ pub fn card() -> AdaptiveColor {
     theme().card
 }
 
+/// A surface that floats over the page: a menu, a popover, a dialog.
+pub fn popover() -> AdaptiveColor {
+    theme().popover
+}
+
 /// Secondary text: a caption, a metadata line, a hint.
 pub fn muted_foreground() -> AdaptiveColor {
     theme().muted_foreground

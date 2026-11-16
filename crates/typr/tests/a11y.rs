@@ -73,7 +73,7 @@ fn StudyScreen() -> impl IntoElement {
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
     study(
         std::rc::Rc::new(std::cell::RefCell::new(Session::new(Queue::Due, entries))),
-        |_, _, _| true,
+        |_, _, _| Ok(()),
         || {},
         || {},
     )
@@ -137,7 +137,7 @@ fn the_library_names_every_control_and_survives_the_keyboard() -> Result<(), Str
 #[test]
 fn the_editor_names_its_controls_and_survives_the_keyboard() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<Editor>())).unwrap();
-    for control in ["Back", "Save", "Attach image"] {
+    for control in ["Back", "Save", "Attach image…"] {
         app.wait_for(&format!("role:button[{control}]"))?;
     }
     keyboard_pass(&mut app, "Unsaved")
