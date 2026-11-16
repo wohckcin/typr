@@ -426,3 +426,21 @@ fn a_due_session_opens_from_the_library_and_grades_back_to_the_store() -> Result
     );
     Ok(())
 }
+
+#[test]
+fn the_librarys_keys_do_nothing_while_a_card_is_open() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("guarded");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("role:button[gato]")?;
+    app.press("role:button[gato]")?;
+    app.wait_for("Attach image")?;
+    // `c` makes a card on the library screen; here it must make nothing and leave the editor alone.
+    app.press_key("c")?;
+    app.wait_for("Attach image")?;
+    let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let cards = reader.snapshot().unwrap().cards.len();
+    assert_eq!(cards, 1, "no card was made while the editor was open");
+    Ok(())
+}

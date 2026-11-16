@@ -76,7 +76,7 @@ fn StudyScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
     study(
-        Session::new(Queue::Due, entries),
+        std::rc::Rc::new(std::cell::RefCell::new(Session::new(Queue::Due, entries))),
         |_, _, _| true,
         || {},
         || {},

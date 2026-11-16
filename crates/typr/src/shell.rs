@@ -160,7 +160,7 @@ pub fn shell_over(
     // The library's keyboard: the card Enter acts on, and the session that may be running.
     let selection = signal(0_usize);
     let studying = signal(false);
-    let session_slot: Rc<std::cell::RefCell<Option<Session>>> =
+    let session_slot: Rc<std::cell::RefCell<Option<Rc<std::cell::RefCell<Session>>>>> =
         Rc::new(std::cell::RefCell::new(None));
     let reopen = {
         let db = db.clone();
@@ -237,7 +237,9 @@ pub fn shell_over(
             if entries.is_empty() {
                 return;
             }
-            *session_slot.borrow_mut() = Some(Session::new(queue, entries));
+            *session_slot.borrow_mut() = Some(Rc::new(std::cell::RefCell::new(Session::new(
+                queue, entries,
+            ))));
             studying.set(true);
         })
     };
@@ -314,46 +316,91 @@ pub fn shell_over(
 
     let open = { move |id: Id| route.set(Route::Editor(id)) };
 
+    // Whether the work area is showing the library: its keys act only there, so `c` inside the
+    // editor makes nothing and `s` inside a session starts nothing.
+    let in_library = {
+        move || {
+            route.get() == Route::Library
+                && !studying.get()
+                && !matches!(
+                    state.selected_key().as_deref(),
+                    Some("settings") | Some("diagnostics")
+                )
+        }
+    };
+
     if let Some(key) = crate::screens::keymap::keystroke_of(
         typr_core::keymap::Surface::Library,
         typr_core::keymap::Command::FocusSearch,
     ) {
         let handle = search_handle;
-        on_key(&key, move |_| handle.focus());
+        let here = in_library;
+        on_key(&key, move |_| {
+            if here() {
+                handle.focus();
+            }
+        });
     }
 
     // The library's keys, every one taken from the keymap table.
     // A command may be bound to more than one chord (Down and `j`), and every one acts.
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionNext) {
+        let here = in_library;
         let visible = visible.clone();
         on_key(&key, move |_| {
+            if !here() {
+                return;
+            }
             let last = visible().len().saturating_sub(1);
             selection.update(|at| *at = (*at + 1).min(last));
         });
     }
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionPrevious) {
+        let here = in_library;
         let visible = visible.clone();
         on_key(&key, move |_| {
+            if !here() {
+                return;
+            }
             let last = visible().len().saturating_sub(1);
             selection.update(|at| *at = at.saturating_sub(1).min(last));
         });
     }
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::EditCard) {
+        let here = in_library;
         let open = open_selected.clone();
-        on_key(&key, move |_| open());
+        on_key(&key, move |_| {
+            if here() {
+                open();
+            }
+        });
     }
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::StartDueSession) {
+        let here = in_library;
         let start = start_session.clone();
-        on_key(&key, move |_| start(typr_core::screen::Queue::Due));
+        on_key(&key, move |_| {
+            if here() {
+                start(typr_core::screen::Queue::Due);
+            }
+        });
     }
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::StartNewSession) {
+        let here = in_library;
         let start = start_session.clone();
-        on_key(&key, move |_| start(typr_core::screen::Queue::New));
+        on_key(&key, move |_| {
+            if here() {
+                start(typr_core::screen::Queue::New);
+            }
+        });
     }
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::NewCard) {
+        let here = in_library;
         let db = db.clone();
         let reopen = reopen.clone();
         on_key(&key, move |_| {
+            if !here() {
+                return;
+            }
             let deck = state
                 .selected_key()
                 .as_deref()
@@ -384,10 +431,14 @@ pub fn shell_over(
         });
     }
     for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::DeleteCard) {
+        let here = in_library;
         let db = db.clone();
         let visible = visible.clone();
         let reopen = reopen.clone();
         on_key(&key, move |_| {
+            if !here() {
+                return;
+            }
             let ids = visible();
             let Some(id) = ids.get(selection.get_untracked()).copied() else {
                 return;
@@ -427,8 +478,10 @@ pub fn shell_over(
         .child(view().flex_1().child(dynamic(move || {
             // A running session takes the whole work area until it is left.
             if studying.get() {
-                let taken = session_slot.borrow_mut().take();
-                let Some(session) = taken else {
+                // Shared, not taken: a rebuild of the work area keeps the session it is showing.
+                let session = session_slot.borrow().clone();
+                let Some(session) = session else {
+                    studying.set(false);
                     return view().into_element();
                 };
                 let grade_db = db.clone();
@@ -453,9 +506,13 @@ pub fn shell_over(
                             false
                         }
                     },
-                    move || {
-                        leaving.set(false);
-                        reopen();
+                    {
+                        let slot = session_slot.clone();
+                        move || {
+                            slot.borrow_mut().take();
+                            leaving.set(false);
+                            reopen();
+                        }
                     },
                     move || state.select(&"settings".into()),
                 )
@@ -480,8 +537,16 @@ pub fn shell_over(
                     let found = snapshot_signal
                         .with(|snapshot| snapshot.cards.iter().find(|card| card.id == id).cloned());
                     let Some(card) = found else {
-                        route.set(Route::Library);
-                        return view().into_element();
+                        // The card went away under the editor: say so, and let Escape return. A
+                        // render never writes the route.
+                        return view()
+                            .p_4()
+                            .child(
+                                text("That card is no longer in the library.")
+                                    .text_sm()
+                                    .text_color(tokens::muted_foreground),
+                            )
+                            .into_element();
                     };
                     let template = card.template.as_ref().map(|text| Template {
                         text: text.clone(),

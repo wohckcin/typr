@@ -16,7 +16,7 @@ fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
     study(
-        Session::new(Queue::Due, entries),
+        std::rc::Rc::new(std::cell::RefCell::new(Session::new(Queue::Due, entries))),
         |_, _, _| true,
         || {},
         || {},
@@ -114,7 +114,10 @@ fn a_grade_is_sent_out_with_its_card() {
 fn Refusing() -> impl IntoElement {
     typr::ui::tokens::install();
     study(
-        Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]),
+        std::rc::Rc::new(std::cell::RefCell::new(Session::new(
+            Queue::Due,
+            vec![Entry::sides(1, ["Question", "Answer"], 0)],
+        ))),
         |_, _, _| false,
         || {},
         || {},
@@ -152,7 +155,10 @@ fn Leaving() -> impl IntoElement {
     let left = signal(false);
     view()
         .child(study(
-            Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]),
+            std::rc::Rc::new(std::cell::RefCell::new(Session::new(
+                Queue::Due,
+                vec![Entry::sides(1, ["Question", "Answer"], 0)],
+            ))),
             |_, _, _| true,
             move || left.set(true),
             || {},
@@ -173,10 +179,10 @@ fn escape_leaves_through_the_keymap_binding() -> Result<(), String> {
 fn Reverse() -> impl IntoElement {
     typr::ui::tokens::install();
     study(
-        Session::new(
+        std::rc::Rc::new(std::cell::RefCell::new(Session::new(
             Queue::Due,
             vec![Entry::reverse(1, ["Question", "Answer"], 0)],
-        ),
+        ))),
         |_, _, _| true,
         || {},
         || {},
@@ -195,7 +201,11 @@ fn a_reverse_review_shows_the_last_side_first() -> Result<(), String> {
 fn Cramming() -> impl IntoElement {
     typr::ui::tokens::install();
     study(
-        Session::cram(vec![Entry::sides(1, ["Front", "Back"], 0)]),
+        std::rc::Rc::new(std::cell::RefCell::new(Session::cram(vec![Entry::sides(
+            1,
+            ["Front", "Back"],
+            0,
+        )]))),
         |_, _, _| true,
         || {},
         || {},
@@ -216,7 +226,10 @@ fn SettingsKey() -> impl IntoElement {
     let card = signal(String::from("none"));
     view()
         .child(study(
-            Session::new(Queue::Due, vec![Entry::sides(7, ["Question", "Answer"], 0)]),
+            std::rc::Rc::new(std::cell::RefCell::new(Session::new(
+                Queue::Due,
+                vec![Entry::sides(7, ["Question", "Answer"], 0)],
+            ))),
             |_, _, _| true,
             || {},
             move || {

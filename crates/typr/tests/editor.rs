@@ -550,22 +550,6 @@ fn merging_a_picked_group_reports_its_rectangles_and_removing_it_reports_the_gro
 }
 
 #[test]
-fn scratch_roles2() -> Result<(), String> {
-    let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
-    app.wait_for("the cat")?;
-    for query in [
-        "role:image",
-        "[the picture]",
-        "image",
-        "label:the picture",
-        "role:img[the picture]",
-    ] {
-        println!("{query}={:?}", app.screen().count(query));
-    }
-    Ok(())
-}
-
-#[test]
 fn a_cover_says_which_group_it_belongs_to() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
     app.wait_for("the cat")?;

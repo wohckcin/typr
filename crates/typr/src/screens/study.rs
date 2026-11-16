@@ -83,7 +83,7 @@ pub fn entries_for(cards: &[CardSummary], prompts: &[(Id, String, i64)]) -> Vec<
 }
 
 pub fn study(
-    session: Session,
+    session: std::rc::Rc<std::cell::RefCell<Session>>,
     on_grade: impl Fn(Id, String, Grade) -> bool + Clone + 'static,
     on_leave: impl Fn() + Clone + 'static,
     on_settings: impl Fn() + Clone + 'static,
@@ -94,24 +94,24 @@ pub fn study(
     let grade_out = on_grade.clone();
     let reveal = move || {
         session.with(|s| {
-            s.reveal();
+            s.borrow_mut().reveal();
         });
         version.update(|v| *v += 1);
     };
     let grade = move |g: Grade| {
-        let sent = session.with(|s| s.grade(g));
+        let sent = session.with(|s| s.borrow_mut().grade(g));
         if let Some((id, grade)) = sent {
             let key = session
-                .with(|s| s.prompt_of(id).map(str::to_owned))
+                .with(|s| s.borrow().prompt_of(id).map(str::to_owned))
                 .unwrap_or_default();
             let taken = grade_out(id, key, grade);
             refused.set(!taken);
             session.with(|s| {
                 if taken {
-                    s.sent(id as u64);
-                    s.acknowledge(id as u64, SystemClock.now_ms());
+                    s.borrow_mut().sent(id as u64);
+                    s.borrow_mut().acknowledge(id as u64, SystemClock.now_ms());
                 } else {
-                    s.refuse(id as u64);
+                    s.borrow_mut().refuse(id as u64);
                 }
             });
         }
@@ -133,14 +133,14 @@ pub fn study(
     }
     if let Some(key) = keystroke_of(Surface::Session, Command::Back) {
         on_key(&key, move |_| {
-            session.with(|s| s.backward());
+            session.with(|s| s.borrow_mut().backward());
             version.update(|v| *v += 1);
         });
     }
     if let Some(key) = keystroke_of(Surface::Session, Command::Shuffle) {
         on_key(&key, move |_| {
             let seed = SystemClock.now_ms() as u64;
-            session.with(|s| s.reshuffle(seed));
+            session.with(|s| s.borrow_mut().reshuffle(seed));
             version.update(|v| *v += 1);
         });
     }
@@ -158,14 +158,15 @@ pub fn study(
         .p_4()
         .child(dynamic(move || {
             version.get();
-            let finished = session.with(|s| s.finished());
+            let finished = session.with(|s| s.borrow().finished());
             if finished {
                 // The summary: what was answered, how it went, and the way back.
                 let (reviewed, remembered, forgot) = session.with(|s| {
+                    let s = s.borrow();
                     let remembered = s.grades.iter().filter(|g| **g == Grade::Remembered).count();
                     (s.grades.len(), remembered, s.grades.len() - remembered)
                 });
-                let due = session.with(|s| s.grades.len() + s.remaining());
+                let due = session.with(|s| s.borrow().grades.len() + s.borrow().remaining());
                 let leave = on_leave.clone();
                 return view()
                     .gap_3()
@@ -185,8 +186,13 @@ pub fn study(
                     )))
                     .into_element();
             }
-            let lines: Vec<String> =
-                session.with(|s| s.lines().iter().map(|(t, _)| t.to_string()).collect());
+            let lines: Vec<String> = session.with(|s| {
+                s.borrow()
+                    .lines()
+                    .iter()
+                    .map(|(t, _)| t.to_string())
+                    .collect()
+            });
             let mut column = view().gap_3();
             for line in lines {
                 column = column.child(prose(move || line.clone().into()));
@@ -195,8 +201,8 @@ pub fn study(
         }))
         .child(dynamic(move || {
             version.get();
-            let reveal_ok = session.with(|s| can_reveal(s));
-            let grading_ok = session.with(|s| s.gradeable());
+            let reveal_ok = session.with(|s| can_reveal(&s.borrow()));
+            let grading_ok = session.with(|s| s.borrow().gradeable());
             let mut row = view().flex_row().gap_2();
             if reveal_ok {
                 row = row.child(button(Variant::Primary, "Show answer", || false, reveal));
@@ -232,7 +238,7 @@ pub fn study(
         }))
         .child(dynamic(move || {
             version.get();
-            let left = session.with(|s| s.remaining());
+            let left = session.with(|s| s.borrow().remaining());
             text(format!("{left} left"))
                 .text_xs()
                 .text_color(tokens::muted_foreground)

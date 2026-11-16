@@ -168,7 +168,10 @@ fn EditorScreen() -> impl IntoElement {
 fn StudyScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     study(
-        Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]),
+        std::rc::Rc::new(std::cell::RefCell::new(Session::new(
+            Queue::Due,
+            vec![Entry::sides(1, ["Question", "Answer"], 0)],
+        ))),
         |_, _, _| true,
         || {},
         || {},
