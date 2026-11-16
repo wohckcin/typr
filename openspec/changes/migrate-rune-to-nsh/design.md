@@ -132,3 +132,9 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 ## Task 6.2
 
 - `crates/typr-core` no longer names Rune (comments updated in `store/task/mod.rs`, `store/tests/protocol.rs`, `keymap/mod.rs`, `Cargo.toml`). Rune still remains in `crates/typr`, `vendor/`, root patches and CI until 6.1/6.3.
+
+
+## Task 4.3 card editor and attachments (partial)
+
+- `screens/editor.rs` gains `attach_image` (copies a chosen picture into the attachments root, refuses one that cannot be copied), `image_reference` and `image_references`. The editor takes `on_attach`, offers an "Attach image" action through `pick_paths`, appends the reference to the draft and shows the copy error. `tests/editor.rs` covers the copy/refusal and the reference text.
+- Not done: image occlusion (diagram rectangles), templates and fields in the editor, and recovery of an unsaved draft. 4.3 stays unticked.
