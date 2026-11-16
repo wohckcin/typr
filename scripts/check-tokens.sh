@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Refuses a spacing, size or type literal in a screen.
+# Refuses a literal or a base control in a screen.
 #
-# Every dimension a screen draws with comes from `crates/typr/src/design`, so a literal here means
-# a screen invented a number of its own and the token set no longer describes the app. Font sizes
-# and line heights are refused the same way: a type style is a token (`type_body`, `type_input`,
-# `type_editor`, `type_caption`), never a size written at the call site.
+# A screen draws with the tokens in `crates/typr/src/ui` (colours by role, radii, type and spacing
+# from the Tailwind scale), and with the app's own components, never with a `nsh_base` control or a
+# number of its own. The `ui` layer is where those values are named, so it is not checked here.
 #
 # Usage: scripts/check-tokens.sh [file...]
 #   No arguments checks the screens this change covers. A file named on the command line is
@@ -12,20 +11,26 @@
 set -uo pipefail
 
 screens=(
-  crates/typr/src/library/mod.rs
-  crates/typr/src/library/tile/mod.rs
-  crates/typr/src/editor/mod.rs
-  crates/typr/src/study/mod.rs
-  crates/typr/src/history/mod.rs
-  crates/typr/src/settings.rs
+  crates/typr/src/shell.rs
+  crates/typr/src/screens/sidebar.rs
+  crates/typr/src/screens/grid.rs
+  crates/typr/src/screens/editor.rs
+  crates/typr/src/screens/embed.rs
+  crates/typr/src/screens/diagnostics.rs
+  crates/typr/src/screens/history.rs
+  crates/typr/src/screens/keymap.rs
+  crates/typr/src/screens/settings.rs
+  crates/typr/src/screens/study.rs
 )
 
 if [ "$#" -gt 0 ]; then
   screens=("$@")
 fi
 
-# A dimension setter followed by a digit: `.px(24.0)`, `.h(30.0)`, `.radius(6.0)`, `.lh(20.0)`.
-pattern='\.(px|py|pl|pr|pt|pb|padding|gap|w|h|max_w|max_h|min_w|min_h|radius|lh|font_size)\([0-9]'
+# A pixel length or a colour written as a value: `px(24.0)`, `rgb(0x1e1e1e)`, `hsla(..)`.
+literal='\b(px|rgb|rgba|hsl|hsla)\([0-9]|\b(rgb|rgba|hsl|hsla)\(0x'
+# Any `nsh_base` import other than the theme, and any call to a base control by name.
+base='use nsh_base::|nsh_base::(button|input|checkbox|switch|select|tab|tabs|menu|popover|tooltip|dialog|alert_dialog|sheet|toast|toast_stack|radio_group|text_view|editor)\b'
 
 status=0
 for file in "${screens[@]}"; do
@@ -34,10 +39,17 @@ for file in "${screens[@]}"; do
     status=1
     continue
   fi
-  if hits=$(grep -nE "$pattern" "$file"); then
-    echo "check-tokens: $file writes a dimension as a literal; use crates/typr/src/design:" >&2
+  if hits=$(grep -nE "$literal" "$file"); then
+    echo "check-tokens: $file writes a literal; take it from crates/typr/src/ui:" >&2
     printf '%s\n' "$hits" | sed "s|^|  $file:|" >&2
     status=1
+  fi
+  if hits=$(grep -nE "$base" "$file" | grep -vE 'use nsh_base::(theme|tokens_of)' ); then
+    if [ -n "$hits" ]; then
+      echo "check-tokens: $file uses a base control; use the app's ui component:" >&2
+      printf '%s\n' "$hits" | sed "s|^|  $file:|" >&2
+      status=1
+    fi
   fi
 done
 

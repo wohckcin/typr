@@ -1,52 +1,52 @@
 //! Where the library, its attachments and the app's folders live.
 //!
 //! The backend takes a path and writes what it is given; deciding which directory that is belongs to
-//! the app, which is the only layer that knows about desktop conventions.
+//! the app, which is the only layer that knows the platform's conventions. Native Shell answers the
+//! app's data folder, and `TYPR_DATA_DIR` overrides it, which is how a test or an isolated run keeps
+//! out of the real one.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use rune::dirs::AppDirs;
+use nsh_core::prelude::data_dir;
 use typr_core::store::{Db, StoreError};
 
-/// The app id used for both Rune's folders and this app's file.
-pub const APP_ID: &str = "typr";
-
-/// The library file inside a data folder.
-pub fn database_path(dirs: &AppDirs) -> PathBuf {
-    dirs.data().join("typr.sqlite3")
+/// The library's file inside the app's data folder.
+pub fn database_path(root: &Path) -> PathBuf {
+    root.join("typr.sqlite3")
 }
 
 /// Where a card's attached images are copied.
-pub fn attachments_root(dirs: &AppDirs) -> PathBuf {
-    dirs.data().join("attachments")
+pub fn attachments_root(root: &Path) -> PathBuf {
+    root.join("attachments")
 }
 
-/// The logs folder of the root this process uses, created if needed.
-pub fn logs_root_from_environment() -> Result<PathBuf, StoreError> {
-    let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;
-    let logs = dirs.logs().to_path_buf();
-    std::fs::create_dir_all(&logs)?;
-    Ok(logs)
+/// Where the app writes its log.
+pub fn logs_root(root: &Path) -> PathBuf {
+    root.join("logs")
 }
 
-/// The attachments folder for the process environment.
-pub fn attachments_root_from_environment() -> Result<PathBuf, StoreError> {
-    let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;
-    Ok(attachments_root(&dirs))
+/// The app's data folder: `TYPR_DATA_DIR` when set, else the platform's for this app.
+pub fn data_root() -> Result<PathBuf, StoreError> {
+    if let Some(root) = std::env::var_os("TYPR_DATA_DIR") {
+        return Ok(PathBuf::from(root));
+    }
+    data_dir().ok_or(StoreError::NoDataDir)
 }
 
-/// Open the library from the process environment, creating its folder if needed.
-///
-/// `RUNE_DIRS_ROOT`, when set, moves every folder (see [`rune::dirs`]), which is how a test or an
-/// isolated run keeps out of the real one.
+/// Open the library from the process environment, creating its folders if needed.
 pub fn open_from_environment() -> Result<Db, StoreError> {
-    let dirs = AppDirs::new(APP_ID).ok_or(StoreError::NoDataDir)?;
-    open_in(&dirs)
-}
-
-/// Open the library inside the given folders.
-pub fn open_in(dirs: &AppDirs) -> Result<Db, StoreError> {
-    std::fs::create_dir_all(dirs.data())?;
-    std::fs::create_dir_all(attachments_root(dirs))?;
-    Db::open(&database_path(dirs))
+    let root = data_root()?;
+    std::fs::create_dir_all(&root)?;
+    std::fs::create_dir_all(attachments_root(&root))?;
+    let db = Db::open(&database_path(&root))?;
+    // What a report needs to tell a migrated library from a refused or unopened one.
+    let facts = db.schema_facts();
+    log::info!(
+        "library {} schema {} -> {}, {} migrations",
+        db.path().display(),
+        facts.found,
+        facts.written,
+        facts.applied
+    );
+    Ok(db)
 }

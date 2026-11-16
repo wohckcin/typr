@@ -2148,3 +2148,130 @@ fn one_decks_view_leaves_another_alone() {
     assert_eq!(view_of(&db, spanish), crate::library_view::ViewMode::Column);
     assert_eq!(view_of(&db, german), crate::library_view::ViewMode::Grid);
 }
+
+#[test]
+fn removing_a_group_takes_every_rectangle_in_it_and_keeps_the_history() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let id = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: "The heart".to_string(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a diagram: {other:?}"),
+    };
+    let (first, second) = (
+        MaskRect::new(0.1, 0.1, 0.2, 0.2),
+        MaskRect::new(0.4, 0.4, 0.2, 0.2),
+    );
+    for (group, rect) in [(1, first), (1, second), (2, first)] {
+        db.apply(
+            &Command::AddMask {
+                card: id,
+                group,
+                rect,
+            },
+            0,
+        )
+        .expect("a rectangle");
+    }
+    db.apply(
+        &Command::Grade {
+            card: id,
+            key: "mask:1".to_string(),
+            grade: Grade::Remembered,
+            duration_ms: Some(900),
+        },
+        0,
+    )
+    .expect("answering group one");
+
+    db.apply(&Command::RemoveMaskGroup { card: id, group: 1 }, 0)
+        .expect("remove group one");
+
+    assert_eq!(
+        db.mask_groups(id).expect("groups"),
+        vec![2],
+        "group one is gone"
+    );
+    assert_eq!(
+        db.masks(id).expect("masks").len(),
+        1,
+        "only group two's rectangle is left"
+    );
+    let reviews: i64 = db
+        .connection_for_test()
+        .query_row(
+            "SELECT count(*) FROM review_log WHERE card_id = ?1 AND key = 'mask:1'",
+            [id],
+            |row| row.get(0),
+        )
+        .expect("the reviews");
+    assert_eq!(reviews, 1, "its reviews are still readable");
+    let groups = db
+        .apply(&Command::MaskGroups { card: id }, 0)
+        .expect("groups");
+    assert_eq!(groups, Outcome::MaskGroups(vec![2]));
+}
+
+#[test]
+fn a_diagram_clears_back_to_an_empty_text_card() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Anatomy");
+    let id = match db
+        .apply(
+            &Command::CreateDiagram {
+                deck,
+                image: "plate.png".to_string(),
+                caption: "The heart".to_string(),
+            },
+            0,
+        )
+        .expect("diagram")
+    {
+        Outcome::Card(id) => id,
+        other => panic!("creating a diagram: {other:?}"),
+    };
+    db.apply(
+        &Command::AddMask {
+            card: id,
+            group: 1,
+            rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
+        },
+        0,
+    )
+    .expect("a rectangle");
+
+    db.apply(&Command::ClearDiagram { card: id }, 0)
+        .expect("clear it");
+
+    let card = db
+        .snapshot()
+        .expect("snapshot")
+        .cards
+        .into_iter()
+        .find(|card| card.id == id)
+        .expect("the card");
+    assert_eq!(card.kind, crate::store::CardKind::Text, "it is text again");
+    assert!(
+        card.image.is_none() && card.caption.is_none(),
+        "the picture and caption are gone"
+    );
+    assert!(card.masks.is_empty(), "the rectangles are gone");
+    assert!(
+        card.markdown.is_empty(),
+        "it starts empty, so its text can be written"
+    );
+    // Clearing a card that is not a diagram is refused rather than silently applied.
+    let again = db.apply(&Command::ClearDiagram { card: id }, 0);
+    assert!(again.is_err(), "only a diagram can be cleared");
+}

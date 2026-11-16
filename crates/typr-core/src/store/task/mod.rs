@@ -36,7 +36,7 @@ struct Shared {
 
 /// How the worker's thread ended, readable after the [`Handle`] is gone.
 ///
-/// `Drop for Handle` runs during `rune::run`'s teardown, so nothing can ask the handle anything
+/// `Drop for Handle` runs during the app's teardown, so nothing can ask the handle anything
 /// afterwards. The application keeps a clone of this instead, and records it at quit.
 #[derive(Clone, Default)]
 pub struct WorkerStatus(Arc<Mutex<Option<Arc<StoreError>>>>);
@@ -133,7 +133,7 @@ impl Handle {
 
 impl Drop for Handle {
     /// Dropping the handle is a quit: the worker drains what it was sent and the join waits for
-    /// it. Rune's `AppSpec` has no quit hook, so nothing else would ever call [`Handle::close`].
+    /// it. The app has no quit hook, so nothing else would ever call [`Handle::close`].
     fn drop(&mut self) {
         self.close();
     }

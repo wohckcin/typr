@@ -4,17 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  # A runner's fonts rasterise their own way, so its baselines have to be drawn there. Dispatch with
-  # `record_baselines` on, download the artifact, and commit it as `tests/baselines/<set>`.
   workflow_dispatch:
-    inputs:
-      record_baselines:
-        description: Record this runner's baseline set
-        type: boolean
-        default: false
 
-# Only a pull request's own newer run replaces it. A dispatch is recording a set and a push is
-# answering a commit; cancelling either throws away work the other run will not redo.
+# Only a pull request's own newer run replaces it: a push answers a commit, and cancelling it would
+# throw away the answer for that commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -25,9 +18,6 @@ permissions:
   contents: read
 
 env:
-  # The pictures the runner is checked against, named rather than taken from the platform: a Linux
-  # machine running the local record command writes `linux/`, which is not this folder.
-  TYPR_BASELINE_SET: ubuntu-26.04
   # Logs are read in a terminal with colour, and a cached target is only correct if nothing in it is
   # incremental.
   CARGO_TERM_COLOR: always
@@ -36,9 +26,8 @@ env:
 
 jobs:
   test:
-    # The label selects the Ubuntu 26 image family, not one build of it. Measured so far, the pool serves
-    # two builds (20261111.196.1 and 20261111.82.6), and both drew the committed pictures byte for byte.
-    # A build that changes the pictures fails Compare; re-record from a dispatch run.
+    # The label selects the Ubuntu 26 image family; any build of it runs these steps, which compare
+    # nothing against recorded pictures.
     runs-on: ubuntu-26.04
     timeout-minutes: 40
     steps:
@@ -47,15 +36,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # Rune draws through wgpu, so the runner needs Vulkan and the X11/wayland client libraries
-      # even for headless snapshots: the tooling path still creates a surface for the frames it
-      # renders. Development packages build and link, runtime packages load when a window opens.
-      - name: Install Rune's Linux dependencies
+      # Native Shell's Linux host is GTK 4 (14 or newer) for its views and GStreamer for its media.
+      # The dev packages are what pkg-config and the linker need to build the host; the screens
+      # themselves run headless, so no display is needed.
+      - name: Install GTK and GStreamer
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libxkbcommon-dev libwayland-dev \
-            libxkbcommon-x11-0 mesa-vulkan-drivers
+          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          pkg-config --modversion gtk4 gstreamer-1.0
 
       # rust-toolchain.toml pins the channel, so rustup installs 1.99.1 without being told.
       - name: Install the pinned toolchain
@@ -91,9 +79,9 @@ jobs:
         run: |
           set -euo pipefail
           graph=$(cargo tree -p typr-core --edges normal)
-          if echo "$graph" | grep -Eq '(^|[^a-z-])(rune|rune-kit|rune-extras|wgpu|wgpu-hal|winit|parley|parley_engine|accesskit)( |$)'; then
-            echo "typr-core depends on a desktop toolkit:" >&2
-            echo "$graph" | grep -E 'rune|wgpu|winit|parley|accesskit' >&2
+          if echo "$graph" | grep -Eq '(^|[^a-z-])(nsh-core|nsh-base|nsh-engine|nsh-testing|nsh-platform)( |$)'; then
+            echo "typr-core depends on Native Shell:" >&2
+            echo "$graph" | grep -E 'nsh-' >&2
             exit 1
           fi
           # The backend reports failures through events; writing them down belongs to the app.
@@ -107,66 +95,9 @@ jobs:
         run: cargo build --workspace --locked
 
       - name: Test
-        # The visual test compares against pictures recorded per platform; it runs as its own step
-        # below so a platform whose fonts rasterise differently cannot stop the snapshot gate.
-        run: cargo test --workspace --locked -- --skip every_scene_matches_its_baseline
+        run: cargo test --workspace --locked
 
-      - name: Record this runner's baselines
-        if: inputs.record_baselines
-        run: |
-          set -euo pipefail
-          export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"
-          set_dir="$PWD/crates/typr/tests/baselines/$TYPR_BASELINE_SET"
-          TYPR_UPDATE_BASELINES=1 cargo test -p typr --test visual
-          echo "recorded into $set_dir"
-          test -s "$set_dir/history.png"
-          # Nothing else writes this down: the OS and the build that drew the set, one per line.
-          printf '%s\n%s\n' "${ImageOS:?the runner reports no ImageOS}" "${ImageVersion:?the runner reports no ImageVersion}" > "$set_dir/image.txt"
-          echo "image.txt now reads: $(tr '\n' ' ' < "$set_dir/image.txt")"
+      # The screens are Rust tests, so `cargo test` above already ran them (headless, no display).
+      # `nsh test --target linux` is for TSX test files, which this app has none of: it exits with
+      # "no test files in ." and the crates' tests are what it would have run.
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: inputs.record_baselines
-        with:
-          name: baselines-ubuntu-26.04
-          path: crates/typr/tests/baselines/ubuntu-26.04
-          if-no-files-found: error
-
-      - name: Snapshot every scene
-        run: |
-          set -euo pipefail
-          export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"
-          mkdir -p "$RUNNER_TEMP/snaps"
-          for scene in $(cargo run -q -p typr -- --list-scenes); do
-            cargo run -q -p typr -- --scene "$scene" --snap "$RUNNER_TEMP/snaps/$scene.png"
-            test -s "$RUNNER_TEMP/snaps/$scene.png"
-          done
-
-      # Each platform keeps its own set (`tests/baselines/<os>/`), recorded on that platform. The
-      # Linux set was drawn on this image; a Mac's differs by up to 3% per scene.
-      - name: Compare every scene with its baseline
-        id: compare
-        env:
-          TYPR_BASELINE_SET: ubuntu-26.04
-        run: |
-          set -euo pipefail
-          export RUNE_DIRS_ROOT="$RUNNER_TEMP/typr-dirs"
-          cargo test -p typr --test visual
-
-      # Runs only when the comparison fails, to say whether a rebuilt runner image is the likely cause.
-      # The pixel comparison is the gate: a rebuild that leaves the pictures alone passes.
-      - name: Say whether the runner image changed
-        if: failure() && steps.compare.outcome == 'failure'
-        env:
-          TYPR_BASELINE_SET: ubuntu-26.04
-        run: |
-          set -uo pipefail
-          recorded="crates/typr/tests/baselines/$TYPR_BASELINE_SET/image.txt"
-          recorded_os=$(sed -n 1p "$recorded")
-          recorded_build=$(sed -n 2p "$recorded")
-          echo "runner reports ImageOS=${ImageOS:-unset} ImageVersion=${ImageVersion:-unset}"
-          echo "baselines were drawn by ImageOS=$recorded_os ImageVersion=$recorded_build"
-          if [ "$recorded_os" != "${ImageOS:-unset}" ] || [ "$recorded_build" != "${ImageVersion:-unset}" ]; then
-            echo "::error::The runner image differs from the one that drew the baselines. Re-record from a dispatch run (record_baselines on), check the artifact's pictures, then commit it as $TYPR_BASELINE_SET."
-          else
-            echo "::error::The runner image is the one that drew the baselines, so the differences are the rendering itself."
-          fi

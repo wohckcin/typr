@@ -1,5 +1,5 @@
-//! The visual language is only as good as its enforcement: this runs the same check CI runs, so a
-//! literal that creeps back into a screen fails here first.
+//! The visual language is enforced by the same check CI runs: a literal or a base control that
+//! creeps into a screen fails here first.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -31,34 +31,56 @@ fn check(files: &[&Path]) -> Check {
     }
 }
 
+fn planted(source: &str) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let file = dir.path().join("screen.rs");
+    std::fs::write(&file, source).expect("the screen");
+    (dir, file)
+}
+
 #[test]
 fn every_screen_draws_with_the_tokens() {
     let result = check(&[]);
-    assert!(result.ok, "a screen writes a literal:\n{}", result.report);
+    assert!(
+        result.ok,
+        "a screen writes a literal or a base control:\n{}",
+        result.report
+    );
 }
 
 #[test]
-fn a_reintroduced_spacing_literal_is_refused() {
-    let dir = tempfile::tempdir().expect("a temp dir");
-    let file = dir.path().join("screen.rs");
-    std::fs::write(&file, "fn view() {\n    col().padding(24.0);\n}\n").expect("the screen");
+fn a_pixel_literal_is_refused() {
+    let (_dir, file) = planted("fn view() {\n    view().h(px(24.0));\n}\n");
     let result = check(&[&file]);
-    assert!(!result.ok, "the check let a padding literal through");
-    assert!(result.report.contains("padding(24.0)"), "{}", result.report);
+    assert!(!result.ok, "the check let a pixel literal through");
+    assert!(result.report.contains("px(24.0)"), "{}", result.report);
 }
 
 #[test]
-fn a_font_size_literal_is_refused() {
-    let dir = tempfile::tempdir().expect("a temp dir");
-    let file = dir.path().join("screen.rs");
-    std::fs::write(
-        &file,
-        "fn view() {\n    text(\"x\").font(type_::BODY.lh(19.0));\n}\n",
-    )
-    .expect("the screen");
+fn a_colour_literal_is_refused() {
+    let (_dir, file) = planted("fn view() {\n    view().bg(rgb(0x1e1e1e));\n}\n");
     let result = check(&[&file]);
-    assert!(!result.ok, "the check let a line height through");
-    assert!(result.report.contains("lh(19.0)"), "{}", result.report);
+    assert!(!result.ok, "the check let a colour literal through");
+    assert!(result.report.contains("rgb(0x1e1e1e)"), "{}", result.report);
+}
+
+#[test]
+fn a_base_control_import_is_refused() {
+    let (_dir, file) = planted("use nsh_base::button;\nfn view() {}\n");
+    let result = check(&[&file]);
+    assert!(!result.ok, "the check let a base control through");
+    assert!(
+        result.report.contains("use nsh_base::button"),
+        "{}",
+        result.report
+    );
+}
+
+#[test]
+fn the_theme_import_is_allowed() {
+    let (_dir, file) = planted("use nsh_base::theme;\nfn view() { let _ = theme(); }\n");
+    let result = check(&[&file]);
+    assert!(result.ok, "the check refused the theme: {}", result.report);
 }
 
 #[test]
