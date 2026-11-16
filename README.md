@@ -50,7 +50,9 @@ nsh check                               # type checks plus `cargo check --all-ta
 
 `desktop.test.tsx` reads the app rather than writing to it: the real host opens the library in your
 data folder, so its tests only press keys and assert what is on screen. A headless run has no data
-folder, and the shell states that ("Library closed") while still showing the library's grid.
+folder, and the shell states that ("Library closed") while still showing the library's grid. The
+macOS host's native text field does not expose its text to selectors, so the test proves the search
+field is reachable and the chord works, not what the field then holds.
 
 Running the Rust tests is what `cargo test` does; `nsh test --target` runs the TSX files only, so it
 does not substitute for them.

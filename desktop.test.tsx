@@ -20,6 +20,8 @@ test("the search field is on the library screen and the chord reaches it", async
   await app.waitFor("text:Search cards");
   await app.keyboard.press("/");
   await app.type("text:Search cards", "ga");
+  // The host's native field does not expose its text to selectors, so the text itself cannot be
+  // read back there; the chord and the keystrokes are exercised and the screen must survive them.
   expect(app.texts()).toContain("All cards");
 });
 
@@ -28,7 +30,6 @@ test("Settings opens and Escape returns to the library", async () => {
   await app.press("Settings");
   await app.waitFor("text:Review");
   expect(app.texts()).toContain("Apply");
-  // Escape's back press; the TSX steps call it `back`.
   await app.keyboard.press("escape");
   await app.waitFor("text:All cards");
   expect(app.texts()).toContain("All cards");
