@@ -1,5 +1,6 @@
-# The tools this app builds and tests with. Keep the Rust pin in step with rust-toolchain.toml: that
-# file serves a plain `cargo` on a machine without mise, and this one is what CI installs.
+# The tools this app builds and tests with. Keep the Rust pin and its components in step with
+# rust-toolchain.toml: that file serves a plain `cargo` on a machine without mise, and this one is
+# what CI installs.
 [tools]
-rust = "1.99.1"
+rust = { version = "1.99.1", components = ["rustfmt", "clippy"] }
 "github:longbridge/nsh" = "0.5.1"
