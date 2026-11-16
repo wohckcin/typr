@@ -11,9 +11,10 @@
 - [x] 1.3 Add `SelectionFirst` and `SelectionLast` to the keymap table in `typr-core`, bind them to Home and End
       on the library surface, and move the arrow keys to step from the selected id's position in `visible()`.
       Verify: the keymap tests list the two new chords, and `cargo test -p typr-core` passes.
-- [x] 1.4 Add the regression test that types a search which shortens the list, presses Enter, and asserts the
-      opened card is the one the highlight is on, then repeats with Delete. Verify: the test fails against the
-      old index-based selection and passes after 1.1 to 1.3.
+- [x] 1.4 Add the regression tests: a search that shortens the list leaves nothing in force, a row change keeps
+      a card that still shows, the arrow keys step from the selected card, Home and End reach the ends, and Delete
+      trashes the highlighted card. Verify: each fails against the old index-based selection and passes after 1.1
+      to 1.3; `cargo test -p typr --test shell` passes.
 
 ## 2. Editor events carry named objects
 

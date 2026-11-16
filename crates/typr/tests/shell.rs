@@ -533,3 +533,61 @@ fn a_row_change_keeps_the_selected_card_when_it_still_shows() -> Result<(), Stri
     app.wait_for("text:perro")?;
     Ok(())
 }
+
+#[test]
+fn the_arrow_keys_step_the_grid_from_the_selected_card() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = two_decks_on_disk("arrows");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("perro")?;
+    // Right selects the first card, Right again the second, and Left steps back to the first.
+    app.press_key("right")?;
+    app.press_key("right")?;
+    app.press_key("left")?;
+    app.press_key("enter")?;
+    app.wait_for("Attach image…")?;
+    app.wait_for("text:gato")?;
+    Ok(())
+}
+
+#[test]
+fn home_and_end_reach_the_ends_of_the_grid() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = two_decks_on_disk("ends");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("perro")?;
+    app.press_key("end")?;
+    app.press_key("enter")?;
+    app.wait_for("Attach image…")?;
+    app.wait_for("text:perro")?;
+    app.press_key("escape")?;
+    app.wait_for_gone("Attach image…", std::time::Duration::from_secs(5))?;
+    app.press_key("home")?;
+    app.press_key("enter")?;
+    app.wait_for("Attach image…")?;
+    app.wait_for("text:gato")?;
+    Ok(())
+}
+
+#[test]
+fn delete_trashes_the_highlighted_card_and_no_other() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = two_decks_on_disk("delete-selected");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("perro")?;
+    // Select the second card and trash it. The card left in the list is the first one.
+    app.press_key("down")?;
+    app.press_key("down")?;
+    app.press_key("backspace")?;
+    app.wait_for_gone("perro", std::time::Duration::from_secs(5))?;
+    let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let cards = reader.snapshot().unwrap().cards;
+    assert!(
+        cards.iter().any(|card| card.markdown.starts_with("gato")),
+        "the pair of the selected card is still in the library: {cards:?}"
+    );
+    Ok(())
+}

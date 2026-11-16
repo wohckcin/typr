@@ -140,6 +140,8 @@ pub fn keystroke_of_chord(chord: Chord) -> Option<String> {
         Chord::Key(Key::Up) => Some("up".to_owned()),
         Chord::Key(Key::Down) => Some("down".to_owned()),
         Chord::Key(Key::Backspace) => Some("backspace".to_owned()),
+        Chord::Key(Key::Home) => Some("home".to_owned()),
+        Chord::Key(Key::End) => Some("end".to_owned()),
         Chord::Modified {
             key: Key::Char(c),
             mods,

@@ -566,6 +566,36 @@ mod tests {
     }
 
     #[test]
+    fn the_grids_ends_are_home_and_end() {
+        assert_eq!(
+            chord_of(Surface::Library, Command::SelectionFirst),
+            Some(Chord::key(Key::Home)),
+            "Home selects the first card"
+        );
+        assert_eq!(
+            chord_of(Surface::Library, Command::SelectionLast),
+            Some(Chord::key(Key::End)),
+            "End selects the last card"
+        );
+    }
+
+    #[test]
+    fn the_arrow_keys_step_the_grid() {
+        for (chord, command) in [
+            (Chord::key(Key::Up), Command::SelectionPrevious),
+            (Chord::key(Key::Left), Command::SelectionPrevious),
+            (Chord::key(Key::Down), Command::SelectionNext),
+            (Chord::key(Key::Right), Command::SelectionNext),
+        ] {
+            assert_eq!(
+                dispatch(Surface::Library, chord),
+                Some(command),
+                "{chord} moves the selection"
+            );
+        }
+    }
+
+    #[test]
     fn no_chord_is_bound_twice_on_one_surface() {
         assert_eq!(conflicts(bindings()), Vec::new());
     }
