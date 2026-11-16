@@ -1,20 +1,9 @@
-//! `typr` — a local-first flashcard app on Rune.
-pub mod keymap;
+//! `typr` — a local-first flashcard app on Native Shell.
+//!
+//! The screens and the `ui` layer draw with `nsh-core`/`nsh-base`; the scheduling, the library and
+//! the session rules live in `typr-core`, which knows no toolkit.
 
-pub mod attachments;
-pub mod day_offset;
-pub mod design;
-pub mod editor;
-pub mod embed;
-pub mod history;
-pub mod library;
-pub mod logging;
-pub mod markdown;
 pub mod paths;
-pub mod screen;
 pub mod screens;
-pub mod settings;
-pub mod sidebar;
 pub mod shell;
-pub mod study;
 pub mod ui;

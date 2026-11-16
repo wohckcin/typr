@@ -1,6 +1,4 @@
-//! Runs the NSH app on this machine's desktop backend (`cargo run --bin typr_nsh`).
-//!
-//! The Rune binary (`src/main.rs`) stays until the port is merged; this is the NSH entry point.
+//! Runs the app on this machine's desktop backend (`cargo run -p typr`).
 
 #[cfg(target_os = "linux")]
 use nsh_platform_linux as platform;

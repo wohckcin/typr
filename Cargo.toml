@@ -11,18 +11,3 @@ nsh-engine = { version = "=0.5.0", default-features = false }
 nsh-testing = { version = "=0.5.0", default-features = false }
 nsh-platform-macos = "=0.5.0"
 nsh-platform-linux = "=0.5.0"
-
-# `rune-kit` is vendored at vendor/rune-kit: its markdown renderer is the only place a highlight can
-# be drawn with a background. The delta from the pinned revision is listed in vendor/rune-kit/PATCHES.md.
-[patch."https://github.com/anomalyco/rune"]
-rune-kit = { path = "vendor/rune-kit" }
-
-# Rune patches these four crates in its own workspace, and a dependency's `[patch]` does not reach
-# the workspace that depends on it. A patch section is only honoured at the workspace root, which is
-# why it lives here rather than beside the package that names Rune. Same rev as `rune` in
-# `crates/typr/Cargo.toml`; when Rune's root `[patch.crates-io]` gains an entry, add it here too.
-[patch.crates-io]
-winit = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
-parley_engine = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
-wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }
-accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "615f06a43a565c4d9abe2d883b12fcd895421f4e" }

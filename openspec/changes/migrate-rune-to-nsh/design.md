@@ -149,3 +149,9 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - `tests/appearance.rs` renders every screen in `ColorScheme::Light` and `Dark` and reads the resolved style with `screen().span_style`: font size (bits) and weight must be equal, and the colour must equal a reference text painted with the same token (`tokens::foreground` or `tokens::muted_foreground`), so it is the theme's colour for that role and appearance, not merely a different one.
 - `screens::NAMES` and the test's own list must agree. Both are hand-maintained: a module added without touching either is not caught, and the guard fires only when a name is added to `NAMES` without its check. Rust cannot enumerate modules, so there is no drift-free form; adding a screen means adding its name and its check together.
 - No images: `Headless` has no screenshot at all (the method lives on a private driver and returns "a screenshot needs a real platform"), and `nsh test --target` cannot run until Rune is removed (it resolves `.nsh/rust/*` against Rune's root-only patches).
+
+## Task 6.1 Rune removed
+
+- `crates/typr` keeps `screens/`, `ui/`, `shell.rs`, `paths.rs` and the desktop runner; the Rune modules (`main.rs`, `editor/`, `library/`, `sidebar/`, `sidebar.rs`, `design/`, `attachments/`, `history/`, `keymap/`, `logging/`, `markdown/`, `study/`, `screen.rs`, `settings.rs`, `day_offset.rs`, `src/tests/`) and `vendor/` are gone.
+- `paths.rs` uses `nsh_core::prelude::data_dir()` with `TYPR_DATA_DIR` overriding it, replacing `rune::dirs::AppDirs`.
+- `cargo tree --workspace | grep -ci rune` is 0 and `Cargo.lock` names no rune package; the workspace suite (308 core + screen tests) passes.
