@@ -53,14 +53,15 @@ jobs:
 
       # The registry and the workspace's own artifacts, pruned to what a fresh build needs: the
       # action drops incremental state, old dependency builds and the app's own stale output. Only
-      # `main` writes a cache, so a branch restores main's and adds no entries of its own.
+      # `main` writes a cache, so a branch restores main's and adds no entries of its own. A failed
+      # job saves nothing: its key is derived from the lockfile and rustc, so a stub saved there
+      # would be restored by every later run until one of them changed.
       - name: Cache the build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # A key of its own: two jobs saving one entry race, and the winner would seed the loser
           # with a build it never made.
           shared-key: linux-checks
-          cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Format
@@ -118,7 +119,6 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: linux-app
-          cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # `desktop.test.tsx` opens the app and reads its screens; headless it needs no display. The
