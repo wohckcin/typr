@@ -444,3 +444,20 @@ fn the_librarys_keys_do_nothing_while_a_card_is_open() -> Result<(), String> {
     assert_eq!(cards, 1, "no card was made while the editor was open");
     Ok(())
 }
+
+#[test]
+fn choosing_a_deck_leaves_the_open_card() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("deck-pick");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("role:button[gato]")?;
+    app.press("role:button[gato]")?;
+    app.wait_for("Attach image")?;
+    // A row in the sidebar opens the grid for that row, so the card on screen goes away.
+    app.press("role:button[Spanish]")?;
+    app.wait_for("Search cards")?;
+    let editor_rows = app.screen().count("Attach image")?;
+    assert_eq!(editor_rows, 0, "the editor is gone");
+    Ok(())
+}

@@ -60,7 +60,7 @@ pub fn library(
         .flex_1()
         .flex_row()
         .bg(tokens::background)
-        .child(sidebar(state))
+        .child(sidebar(state, move |key: &SharedString| state.select(key)))
         .child(
             view()
                 .flex_1()

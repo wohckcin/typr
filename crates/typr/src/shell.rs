@@ -66,12 +66,44 @@ pub fn import_from(db: &Db, archive: &std::path::Path, attachments: &std::path::
     }
 }
 
-/// Where the work area is: the library's grid, a card's editor, or nothing of its own (settings).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Route {
-    #[default]
+/// What the work area shows. One value owns it, so a key can only act where its screen is showing
+/// and a screen can only be entered by setting it.
+#[derive(Clone)]
+enum Screen {
+    /// The grid, filtered by the sidebar's row in force.
     Library,
+    /// One card's editor.
     Editor(Id),
+    /// The library's paths and defaults.
+    Settings,
+    /// What the store and the slow commands have done since launch.
+    Diagnostics,
+    /// A session, shared rather than taken, so a rebuild keeps the session it is showing.
+    Study(Rc<std::cell::RefCell<Session>>),
+}
+
+impl PartialEq for Screen {
+    /// Two screens are the same when they show the same thing; a session is the same session while
+    /// its handle matches, so a rebuild of the work area is not a new screen.
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Screen::Library, Screen::Library)
+            | (Screen::Settings, Screen::Settings)
+            | (Screen::Diagnostics, Screen::Diagnostics) => true,
+            (Screen::Editor(one), Screen::Editor(two)) => one == two,
+            (Screen::Study(one), Screen::Study(two)) => Rc::ptr_eq(one, two),
+            _ => false,
+        }
+    }
+}
+
+/// The screen a sidebar row opens: the utilities are screens, every other row filters the grid.
+fn screen_for(key: &SharedString) -> Screen {
+    match key.as_ref() {
+        "settings" => Screen::Settings,
+        "diagnostics" => Screen::Diagnostics,
+        _ => Screen::Library,
+    }
 }
 
 /// The shell over `snapshot`: `library_open` says whether the store opened, which the sidebar
@@ -88,6 +120,13 @@ pub fn shell_with(
 ) -> impl IntoElement {
     let due = due_counts(&snapshot, SystemClock.now_ms());
     let state = Sidebar::new(items_from(&snapshot, &due), library_open, search_chord());
+    let screen = signal(Screen::Library);
+    let pick = {
+        move |key: &SharedString| {
+            state.select(key);
+            screen.set(screen_for(key));
+        }
+    };
     let cap = snapshot.settings.new_per_day;
     // Without a store the screen still shows the library it read: a blank work area would leave a
     // reader guessing whether the app works.
@@ -104,15 +143,17 @@ pub fn shell_with(
     };
     // Escape leaves the screen the work area is showing, back to the whole library. The library
     // table binds no Leave command, so the key is the one every screen uses for it.
-    on_key("escape", move |_| state.select(&"all".into()));
+    on_key("escape", move |_| {
+        state.select(&"all".into());
+        screen.set(Screen::Library);
+    });
     view()
         .flex_1()
         .flex_row()
         .bg(tokens::background)
-        .child(sidebar(state))
+        .child(sidebar(state, pick))
         .child(view().flex_1().child(dynamic(move || {
-            let showing_settings = state.selected_key().as_deref() == Some("settings");
-            if showing_settings {
+            if let Screen::Settings = screen.get() {
                 // The screen's signals belong to this branch, so leaving it disposes them with it.
                 return settings(
                     Values::new(cap, true),
@@ -142,7 +183,7 @@ pub fn shell_over(
     library: LibraryInfo,
 ) -> impl IntoElement {
     let snapshot_signal = signal(snapshot);
-    let route = signal(Route::Library);
+    let screen = signal(Screen::Library);
     let due = due_counts(&snapshot_signal.get_untracked(), SystemClock.now_ms());
     let state = Sidebar::new(
         items_from(&snapshot_signal.get_untracked(), &due),
@@ -159,9 +200,6 @@ pub fn shell_over(
     let search_handle = element_ref();
     // The library's keyboard: the card Enter acts on, and the session that may be running.
     let selection = signal(0_usize);
-    let studying = signal(false);
-    let session_slot: Rc<std::cell::RefCell<Option<Rc<std::cell::RefCell<Session>>>>> =
-        Rc::new(std::cell::RefCell::new(None));
     let reopen = {
         let db = db.clone();
         Rc::new(move || {
@@ -172,9 +210,7 @@ pub fn shell_over(
     };
     // The cards the grid shows now, in the order it shows them: the keyboard walks this list.
     let visible = {
-        let db = db.clone();
         Rc::new(move || {
-            let _ = &db;
             let snapshot = snapshot_signal.get_untracked();
             let cards = cards_in(&snapshot, state.selected_key().as_deref());
             tiles_for(&cards, &query.get_untracked(), SystemClock.now_ms())
@@ -188,7 +224,7 @@ pub fn shell_over(
         Rc::new(move || {
             let ids = visible();
             if let Some(id) = ids.get(selection.get_untracked()) {
-                route.set(Route::Editor(*id));
+                screen.set(Screen::Editor(*id));
             }
         })
     };
@@ -196,7 +232,6 @@ pub fn shell_over(
     // the store quietly, so the session is not rebuilt under the user as it is graded.
     let start_session = {
         let db = db.clone();
-        let session_slot = session_slot.clone();
         Rc::new(move |queue: typr_core::screen::Queue| {
             let now = SystemClock.now_ms();
             let offset = crate::day_offset::local_offset_ms();
@@ -237,10 +272,9 @@ pub fn shell_over(
             if entries.is_empty() {
                 return;
             }
-            *session_slot.borrow_mut() = Some(Rc::new(std::cell::RefCell::new(Session::new(
-                queue, entries,
+            screen.set(Screen::Study(Rc::new(std::cell::RefCell::new(
+                Session::new(queue, entries),
             ))));
-            studying.set(true);
         })
     };
     let slow = signal(Vec::<SlowCommand>::new());
@@ -321,20 +355,17 @@ pub fn shell_over(
         }
     };
 
-    let open = { move |id: Id| route.set(Route::Editor(id)) };
-
-    // Whether the work area is showing the library: its keys act only there, so `c` inside the
-    // editor makes nothing and `s` inside a session starts nothing.
-    let in_library = {
-        move || {
-            route.get() == Route::Library
-                && !studying.get()
-                && !matches!(
-                    state.selected_key().as_deref(),
-                    Some("settings") | Some("diagnostics")
-                )
+    let open = { move |id: Id| screen.set(Screen::Editor(id)) };
+    let pick = {
+        move |key: &SharedString| {
+            state.select(key);
+            screen.set(screen_for(key));
         }
     };
+
+    // The library's keys act only on the library, so `c` inside the editor makes nothing and `s`
+    // inside a session starts nothing.
+    let in_library = move || matches!(screen.get(), Screen::Library);
 
     if let Some(key) = crate::screens::keymap::keystroke_of(
         typr_core::keymap::Surface::Library,
@@ -430,7 +461,7 @@ pub fn shell_over(
             ) {
                 Ok(Outcome::Card(id)) => {
                     reopen();
-                    route.set(Route::Editor(id));
+                    screen.set(Screen::Editor(id));
                 }
                 Ok(_) => {}
                 Err(error) => log::error!("new card refused: {}", crate::logging::describe(&error)),
@@ -464,17 +495,16 @@ pub fn shell_over(
     // snapshot). The route follows the snapshot rather than the render that noticed.
     {
         effect(move || {
-            if let Route::Editor(id) = route.get()
+            if let Screen::Editor(id) = screen.get()
                 && snapshot_signal.with(|snapshot| !snapshot.cards.iter().any(|card| card.id == id))
             {
-                route.set(Route::Library);
+                screen.set(Screen::Library);
             }
         });
     }
 
     // Escape returns to the whole library from the grid; while a card is open the editor binds it,
     // and this one lets the key through so both can hear it.
-    let route_for_key = route;
     on_key_with(
         "escape",
         KeyOptions {
@@ -482,10 +512,14 @@ pub fn shell_over(
             when: When::Always,
             ..KeyOptions::default()
         },
-        move |_| {
-            if route_for_key.get() == Route::Library {
+        move |_| match screen.get() {
+            // Escape narrows the grid here, and the editor and the session bind their own Leave.
+            Screen::Library => state.select(&"all".into()),
+            Screen::Settings | Screen::Diagnostics => {
                 state.select(&"all".into());
+                screen.set(Screen::Library);
             }
+            Screen::Editor(_) | Screen::Study(_) => {}
         },
     );
 
@@ -493,70 +527,61 @@ pub fn shell_over(
         .flex_1()
         .flex_row()
         .bg(tokens::background)
-        .child(sidebar(state))
+        .child(sidebar(state, pick))
         .child(view().flex_1().child(dynamic(move || {
-            // A running session takes the whole work area until it is left.
-            if studying.get() {
-                // Shared, not taken: a rebuild of the work area keeps the session it is showing.
-                let session = session_slot.borrow().clone();
-                let Some(session) = session else {
-                    studying.set(false);
-                    return view().into_element();
-                };
-                let grade_db = db.clone();
-                let grade_stopped = stopped;
-                let leaving = studying;
-                let reopen = reopen.clone();
-                return study(
-                    session,
-                    move |card: Id, key: String, grade: Grade| match grade_db.apply(
-                        &Command::Grade {
-                            card,
-                            key,
-                            grade,
-                            duration_ms: None,
+            // One match on the screen: a key can only act where its screen is showing.
+            match screen.get() {
+                // A running session takes the whole work area until it is left.
+                Screen::Study(session) => {
+                    let grade_db = db.clone();
+                    let grade_stopped = stopped;
+                    let reopen = reopen.clone();
+                    study(
+                        session,
+                        move |card: Id, key: String, grade: Grade| match grade_db.apply(
+                            &Command::Grade {
+                                card,
+                                key,
+                                grade,
+                                duration_ms: None,
+                            },
+                            SystemClock.now_ms(),
+                        ) {
+                            Ok(_) => true,
+                            Err(error) => {
+                                grade_stopped.set(true);
+                                log::error!("grade refused: {}", crate::logging::describe(&error));
+                                false
+                            }
                         },
-                        SystemClock.now_ms(),
-                    ) {
-                        Ok(_) => true,
-                        Err(error) => {
-                            grade_stopped.set(true);
-                            log::error!("grade refused: {}", crate::logging::describe(&error));
-                            false
-                        }
-                    },
-                    {
-                        let slot = session_slot.clone();
                         move || {
-                            slot.borrow_mut().take();
-                            leaving.set(false);
+                            screen.set(Screen::Library);
                             reopen();
+                        },
+                        move || screen.set(Screen::Settings),
+                    )
+                    .into_element()
+                }
+                Screen::Settings => {
+                    let back = {
+                        let state = state;
+                        move || {
+                            state.select(&"all".into());
+                            screen.set(Screen::Library);
                         }
-                    },
-                    move || state.select(&"settings".into()),
-                )
-                .into_element();
-            }
-            if state.selected_key().as_deref() == Some("settings") {
-                return settings(
-                    Values::new(cap, true),
-                    library.clone(),
-                    |_| {},
-                    || {},
-                    || {},
-                )
-                .into_element();
-            }
-            if state.selected_key().as_deref() == Some("diagnostics") {
-                return diagnostics(stopped, slow.get(), result, import.clone(), export.clone())
-                    .into_element();
-            }
-            match route.get() {
-                Route::Editor(id) => {
+                    };
+                    settings(Values::new(cap, true), library.clone(), |_| {}, back, || {})
+                        .into_element()
+                }
+                Screen::Diagnostics => {
+                    diagnostics(stopped, slow.get(), result, import.clone(), export.clone())
+                        .into_element()
+                }
+                Screen::Editor(id) => {
                     let found = snapshot_signal
                         .with(|snapshot| snapshot.cards.iter().find(|card| card.id == id).cloned());
                     let Some(card) = found else {
-                        // The card went away under the editor. The effect above moves the route
+                        // The card went away under the editor. The effect above moves the screen
                         // back; until that runs, show the library rather than nothing.
                         return view()
                             .flex_1()
@@ -591,7 +616,7 @@ pub fn shell_over(
                     let write_mask = write.clone();
                     let write_merge = write.clone();
                     let write_remove = write.clone();
-                    let leaving = route;
+                    let leaving = screen;
                     let actions = Actions::new()
                         .save(move |markdown| {
                             write_save(Command::SaveCard { id, markdown }, false, "SaveCard");
@@ -614,7 +639,7 @@ pub fn shell_over(
                                 "SetDraft",
                             )
                         })
-                        .leave(move || leaving.set(Route::Library))
+                        .leave(move || leaving.set(Screen::Library))
                         .discard({
                             let write = write.clone();
                             move || {
@@ -627,7 +652,7 @@ pub fn shell_over(
                                     true,
                                     "SetDraft",
                                 );
-                                leaving.set(Route::Library);
+                                screen.set(Screen::Library);
                             }
                         })
                         .attach({
@@ -709,26 +734,14 @@ pub fn shell_over(
                     )
                     .into_element()
                 }
-                Route::Library => {
-                    // The work area's grid: the sidebar's selection chooses the cards, and a tile
-                    // opens one.
-                    let for_tiles = snapshot_signal;
-                    let chosen = state;
-                    let now = SystemClock.now_ms();
-                    let tiles = computed(move || {
-                        let snapshot = for_tiles.get();
-                        let cards = cards_in(&snapshot, chosen.selected_key().as_deref());
-                        let text = query.get();
-                        tiles_for(&cards, &text, now)
-                    });
-                    view()
-                        .flex_1()
-                        .p_4()
-                        .gap_3()
-                        .child(field_reachable("Search cards", query, &search_handle))
-                        .child(grid(tiles, selection, || {}, open))
-                        .into_element()
-                }
+                // The grid: the sidebar's row in force picks the cards, and a tile opens one.
+                Screen::Library => view()
+                    .flex_1()
+                    .p_4()
+                    .gap_3()
+                    .child(field_reachable("Search cards", query, &search_handle))
+                    .child(grid(tiles, selection, || {}, open))
+                    .into_element(),
             }
         })))
 }

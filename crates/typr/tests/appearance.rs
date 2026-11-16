@@ -114,18 +114,21 @@ macro_rules! check {
 #[component]
 fn SidebarScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    sidebar(Sidebar::new(
-        vec![Item {
-            key: "all".into(),
-            label: "All cards".into(),
-            group: Group::Navigation,
-            parent: None,
-            due: 0,
-            has_children: false,
-        }],
-        true,
-        "search",
-    ))
+    sidebar(
+        Sidebar::new(
+            vec![Item {
+                key: "all".into(),
+                label: "All cards".into(),
+                group: Group::Navigation,
+                parent: None,
+                due: 0,
+                has_children: false,
+            }],
+            true,
+            "search",
+        ),
+        |_| {},
+    )
 }
 
 #[component]

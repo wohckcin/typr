@@ -39,7 +39,7 @@ fn Probe() -> impl IntoElement {
     let state = Sidebar::new(fixture(), false, typr::screens::sidebar::search_chord());
     view()
         .flex_row()
-        .child(sidebar(state))
+        .child(sidebar(state, move |key: &SharedString| state.select(key)))
         .child(text(move || format!("selected={}", state.selected_text())))
         .child(button_refresh(state))
 }

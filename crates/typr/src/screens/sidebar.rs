@@ -163,8 +163,9 @@ impl Sidebar {
     }
 }
 
-/// The column: the search chord, the library's state, then each group with rows.
-pub fn sidebar(state: Sidebar) -> impl IntoElement {
+/// The column: the search chord, the library's state, then each group with rows. `pick` hears every
+/// press, so the caller owns what a row opens.
+pub fn sidebar(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -> impl IntoElement {
     let column = view()
         .w(tokens::sidebar_width())
         .p_3()
@@ -192,7 +193,7 @@ pub fn sidebar(state: Sidebar) -> impl IntoElement {
                     .text_color(tokens::muted_foreground),
             );
             for item in rows {
-                section = section.child(row_view(state, item));
+                section = section.child(row_view(state, item, pick.clone()));
             }
             groups = groups.child(section);
         }
@@ -229,7 +230,11 @@ fn library_state(state: Sidebar) -> impl IntoElement {
     })
 }
 
-fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
+fn row_view(
+    state: Sidebar,
+    item: Item,
+    pick: impl Fn(&SharedString) + Clone + 'static,
+) -> impl IntoElement {
     let key = item.key.clone();
     let in_force = key.clone();
     let press = key.clone();
@@ -243,7 +248,10 @@ fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
         .child(view().flex_1().child(list_row(
             item.label.clone(),
             move || state.selected.with(|s| s.as_ref() == Some(&in_force)),
-            move || state.select(&press),
+            move || {
+                state.select(&press);
+                pick(&press);
+            },
         )));
     if item.due > 0 {
         row = row.child(badge(item.due.to_string()));
