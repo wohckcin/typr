@@ -11,7 +11,12 @@ use nsh_core::prelude::*;
 #[native_module("typr/native")]
 fn native(_registry: &mut Registry) {}
 
+pub mod day_offset;
+pub mod logging;
 pub mod paths;
 pub mod screens;
 pub mod shell;
 pub mod ui;
+
+/// The app's root, which `nsh.json` names (`"root": "App"`) and the platform host starts.
+pub use shell::App;

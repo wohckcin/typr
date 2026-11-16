@@ -144,7 +144,7 @@ impl Sidebar {
 
 /// The column: the search chord, the library's state, then each group with rows.
 pub fn sidebar(state: Sidebar) -> impl IntoElement {
-    let mut column = view()
+    let column = view()
         .w(tokens::sidebar_width())
         .p_3()
         .gap_3()
@@ -152,10 +152,25 @@ pub fn sidebar(state: Sidebar) -> impl IntoElement {
         .border_color(move || tokens::border())
         .child(search_row(state))
         .child(library_state(state));
-    for group in Group::ALL {
-        column = column.child(group_view(state, group));
-    }
-    column
+    // One dynamic for every group: one owner for the rows, so a row's controls are not rebuilt
+    // under a nested owner that the next render disposes.
+    column.child(dynamic(move || {
+        let mut groups = view().gap_3();
+        for group in Group::ALL {
+            let rows: Vec<Item> = state.visible().into_iter().filter(|item| item.group == group).collect();
+            if rows.is_empty() {
+                continue;
+            }
+            let mut section = view()
+                .gap_1()
+                .child(text(group.label()).text_xs().text_color(move || tokens::muted_foreground()));
+            for item in rows {
+                section = section.child(row_view(state, item));
+            }
+            groups = groups.child(section);
+        }
+        groups.into_element()
+    }))
 }
 
 fn search_row(state: Sidebar) -> impl IntoElement {
@@ -173,22 +188,6 @@ fn library_state(state: Sidebar) -> impl IntoElement {
         .text_color(move || {
             if state.library_open.get() { tokens::muted_foreground() } else { tokens::destructive() }
         })
-}
-
-fn group_view(state: Sidebar, group: Group) -> impl IntoElement {
-    dynamic(move || {
-        let rows: Vec<Item> = state.visible().into_iter().filter(|item| item.group == group).collect();
-        if rows.is_empty() {
-            return view().into_element();
-        }
-        let mut column = view()
-            .gap_1()
-            .child(text(group.label()).text_xs().text_color(move || tokens::muted_foreground()));
-        for item in rows {
-            column = column.child(row_view(state, item));
-        }
-        column.into_element()
-    })
 }
 
 fn row_view(state: Sidebar, item: Item) -> impl IntoElement {

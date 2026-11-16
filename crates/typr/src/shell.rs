@@ -51,9 +51,15 @@ pub fn App() -> impl IntoElement {
             let library = LibraryInfo::of(&db);
             match db.snapshot() {
                 Ok(snapshot) => shell_with(snapshot, true, library).into_element(),
-                Err(_) => shell_with(Snapshot::default(), false, library).into_element(),
+                Err(error) => {
+                log::error!("library snapshot failed: {}", crate::logging::describe(&error));
+                shell_with(Snapshot::default(), false, library).into_element()
+            }
             }
         }
-        Err(_) => shell(Snapshot::default(), false).into_element(),
+        Err(error) => {
+            log::error!("library did not open: {}", crate::logging::describe(&error));
+            shell(Snapshot::default(), false).into_element()
+        }
     }
 }

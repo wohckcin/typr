@@ -4,7 +4,7 @@
 use nsh_base::{SelectItem, select, tab, tabs};
 use nsh_core::prelude::*;
 
-use super::{button::{Variant, button}, tokens};
+use super::tokens;
 
 /// A row of tabs showing which section is selected; the caller shows the panel.
 pub fn tab_row(labels: &'static [&'static str], selected: Signal<usize>) -> impl IntoElement {
@@ -46,9 +46,14 @@ pub fn choose(options: &'static [(&'static str, &'static str)], chosen: Signal<O
 }
 
 /// A selectable row: its own surface shows the selection, not a marker at the edge.
+///
+/// The row is a pressable view rather than a base button: a base button made inside the sidebar's
+/// reactive list is disposed with the list's previous render, and its `disabled` prop is then read
+/// from a dead owner (the engine logs "a prop read or written after its owner was disposed").
 pub fn list_row(title: impl IntoReactive<SharedString>, selected: impl Fn() -> bool + 'static, on_press: impl Fn() + 'static) -> impl IntoElement {
     view()
         .w_full()
         .bg(move || tokens::row_fill(selected()))
-        .child(button(Variant::Ghost, title, || false, on_press))
+        .on_press(on_press)
+        .child(text(title).text_sm().text_color(move || tokens::foreground()))
 }

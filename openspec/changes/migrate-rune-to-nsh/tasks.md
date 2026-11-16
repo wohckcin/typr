@@ -30,7 +30,7 @@
 - [x] 4.6 Settings/preferences; verify `preferences` scenarios and persistence across a restart with a temp library
 - [x] 4.7 Keymap panel and palette, with `Chord::from_event` rewritten for NSH key events; verify `keymap-panel` scenarios
 - [x] 4.8 Embeds and markdown rendering per the spike's decision; verify `card-embeds` scenarios
-- [x] 4.9 Diagnostics and import/export entry points; verify `diagnostics` and `transfer` UI scenarios
+- [ ] 4.9 Diagnostics and import/export entry points; verify `diagnostics` and `transfer` UI scenarios
 - [ ] 4.10 Run the Finishing checklist and accessibility checklist on each screen in light and dark with `nsh run`, keyboard-only; record per-group results in the PR
 
 ## 5. Screenshot baselines

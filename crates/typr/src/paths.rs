@@ -38,5 +38,15 @@ pub fn open_from_environment() -> Result<Db, StoreError> {
     let root = data_root()?;
     std::fs::create_dir_all(&root)?;
     std::fs::create_dir_all(attachments_root(&root))?;
-    Db::open(&database_path(&root))
+    let db = Db::open(&database_path(&root))?;
+    // What a report needs to tell a migrated library from a refused or unopened one.
+    let facts = db.schema_facts();
+    log::info!(
+        "library {} schema {} -> {}, {} migrations",
+        db.path().display(),
+        facts.found,
+        facts.written,
+        facts.applied
+    );
+    Ok(db)
 }
