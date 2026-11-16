@@ -7,9 +7,21 @@ use super::tokens;
 
 /// A text field bound to `value`; typing writes the whole text back through `on_change`.
 pub fn field(placeholder: &'static str, value: Signal<String>) -> impl IntoElement {
+    field_with(placeholder, value, |_| {})
+}
+
+/// A text field that also reports each edit, for a caller that keeps the text somewhere of its own.
+pub fn field_with(
+    placeholder: &'static str,
+    value: Signal<String>,
+    on_change: impl Fn(&str) + 'static,
+) -> impl IntoElement {
     input()
         .value(move || value.get())
-        .on_change(move |text: &str| value.set(text.to_owned()))
+        .on_change(move |text: &str| {
+            value.set(text.to_owned());
+            on_change(text);
+        })
         .placeholder(placeholder)
         .h(px(32.0))
         .px_3()

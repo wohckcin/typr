@@ -167,3 +167,11 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 
 - The logger is ported: `logging/` (restored, Rune-free) installs a bounded file under `data_dir/logs`, rotates at 1 MiB, takes its level from `TYPR_LOG` (default `warn`), formats each record and hands it to a writer thread so the frame thread never touches the file, and flushes at quit. `bin/typr_nsh.rs` installs it; `paths::open_from_environment` records the library path and its schema facts at info; `shell::App` logs a failed open or snapshot with `logging::describe`'s cause chain.
 - 4.9 is un-ticked because two `diagnostics` scenarios still have no implementation: "A slow command is recorded with its cost" and "A worker that ended abnormally is recorded when the application quits". Both need the store worker (`typr_core::store::Handle` + `WorkerStatus`) wired into the app, which is part of connecting the screens to the library. The log file, its rotation, the level, the startup facts, the cause chain and the never-stalls guarantee are in place.
+
+## Task 4.3 progress (still open)
+
+- Images: `resolve_images` rewrites `![alt](name)` to the absolute path under the attachments folder, leaves an absolute or `..` reference as written (the renderer then draws its placeholder), and the preview applies it. `prompt_count` counts hidden-text groups or a two-sided card and shows on the editor caption.
+- Templates: `template_preview` renders a card from `typr_core::template::render_card`; `field_table` lists a value per field with computed rows read-only, and reports edits.
+- Leaving: `leaving_choice(dirty)` asks only when there is something to lose; `leave_decision` offers Save, Discard and Stay and reports the answer.
+- Occlusion: `rect_from_drag` turns a drag from the picture's middle into a fraction rectangle, refuses anything under one percent on either axis (a click adds none), and `cover_box` places a cover at any pane size. Tests cover both.
+- Still missing before 4.3 can be ticked: the diagram pane that draws the covers and wires `rect_from_drag` to `AddMask`/`MergeMasks`/`RemoveMask`, the text↔diagram switch, and the editor's connection to the store (the shell has no editor route yet).

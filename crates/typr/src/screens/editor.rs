@@ -11,6 +11,8 @@ use typr_core::sides;
 
 use crate::ui::{
     button::{Variant, button},
+    input::field_with,
+    overlay::decision,
     prose::prose,
     source::source_with,
     status::badge,
@@ -40,6 +42,55 @@ pub fn attach_image(source: &Path, root: &Path) -> std::io::Result<String> {
 /// image and the store copies the picture beside the library.
 pub fn image_reference(alt: &str, name: &str) -> String {
     format!("![{alt}]({name})")
+}
+
+/// The card's text with `![alt](name)` rewritten to the absolute path under `root`, so the renderer
+/// loads the copy beside the library. A reference that escapes `root` (an absolute path, a `..`
+/// segment) or names nothing is left as written, which draws the renderer's placeholder.
+pub fn resolve_images(markdown: &str, root: &Path) -> String {
+    if root.as_os_str().is_empty() {
+        return markdown.to_owned();
+    }
+    let mut out = String::with_capacity(markdown.len());
+    let mut rest = markdown;
+    while let Some(at) = rest.find("![") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at..];
+        let Some(close) = after.find("](") else {
+            out.push_str(after);
+            return out;
+        };
+        let Some(end) = after[close + 2..].find(')') else {
+            out.push_str(after);
+            return out;
+        };
+        let src = &after[close + 2..close + 2 + end];
+        let inside = !src.trim().is_empty()
+            && Path::new(src.trim()).is_absolute().eq(&false)
+            && !Path::new(src.trim())
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir));
+        out.push_str(&after[..close + 2]);
+        if inside {
+            out.push_str(&root.join(src.trim()).display().to_string());
+        } else {
+            out.push_str(src);
+        }
+        out.push(')');
+        rest = &after[close + 2 + end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The prompts a card's text holds: one per numbered hidden-text group, the plain group as one, or
+/// one for a card of two or more sides. A note holds none.
+pub fn prompt_count(markdown: &str) -> usize {
+    let shape = typr_core::hidden::shape(markdown);
+    if let typr_core::hidden::Shape::Sides(sides) = &shape {
+        return usize::from(sides.len() >= 2);
+    }
+    shape.prompt_keys().len()
 }
 
 /// Whether a card's text names any local image, and the reference of each, in order.
@@ -72,7 +123,7 @@ pub fn editor(
     on_save: impl Fn(String) + Clone + 'static,
     on_attach: impl Fn(PathBuf) -> std::io::Result<String> + Clone + 'static,
 ) -> impl IntoElement {
-    editor_with_draft(initial.clone(), None, on_save, on_attach, |_| {})
+    editor_with_draft(initial, None, PathBuf::new(), on_save, on_attach, |_| {})
 }
 
 /// The editor opening on an unsaved draft when there is one, and reporting each edit so the caller
@@ -80,6 +131,7 @@ pub fn editor(
 pub fn editor_with_draft(
     saved_text: String,
     draft_text: Option<String>,
+    attachments: PathBuf,
     on_save: impl Fn(String) + Clone + 'static,
     on_attach: impl Fn(PathBuf) -> std::io::Result<String> + Clone + 'static,
     on_draft: impl Fn(&str) + 'static,
@@ -102,7 +154,22 @@ pub fn editor_with_draft(
             view()
                 .flex_1()
                 .gap_2()
-                .child(state_badge)
+                .child(
+                    view()
+                        .flex_row()
+                        .items_center()
+                        .gap_2()
+                        .child(state_badge)
+                        .child(dynamic(move || {
+                            let count = prompt_count(&draft.get());
+                            let label = match count {
+                                0 => "note".to_owned(),
+                                1 => "1 prompt".to_owned(),
+                                n => format!("{n} prompts"),
+                            };
+                            badge(label).into_element()
+                        })),
+                )
                 .child(source_with(draft, on_draft))
                 .child(button(
                     Variant::Primary,
@@ -160,12 +227,138 @@ pub fn editor_with_draft(
                 .gap_3()
                 .child(dynamic(move || {
                     let text = draft.get();
+                    let root = attachments.clone();
                     let sides_of: Vec<String> = sides::split(&text).iter().map(|s| s.to_string()).collect();
                     let mut column = view().gap_3();
                     for side in sides_of {
-                        column = column.child(prose(move || preview_of(&side).into()));
+                        let drawn = resolve_images(&preview_of(&side), &root);
+                        column = column.child(prose(move || drawn.clone().into()));
                     }
                     column.into_element()
                 }))
         )
+}
+
+/// What leaving a card with unsaved edits does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Leaving {
+    /// Nothing to lose: leave.
+    Leave,
+    /// Ask first.
+    Ask,
+}
+
+/// The user's answer when asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Answer {
+    Save,
+    Discard,
+}
+
+/// Whether leaving needs the user's answer first.
+pub fn leaving_choice(dirty: bool) -> Leaving {
+    if dirty { Leaving::Ask } else { Leaving::Leave }
+}
+
+/// The question a dirty editor asks: save, discard, or stay. `open` false hides it; Stay closes it.
+pub fn leave_decision(open: Signal<bool>, on_answer: impl Fn(Answer) + Clone + 'static) -> impl IntoElement {
+    let save = on_answer.clone();
+    let discard = on_answer;
+    decision(open, move || {
+        let stay = open;
+        let save = save.clone();
+        let discard = discard.clone();
+        view()
+            .gap_3()
+            .child(text("Save this card before leaving?").text_sm().text_color(move || tokens::foreground()))
+            .child(
+                view()
+                    .flex_row()
+                    .gap_2()
+                    .child(button(Variant::Primary, "Save", || false, move || {
+                        save(Answer::Save);
+                        stay.set(false);
+                    }))
+                    .child(button(Variant::Default, "Discard", || false, move || {
+                        discard(Answer::Discard);
+                        stay.set(false);
+                    }))
+                    .child(button(Variant::Ghost, "Stay", || false, move || stay.set(false))),
+            )
+    })
+}
+
+/// One row of a card's field table: the name a template uses, the value typed for it, and whether
+/// the app computes it (which makes it read-only).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Field {
+    pub name: String,
+    pub value: String,
+    pub computed: bool,
+}
+
+/// The fields a card's template fills from, as the editor shows them: a value per name, computed
+/// rows read-only, and `on_edit(name, value)` when the user types one.
+pub fn field_table(fields: Vec<Field>, on_edit: impl Fn(&str, &str) + Clone + 'static) -> impl IntoElement {
+    let mut column = view().gap_2().child(badge("Fields"));
+    for row in fields {
+        let name = row.name.clone();
+        let edit = on_edit.clone();
+        if row.computed {
+            column = column.child(
+                view()
+                    .flex_row()
+                    .items_center()
+                    .gap_2()
+                    .child(text(row.name).text_xs().text_color(move || tokens::muted_foreground()))
+                    .child(text(row.value).text_sm().text_color(move || tokens::foreground()))
+                    .child(badge("computed")),
+            );
+        } else {
+            let value = signal(row.value);
+            let edited = name.clone();
+            column = column.child(
+                view()
+                    .gap_1()
+                    .child(text(name).text_xs().text_color(move || tokens::muted_foreground()))
+                    .child(field_with("Value", value, move |text| edit(&edited, text))),
+            );
+        }
+    }
+    column
+}
+
+/// A card's text as its template renders it, for the editor's preview of a templated card.
+pub fn template_preview(template: &str, fields: &[(String, String)], deck: Option<&str>) -> String {
+    typr_core::template::render_card(template, fields, deck)
+}
+
+/// The rectangle a drag across the picture covers: the pointer lands at the middle and moves by
+/// `translation` points on a pane `size` points wide, and the corners are stored as fractions.
+///
+/// `None` when the drag covers less than one percent on either axis — the spec's floor — so a click
+/// or a twitch adds nothing.
+pub fn rect_from_drag(size: (f32, f32), translation: (f32, f32)) -> Option<typr_core::store::MaskRect> {
+    let (pane_w, pane_h) = size;
+    if pane_w <= 0.0 || pane_h <= 0.0 {
+        return None;
+    }
+    let (dx, dy) = (translation.0 / pane_w, translation.1 / pane_h);
+    let (x0, x1) = (0.5_f32.min(0.5 + dx), 0.5_f32.max(0.5 + dx));
+    let (y0, y1) = (0.5_f32.min(0.5 + dy), 0.5_f32.max(0.5 + dy));
+    let rect = typr_core::store::MaskRect::new(
+        x0.clamp(0.0, 1.0),
+        y0.clamp(0.0, 1.0),
+        (x1 - x0).clamp(0.0, 1.0),
+        (y1 - y0).clamp(0.0, 1.0),
+    );
+    if rect.w < 0.01 || rect.h < 0.01 || !rect.inside_the_image() {
+        return None;
+    }
+    Some(rect)
+}
+
+/// Where a cover sits inside a pane `size` points wide, in points: `(left, top, width, height)`.
+pub fn cover_box(size: (f32, f32), rect: typr_core::store::MaskRect) -> (f32, f32, f32, f32) {
+    (rect.x * size.0, rect.y * size.1, rect.w * size.0, rect.h * size.1)
 }
