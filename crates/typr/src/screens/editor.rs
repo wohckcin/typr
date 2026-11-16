@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 
 use nsh_core::prelude::*;
 use nsh_core::file_dialog::OpenDialog;
+use typr_core::keymap::{Command, Surface};
 use typr_core::sides;
+
+use crate::screens::keymap::keystroke_of;
 
 use crate::ui::{
     button::{Variant, button},
@@ -136,10 +139,71 @@ pub fn editor_with_draft(
     on_attach: impl Fn(PathBuf) -> std::io::Result<String> + Clone + 'static,
     on_draft: impl Fn(&str) + 'static,
 ) -> impl IntoElement {
+    editor_full(
+        saved_text,
+        draft_text,
+        attachments,
+        None,
+        on_save,
+        on_attach,
+        on_draft,
+        || {},
+    )
+}
+
+/// A template in force on the card: its text, the fields it fills from, and the deck's name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Template {
+    pub text: String,
+    pub fields: Vec<Field>,
+    pub deck: Option<String>,
+}
+
+/// The whole editor: the source, the preview (from the template when one is in force), the field
+/// table, the image action, and the Save/Discard/Stay question before leaving unsaved work.
+pub fn editor_full(
+    saved_text: String,
+    draft_text: Option<String>,
+    attachments: PathBuf,
+    template: Option<Template>,
+    on_save: impl Fn(String) + Clone + 'static,
+    on_attach: impl Fn(PathBuf) -> std::io::Result<String> + Clone + 'static,
+    on_draft: impl Fn(&str) + 'static,
+    on_leave: impl Fn() + Clone + 'static,
+) -> impl IntoElement {
+    let asking = signal(false);
+    let save_and_leave = on_leave.clone();
+    let discard = on_leave.clone();
     let draft = signal(draft_text.unwrap_or_else(|| saved_text.clone()));
-    let saved = signal(saved_text);
+    let saved = signal(saved_text.clone());
+    let preview_template = template.clone();
+    let fields = signal(
+        template
+            .as_ref()
+            .map(|t| {
+                t.fields
+                    .iter()
+                    .filter(|field| !field.computed)
+                    .map(|field| (field.name.clone(), field.value.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+    );
     let attach_error = signal(None::<SharedString>);
     let save_text = on_save.clone();
+    let save_on_leave = on_save.clone();
+    // Leaving asks first only when the draft differs from what was saved.
+    let leave_now = on_leave.clone();
+    let dirty = move || draft.with(|d| saved.with(|s| d != s));
+    if let Some(key) = keystroke_of(Surface::Editor, Command::Leave) {
+        on_key(&key, move |_| {
+            if dirty() {
+                asking.set(true);
+            } else {
+                leave_now();
+            }
+        });
+    }
     let attach = on_attach.clone();
     let state_badge = dynamic(move || {
         let dirty = draft.with(|d| saved.with(|s| d != s));
@@ -226,9 +290,15 @@ pub fn editor_with_draft(
                 .flex_1()
                 .gap_3()
                 .child(dynamic(move || {
-                    let text = draft.get();
                     let root = attachments.clone();
-                    let sides_of: Vec<String> = sides::split(&text).iter().map(|s| s.to_string()).collect();
+                    let sides_of: Vec<String> = match &preview_template {
+                        // A templated card's text is the template rendered from its fields.
+                        Some(template) => {
+                            let rendered = template_preview(&template.text, &fields.get(), template.deck.as_deref());
+                            sides::split(&rendered).iter().map(|side| side.to_string()).collect()
+                        }
+                        None => sides::split(&draft.get()).iter().map(|side| side.to_string()).collect(),
+                    };
                     let mut column = view().gap_3();
                     for side in sides_of {
                         let drawn = resolve_images(&preview_of(&side), &root);
@@ -236,7 +306,34 @@ pub fn editor_with_draft(
                     }
                     column.into_element()
                 }))
+                .child(dynamic(move || match &template {
+                    // The field table is the card's own only when a template is in force.
+                    Some(template) => field_table(
+                        template.fields.clone(),
+                        move |name, value| {
+                            fields.update(|rows| {
+                                match rows.iter_mut().find(|(field, _)| field == name) {
+                                    Some(row) => row.1 = value.to_owned(),
+                                    None => rows.push((name.to_owned(), value.to_owned())),
+                                }
+                            });
+                        },
+                    )
+                    .into_element(),
+                    None => view().into_element(),
+                }))
         )
+        .child(leave_decision(asking, move |answer| match answer {
+            Answer::Save => {
+                let text = draft.get_untracked();
+                if has_content(&text) {
+                    saved.set(text.clone());
+                    save_on_leave.clone()(text);
+                }
+                save_and_leave.clone()();
+            }
+            Answer::Discard => discard.clone()(),
+        }))
 }
 
 /// What leaving a card with unsaved edits does.
@@ -275,7 +372,7 @@ pub fn leave_decision(open: Signal<bool>, on_answer: impl Fn(Answer) + Clone + '
                 view()
                     .flex_row()
                     .gap_2()
-                    .child(button(Variant::Primary, "Save", || false, move || {
+                    .child(button(Variant::Primary, "Save and leave", || false, move || {
                         save(Answer::Save);
                         stay.set(false);
                     }))

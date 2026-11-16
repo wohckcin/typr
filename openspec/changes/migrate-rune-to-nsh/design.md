@@ -175,3 +175,9 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - Leaving: `leaving_choice(dirty)` asks only when there is something to lose; `leave_decision` offers Save, Discard and Stay and reports the answer.
 - Occlusion: `rect_from_drag` turns a drag from the picture's middle into a fraction rectangle, refuses anything under one percent on either axis (a click adds none), and `cover_box` places a cover at any pane size. Tests cover both.
 - Still missing before 4.3 can be ticked: the diagram pane that draws the covers and wires `rect_from_drag` to `AddMask`/`MergeMasks`/`RemoveMask`, the text↔diagram switch, and the editor's connection to the store (the shell has no editor route yet).
+
+### What the editor mounts, and what it does not
+
+- Mounted in `editor_full`: the source, the preview (from `template_preview` when a template is in force, else the sides, with `resolve_images` applied), the `field_table` only when a template is present, the Saved/Unsaved and prompt badges, Save, Attach image, and `leave_decision` on the Leave chord (`escape`), which asks only when the draft differs from what was saved. Editor-level tests: `a_templated_card_shows_its_field_table_and_previews_the_template`, `a_card_without_a_template_shows_no_field_table`, `leaving_a_dirty_editor_asks_and_stay_keeps_it`, `leaving_a_dirty_editor_can_discard`, `leaving_a_dirty_editor_can_save_first`, `leaving_a_clean_editor_does_not_ask`.
+- NOT mounted: the occlusion pane. `rect_from_drag` and `cover_box` are tested only as functions; nothing draws covers, takes a drag, or calls `AddMask`/`MergeMasks`/`RemoveMask`, and the text↔diagram switch is not built.
+- NOT wired: no caller supplies the store callbacks, so `on_save`/`on_attach`/`on_draft`/`on_leave` are exercised only by tests; the shell still has no editor route.

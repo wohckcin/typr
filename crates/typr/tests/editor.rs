@@ -6,7 +6,7 @@ use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::screens::editor::{
     Answer, Field, Leaving, attach_image, editor, editor_with_draft, field_table, has_content,
-    cover_box, image_reference, leave_decision, leaving_choice, prompt_count, rect_from_drag,
+    cover_box, editor_full, image_reference, leave_decision, leaving_choice, prompt_count, rect_from_drag, Template,
     resolve_images, template_preview,
 };
 
@@ -239,4 +239,128 @@ fn a_click_or_a_twitch_adds_nothing() {
     assert_eq!(rect_from_drag((400.0, 200.0), (2.0, 100.0)), None, "narrower than one percent");
     assert_eq!(rect_from_drag((400.0, 200.0), (100.0, 1.0)), None, "shorter than one percent");
     assert_eq!(rect_from_drag((0.0, 0.0), (100.0, 100.0)), None, "no pane yet");
+}
+
+#[component]
+fn Templated() -> impl IntoElement {
+    typr::ui::tokens::install();
+    view().child(editor_full(
+        "stored".to_owned(),
+        None,
+        std::path::PathBuf::from("/tmp/typr-edit/attachments"),
+        Some(Template {
+            text: "<<Word>>\n---\n<<Meaning>>".to_owned(),
+            fields: vec![
+                Field { name: "Word".to_owned(), value: "gato".to_owned(), computed: false },
+                Field { name: "Meaning".to_owned(), value: "cat".to_owned(), computed: false },
+                Field { name: "Name".to_owned(), value: "gato".to_owned(), computed: true },
+            ],
+            deck: Some("Spanish".to_owned()),
+        }),
+        |_| {},
+        |_| Ok("unused.png".to_owned()),
+        |_| {},
+        || {},
+    ))
+}
+
+#[test]
+fn a_templated_card_shows_its_field_table_and_previews_the_template() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Templated>())).unwrap();
+    app.wait_for("Fields")?;
+    app.wait_for("gato")?;
+    app.wait_for("cat")?;
+    assert_eq!(app.screen().count("text:/computed/")?, 1, "only Name is computed");
+    Ok(())
+}
+
+#[test]
+fn a_card_without_a_template_shows_no_field_table() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
+    app.wait_for("Question")?;
+    assert!(!app.screen().shows("Fields"), "an untemplated card has no field table");
+    Ok(())
+}
+
+#[component]
+fn LeavingProbe() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let left = signal(String::from("not left"));
+    let saved = signal(String::from("not saved"));
+    view()
+        .gap_2()
+        .child(text(move || format!("left={} saved={}", left.get(), saved.get())))
+        .child(editor_full(
+            "saved text".to_owned(),
+            Some("saved text!".to_owned()),
+            std::path::PathBuf::new(),
+            None,
+            move |text| saved.set(text),
+            |_| Ok("unused.png".to_owned()),
+            |_| {},
+            move || left.set("yes".to_owned()),
+        ))
+}
+
+#[test]
+fn leaving_a_dirty_editor_asks_and_stay_keeps_it() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<LeavingProbe>())).unwrap();
+    app.wait_for("text:/left=not left/")?;
+    app.press_key("escape")?;
+    app.wait_for("Save this card before leaving?")?;
+    app.press("role:button[Stay]")?;
+    app.wait_for_gone("Save this card before leaving?", std::time::Duration::from_secs(5))?;
+    app.wait_for("text:/left=not left/")?;
+    Ok(())
+}
+
+#[test]
+fn leaving_a_dirty_editor_can_discard() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<LeavingProbe>())).unwrap();
+    app.wait_for("text:/left=not left/")?;
+    app.press_key("escape")?;
+    app.wait_for("Save this card before leaving?")?;
+    app.press("role:button[Discard]")?;
+    app.wait_for("text:/left=yes saved=not saved/")?;
+    Ok(())
+}
+
+#[test]
+fn leaving_a_dirty_editor_can_save_first() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<LeavingProbe>())).unwrap();
+    app.wait_for("text:/left=not left/")?;
+    app.press_key("escape")?;
+    app.wait_for("Save this card before leaving?")?;
+    app.press("role:button[Save and leave]")?;
+    app.wait_for("text:/left=yes saved=saved text!/")?;
+    Ok(())
+}
+
+#[component]
+fn CleanLeaving() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let left = signal(String::from("not left"));
+    view()
+        .gap_2()
+        .child(text(move || format!("left={}", left.get())))
+        .child(editor_full(
+            "saved text".to_owned(),
+            None,
+            std::path::PathBuf::new(),
+            None,
+            |_| {},
+            |_| Ok("unused.png".to_owned()),
+            |_| {},
+            move || left.set("yes".to_owned()),
+        ))
+}
+
+#[test]
+fn leaving_a_clean_editor_does_not_ask() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<CleanLeaving>())).unwrap();
+    app.wait_for("text:/left=not left/")?;
+    app.press_key("escape")?;
+    app.wait_for("left=yes")?;
+    assert!(!app.screen().shows("Save this card before leaving?"));
+    Ok(())
 }
