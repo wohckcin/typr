@@ -15,7 +15,7 @@ use typr_core::session::{Entry, Session};
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
-    study(Session::new(Queue::Due, entries), |_, _| true, || {})
+    study(Session::new(Queue::Due, entries), |_, _| true, || {}, || {})
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn a_grade_is_sent_out_with_its_card() {
 #[component]
 fn Refusing() -> impl IntoElement {
     typr::ui::tokens::install();
-    study(Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]), |_, _| false, || {})
+    study(Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]), |_, _| false, || {}, || {})
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn Leaving() -> impl IntoElement {
     typr::ui::tokens::install();
     let left = signal(false);
     view()
-        .child(study(Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]), |_, _| true, move || left.set(true)))
+        .child(study(Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]), |_, _| true, move || left.set(true), || {}))
         .child(text(move || format!("left={}", left.get())))
 }
 
@@ -102,7 +102,7 @@ fn escape_leaves_through_the_keymap_binding() -> Result<(), String> {
 #[component]
 fn Reverse() -> impl IntoElement {
     typr::ui::tokens::install();
-    study(Session::new(Queue::Due, vec![Entry::reverse(1, ["Question", "Answer"], 0)]), |_, _| true, || {})
+    study(Session::new(Queue::Due, vec![Entry::reverse(1, ["Question", "Answer"], 0)]), |_, _| true, || {}, || {})
 }
 
 #[test]
@@ -116,12 +116,39 @@ fn a_reverse_review_shows_the_last_side_first() -> Result<(), String> {
 #[component]
 fn Cramming() -> impl IntoElement {
     typr::ui::tokens::install();
-    study(Session::cram(vec![Entry::sides(1, ["Front", "Back"], 0)]), |_, _| true, || {})
+    study(Session::cram(vec![Entry::sides(1, ["Front", "Back"], 0)]), |_, _| true, || {}, || {})
 }
 
 #[test]
 fn a_cram_session_asks_its_cards() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<Cramming>())).unwrap();
     app.wait_for("Front")?;
+    Ok(())
+}
+
+#[component]
+fn SettingsKey() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let opened = signal(false);
+    let card = signal(String::from("none"));
+    view()
+        .child(study(
+            Session::new(Queue::Due, vec![Entry::sides(7, ["Question", "Answer"], 0)]),
+            |_, _| true,
+            || {},
+            move || {
+                card.set("card 7".to_owned());
+                opened.set(true);
+            },
+        ))
+        .child(text(move || format!("settings={} on {}", opened.get(), card.get())))
+}
+
+#[test]
+fn the_settings_key_opens_settings_from_a_session_card() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<SettingsKey>())).unwrap();
+    app.wait_for("Question")?;
+    app.press_key(",")?;
+    app.wait_for("settings=true on card 7")?;
     Ok(())
 }

@@ -4,15 +4,50 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr::screens::settings::{Values, check_new_card_cap, settings, NEW_CARD_CAP_MAX};
+use std::path::PathBuf;
+
+use typr::screens::settings::{LibraryInfo, Values, check_new_card_cap, settings, NEW_CARD_CAP_MAX};
+
+fn library() -> LibraryInfo {
+    LibraryInfo {
+        database: PathBuf::from("/tmp/typr/typr.sqlite3"),
+        schema: 12,
+        bytes: 4096,
+        attachments: PathBuf::from("/tmp/typr/attachments"),
+        logs: PathBuf::from("/tmp/typr/logs"),
+    }
+}
 
 #[component]
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let values = Values::new(20, true);
     view()
-        .child(settings(values, |_| {}))
+        .child(settings(values, library(), |_| {}, || {}, || {}))
         .child(text(move || format!("cap={}", values.cap.get())))
+}
+
+#[test]
+fn the_screen_reports_where_the_library_is() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
+    app.wait_for("text:/typr.sqlite3/")?;
+    app.wait_for("text:/attachments/")?;
+    app.wait_for(r"text:/\/tmp\/typr\/logs/")?;
+    app.wait_for("text:/Schema 12/")?;
+    app.wait_for("text:/4096 bytes/")?;
+    // Each path offers a control that shows it in the file manager.
+    app.wait_for("role:button[Show Database in the file manager]")?;
+    app.wait_for("role:button[Show Attachments in the file manager]")?;
+    app.wait_for("role:button[Show Log in the file manager]")?;
+    Ok(())
+}
+
+#[test]
+fn the_screen_offers_import_and_export() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
+    app.wait_for("role:button[Import]")?;
+    app.wait_for("role:button[Export]")?;
+    Ok(())
 }
 
 #[test]

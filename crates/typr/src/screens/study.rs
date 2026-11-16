@@ -4,10 +4,11 @@
 
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
-use typr_core::keymap::{Chord, Command, Key, Surface, chord_of};
+use typr_core::keymap::{Command, Surface};
 use typr_core::session::Session;
 use typr_core::store::{Grade, Id};
 
+use crate::screens::keymap::keystroke_of;
 use crate::ui::{
     button::{Variant, button},
     prose::prose,
@@ -30,6 +31,7 @@ pub fn study(
     session: Session,
     on_grade: impl Fn(Id, Grade) -> bool + Clone + 'static,
     on_leave: impl Fn() + Clone + 'static,
+    on_settings: impl Fn() + Clone + 'static,
 ) -> impl IntoElement {
     let session = stored(session);
     let version = signal(0_u32);
@@ -60,33 +62,37 @@ pub fn study(
     let grade_forgot = grade.clone();
     let grade_remembered = grade;
     // The keys come from the keymap table, so a rebinding moves them here too.
-    if let Some(key) = keystroke_of(Command::Reveal) {
+    if let Some(key) = keystroke_of(Surface::Session, Command::Reveal) {
         on_key(&key, move |_| reveal());
     }
-    if let Some(key) = keystroke_of(Command::GradeForgot) {
+    if let Some(key) = keystroke_of(Surface::Session, Command::GradeForgot) {
         let forgot = grade_forgot.clone();
         on_key(&key, move |_| forgot(Grade::Forgot));
     }
-    if let Some(key) = keystroke_of(Command::GradeRemembered) {
+    if let Some(key) = keystroke_of(Surface::Session, Command::GradeRemembered) {
         let remembered = grade_remembered.clone();
         on_key(&key, move |_| remembered(Grade::Remembered));
     }
-    if let Some(key) = keystroke_of(Command::Back) {
+    if let Some(key) = keystroke_of(Surface::Session, Command::Back) {
         on_key(&key, move |_| {
             session.with(|s| s.backward());
             version.update(|v| *v += 1);
         });
     }
-    if let Some(key) = keystroke_of(Command::Shuffle) {
+    if let Some(key) = keystroke_of(Surface::Session, Command::Shuffle) {
         on_key(&key, move |_| {
             let seed = SystemClock.now_ms() as u64;
             session.with(|s| s.reshuffle(seed));
             version.update(|v| *v += 1);
         });
     }
-    if let Some(key) = keystroke_of(Command::Leave) {
+    if let Some(key) = keystroke_of(Surface::Session, Command::Leave) {
         let leave = on_leave.clone();
         on_key(&key, move |_| leave());
+    }
+    if let Some(key) = keystroke_of(Surface::Session, Command::Settings) {
+        let open = on_settings.clone();
+        on_key(&key, move |_| open());
     }
     view()
         .flex_1()
@@ -135,17 +141,4 @@ pub fn study(
             let left = session.with(|s| s.remaining());
             text(format!("{left} left")).text_xs().text_color(move || tokens::muted_foreground()).into_element()
         }))
-}
-
-/// The keystroke string NSH's `on_key` takes for a command on the review surface, from the table.
-fn keystroke_of(command: Command) -> Option<String> {
-    match chord_of(Surface::Session, command)? {
-        Chord::Key(Key::Space) => Some("space".to_owned()),
-        Chord::Key(Key::Enter) => Some("enter".to_owned()),
-        Chord::Key(Key::Char(c)) => Some(c.to_string()),
-        Chord::Key(Key::Escape) => Some("escape".to_owned()),
-        Chord::Key(Key::Left) => Some("left".to_owned()),
-        Chord::Key(Key::Right) => Some("right".to_owned()),
-        _ => None,
-    }
 }

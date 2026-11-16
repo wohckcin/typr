@@ -76,3 +76,15 @@ fn a_tag_shows_under_tags_with_its_name_only() -> Result<(), String> {
     app.wait_for("verbs")?;
     Ok(())
 }
+
+#[test]
+fn the_settings_row_opens_settings_and_escape_returns() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("Settings")?;
+    app.press("Settings")?;
+    app.wait_for("Show review counts")?;
+    app.press_key("escape")?;
+    app.wait_for_gone("Show review counts", std::time::Duration::from_secs(5))?;
+    app.wait_for("Spanish")?;
+    Ok(())
+}

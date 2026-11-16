@@ -2,11 +2,16 @@
 //! accepted; a refused value keeps the previous one and names the setting and its limit.
 //!
 //! Persistence to the library database is not part of this screen: accepted values are reported
-//! through callbacks, and the caller stores them.
+//! through callbacks, and the caller stores them. The Library group reports the file itself — its
+//! path, schema version, size, the attachments folder and the log path — each with a control that
+//! shows it in the file manager, plus the import and export actions.
+
+use std::path::PathBuf;
 
 use nsh_core::prelude::*;
+use typr_core::store::Db;
 
-use crate::ui::{input::field, status::badge, toggle::toggle, tokens};
+use crate::ui::{button::{Variant, button}, input::field, status::badge, toggle::toggle, tokens};
 
 /// The most new cards a day may be asked for.
 pub const NEW_CARD_CAP_MAX: u32 = 10_000;
@@ -64,6 +69,37 @@ impl Values {
     }
 }
 
+/// Where the library keeps its files, and what the file records about itself.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LibraryInfo {
+    /// The SQLite file the library lives in.
+    pub database: PathBuf,
+    /// The schema version the file is at after this open.
+    pub schema: i64,
+    /// The file's size in bytes.
+    pub bytes: u64,
+    /// Where a card's pictures are copied.
+    pub attachments: PathBuf,
+    /// Where the app writes its log.
+    pub logs: PathBuf,
+}
+
+impl LibraryInfo {
+    /// What `db` reports about its own file. A folder or file that cannot be measured is left out of
+    /// the numbers rather than failing the screen.
+    pub fn of(db: &Db) -> Self {
+        let database = db.path().to_path_buf();
+        let bytes = std::fs::metadata(&database).map(|meta| meta.len()).unwrap_or(0);
+        Self {
+            schema: db.schema_facts().written,
+            attachments: database.parent().map(|dir| dir.join("attachments")).unwrap_or_default(),
+            logs: database.parent().map(|dir| dir.join("logs")).unwrap_or_default(),
+            database,
+            bytes,
+        }
+    }
+}
+
 fn section(name: &'static str, body: impl IntoElement) -> impl IntoElement {
     view()
         .gap_2()
@@ -71,13 +107,51 @@ fn section(name: &'static str, body: impl IntoElement) -> impl IntoElement {
         .child(body)
 }
 
-/// The settings screen over `values`. `on_change` is called with the cap in force after a change.
-pub fn settings(values: Values, on_change: impl Fn(u32) + Clone + 'static) -> impl IntoElement {
+/// One reported path: the full path, and a control that shows it in the file manager.
+fn path_row(label: &'static str, path: PathBuf) -> impl IntoElement {
+    let shown = path.display().to_string();
+    let reveal = path.clone();
+    view()
+        .gap_1()
+        .child(text(label).text_xs().text_color(move || tokens::muted_foreground()))
+        .child(
+            view()
+                .flex_row()
+                .items_center()
+                .gap_2()
+                .child(text(shown).text_sm().text_color(move || tokens::foreground()))
+                .child(button(
+                    Variant::Ghost,
+                    move || -> SharedString { format!("Show {label} in the file manager").into() },
+                    || false,
+                    move || {
+                        let path = reveal.clone();
+                        spawn(async move {
+                            let _ = reveal_path(path).await;
+                        });
+                    },
+                )),
+        )
+}
+
+/// The settings screen over `values` and the library's own file. `on_change` is called with the cap
+/// in force after a change; `on_import` and `on_export` run the caller's dialogs.
+pub fn settings(
+    values: Values,
+    library: LibraryInfo,
+    on_change: impl Fn(u32) + Clone + 'static,
+    on_import: impl Fn() + 'static,
+    on_export: impl Fn() + 'static,
+) -> impl IntoElement {
     let cap_changed = on_change.clone();
     let accept = move || {
         values.accept_cap();
         cap_changed(values.cap.get_untracked());
     };
+    let database = path_row("Database", library.database.clone());
+    let attachments = path_row("Attachments", library.attachments.clone());
+    let logs = path_row("Log", library.logs.clone());
+    let (schema, bytes) = (library.schema, library.bytes);
     view()
         .flex_1()
         .gap_4()
@@ -93,8 +167,29 @@ pub fn settings(values: Values, on_change: impl Fn(u32) + Clone + 'static) -> im
                         None => view().into_element(),
                     }
                 }))
-                .child(crate::ui::button::button(crate::ui::button::Variant::Default, "Apply", || false, accept)),
+                .child(button(Variant::Default, "Apply", || false, accept)),
         ))
         .child(section("Appearance", toggle("Show review counts", values.show_counts)))
-        .child(section("Library", text("Database, attachments and log paths are shown here.").text_sm().text_color(move || tokens::muted_foreground())))
+        .child(section(
+            "Library",
+            view()
+                .gap_3()
+                .child(database)
+                .child(attachments)
+                .child(logs)
+                .child(
+                    view()
+                        .flex_row()
+                        .gap_2()
+                        .child(badge(format!("Schema {schema}")))
+                        .child(badge(format!("{} bytes", bytes))),
+                )
+                .child(
+                    view()
+                        .flex_row()
+                        .gap_2()
+                        .child(button(Variant::Default, "Import", || false, on_import))
+                        .child(button(Variant::Default, "Export", || false, on_export)),
+                ),
+        ))
 }

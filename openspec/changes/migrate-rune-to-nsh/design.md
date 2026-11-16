@@ -117,12 +117,15 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 
 ## Task 4.6 settings/preferences
 
-- The NSH screen accepts and refuses values (limit named, previous kept). `tests/settings.rs` adds `an_accepted_cap_persists_across_a_restart` against a temp `typr_core::store::Db`, and core settings tests cover validation, corrupt values, and round-trips. UI reachability-from-session/library and "paths shown" are part of 4.10's finishing/accessibility wiring.
+- The NSH screen accepts and refuses values (limit named, previous kept), reports the library's file (`LibraryInfo::of`): database path, schema version, size, attachments folder and log path, each with a "Show … in the file manager" control that calls `reveal_path`, plus Import and Export.
+- Reachable from the library: the shell's Settings row puts the screen in the work area, and Escape returns to the library (`tests/shell.rs`). Reachable from a session: the study screen binds the Settings chord from the table to its caller's `on_settings` (`tests/study.rs`).
+- `tests/settings.rs` covers the refusal, the paths and controls, Import/Export, and `an_accepted_cap_persists_across_a_restart` against a temp `typr_core::store::Db`; core settings tests cover validation, corrupt values and round-trips.
 
 
 ## Task 4.7 keymap panel
 
-- `chord_from_keystroke` maps NSH keystroke strings to typr-core `Chord`; `keymap_panel` lists every binding of a surface with its label and chord. `tests/keymap.rs` verifies the mapping and that every binding is listed. Palette/filtering and the panel open/close toggle are shell wiring covered by 4.10.
+- `chord_from_keystroke` maps NSH keystroke strings to typr-core `Chord`; `keystroke_of` turns a table chord into the keystroke `on_key` takes, writing Shifted characters as the key they are typed on (`?` is `shift+/`). `keymap_panel` opens and closes on the surface's shortcut chord and its list narrows as the user types; `palette` narrows the surface's commands and Enter (the field's submit) runs the first left. A command the surface does not bind is never offered.
+- `tests/keymap.rs` verifies the mapping, the shifted form, the listing, the open/close toggle, filtering, and the palette's Enter run. The palette indicator is drawn before the row list: a row list of cards following it is drawn into its own subtree.
 
 ## Task 4.9 diagnostics
 
