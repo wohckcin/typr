@@ -137,11 +137,13 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - **Hover and pressed**: rows take a wash weaker than selection (`accent` at 60%) and press to the selection fill; buttons move to 85–90% opacity and ring the keyboard focus; tiles take the button's treatment through `tile_button`.
 - **The `ui` layer**: every screen builds from `crate::ui`; the source check refuses an `nsh_base` control or a literal, and the gallery test shows each component in its states.
 - **Component standards**: one height per size (buttons 32, fields 32, chips from the type scale), popups on one surface, focus rings outside the border.
-- **Other states**: focus rings on every keyboard-reachable control (rows, tiles, tabs, toggles, fields, buttons); the fold control is the one icon-only button and carries a glyph, not a label — not fixed, listed below.
+- **Other states**: focus rings on every keyboard-reachable control (rows, tiles, tabs, toggles, fields, buttons); the fold control is the one icon-only button, and it names itself for a reader ("Expand Spanish" / "Collapse Spanish") through `ui::button::button_labelled`.
 - **Motion and sound**: no motion on these screens beyond the switch thumb and the press settle; the app plays no sound.
 - **Accessibility and keyboard (blocking)**: the main task completes with the keyboard alone — Down walks the grid with a ring, Enter edits, `s`/`n` start a session, Space reveals, `j`/`f` grade, Escape returns; every control is a role with a name (checked through the AX tree and `tests/a11y.rs`); nothing relies on colour alone (the selected row is filled *and* the tiles ring).
 - **Platforms**: desktop only in this port; the web and mobile columns do not apply.
 - **Content states**: empty (Diagnostics states "No slow commands recorded"; the grid states an empty deck with the new-card action), long content truncates in tiles and scrolls in the source. Larger text and a scripted minimum window were not exercised.
+
+**This is a partial pass, not a pass.** Two checklist groups are marked blocking and were not completed on the running app: the screen reader on one target, and larger text; the "platforms and states of content" group's minimum window was not scripted either. 4.10 stays unticked until a person runs those three on a real window.
 
 Fixed from this audit: input text/placeholder/caret colour (none reached the field before), section names drawn as chips, the missing library search field, raw markdown in tile names, no default selection, rows without role/hover/pressed/focus, `Apply` at full width, and the library's keymap (selection, Enter, `s`/`n`, `c`, Backspace) with the session, its grades and a summary behind them.
 

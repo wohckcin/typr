@@ -73,7 +73,7 @@ fn a_deck_with_work_shows_its_count_and_a_quiet_one_does_not() -> Result<(), Str
 fn folding_a_deck_hides_its_children_and_keeps_its_count() -> Result<(), String> {
     let mut app = start();
     app.wait_for("Verbs")?;
-    app.press("role:button[▾]")?;
+    app.press("role:button[Collapse Spanish]")?;
     app.wait_for_gone("Verbs", std::time::Duration::from_secs(2))?;
     assert!(app.screen().shows("Spanish"));
     Ok(())
@@ -83,7 +83,7 @@ fn folding_a_deck_hides_its_children_and_keeps_its_count() -> Result<(), String>
 fn a_fold_survives_a_refresh() -> Result<(), String> {
     let mut app = start();
     app.wait_for("Verbs")?;
-    app.press("role:button[▾]")?;
+    app.press("role:button[Collapse Spanish]")?;
     app.wait_for_gone("Verbs", std::time::Duration::from_secs(2))?;
     app.press("Refresh")?;
     app.wait_for("Spanish")?;
@@ -104,5 +104,14 @@ fn the_search_row_shows_the_chord_the_keymap_binds() -> Result<(), String> {
 fn a_closed_library_is_stated() -> Result<(), String> {
     let mut app = start();
     app.wait_for("Library closed")?;
+    Ok(())
+}
+
+#[test]
+fn the_fold_chevron_names_what_it_does_and_what_it_folds() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("role:button[Collapse Spanish]")?;
+    app.press("role:button[Collapse Spanish]")?;
+    app.wait_for("role:button[Expand Spanish]")?;
     Ok(())
 }

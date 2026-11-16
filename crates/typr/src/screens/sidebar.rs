@@ -11,7 +11,7 @@ use typr_core::keymap::{Command, Surface, chord_of};
 use typr_core::store::{Id, Snapshot};
 
 use crate::ui::{
-    button::{Variant, button},
+    button::{Variant, button, button_labelled},
     choice::list_row,
     status::badge,
     tokens,
@@ -199,6 +199,7 @@ fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
     let press = key.clone();
     let fold = key.clone();
     let folded = key.clone();
+    let named_fold = key.clone();
     let mut row = view().flex_row().items_center().gap_1().child(view().flex_1().child(list_row(
         item.label.clone(),
         move || state.selected.with(|s| s.as_ref() == Some(&in_force)),
@@ -208,9 +209,15 @@ fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
         row = row.child(badge(item.due.to_string()));
     }
     if item.has_children {
-        row = row.child(button(
+        // The chevron is the one control with no words on it, so it names itself.
+        let named = item.label.clone();
+        row = row.child(button_labelled(
             Variant::Ghost,
             move || -> SharedString { if state.is_collapsed(&folded) { "▸".into() } else { "▾".into() } },
+            move || -> SharedString {
+                let action = if state.is_collapsed(&named_fold) { "Expand" } else { "Collapse" };
+                format!("{action} {named}").into()
+            },
             || false,
             move || state.toggle_collapsed(&fold),
         ));
