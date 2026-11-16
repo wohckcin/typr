@@ -315,7 +315,8 @@ impl Db {
                 }
                 // The picture, its rectangles and the caption go; the file stays in the attachments
                 // folder, and the prompt rows are retired rather than deleted, so history reads.
-                self.conn.execute("DELETE FROM mask WHERE card_id = ?1", params![card])?;
+                self.conn
+                    .execute("DELETE FROM mask WHERE card_id = ?1", params![card])?;
                 self.conn.execute(
                     "UPDATE card SET kind = 'text', image = NULL, caption = NULL, markdown = '',
                         sides = 0, search_text = '', updated_at = ?2

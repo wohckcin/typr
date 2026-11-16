@@ -12,7 +12,11 @@ fn tiles(count: i64) -> Vec<Tile> {
             id,
             preview: format!("card {id}").into(),
             hidden_sides: if id == 0 { 2 } else { 0 },
-            tags: if id == 0 { vec!["verbs".into(), "a".into(), "b".into(), "c".into()] } else { Vec::new() },
+            tags: if id == 0 {
+                vec!["verbs".into(), "a".into(), "b".into(), "c".into()]
+            } else {
+                Vec::new()
+            },
             schedule: typr::screens::grid::Schedule::New,
             pinned: false,
         })
@@ -59,7 +63,10 @@ fn a_recycled_cell_shows_the_row_it_is_given() -> Result<(), String> {
     app.wait_for("card 0")?;
     app.scroll("card 0", px(20000.0))?;
     app.wait_for("card 199")?;
-    assert!(!app.screen().shows("card 0"), "the first row is still on screen after scrolling away");
+    assert!(
+        !app.screen().shows("card 0"),
+        "the first row is still on screen after scrolling away"
+    );
     Ok(())
 }
 
@@ -77,7 +84,10 @@ fn a_new_card_is_new_and_a_studied_card_states_its_interval() {
     use typr::screens::grid::{Schedule, schedule_of};
     let day = 86_400_000;
     assert_eq!(schedule_of(0, None, 1000), Schedule::New);
-    assert_eq!(schedule_of(1, Some(1000 + 10 * day), 1000), Schedule::Interval(10));
+    assert_eq!(
+        schedule_of(1, Some(1000 + 10 * day), 1000),
+        Schedule::Interval(10)
+    );
     assert_eq!(schedule_of(1, Some(500), 1000), Schedule::Due);
 }
 
@@ -92,7 +102,10 @@ fn a_tile_never_shows_a_hidden_answer() {
 
 #[test]
 fn the_empty_deck_shows_the_binding_that_starts_a_card() {
-    let chord = typr_core::keymap::chord_of(typr_core::keymap::Surface::Library, typr_core::keymap::Command::NewCard);
+    let chord = typr_core::keymap::chord_of(
+        typr_core::keymap::Surface::Library,
+        typr_core::keymap::Command::NewCard,
+    );
     assert!(chord.is_some(), "the library binds no key to a new card");
 }
 
@@ -103,5 +116,5 @@ fn tags_past_the_tile_width_are_counted_not_drawn() {
     assert_eq!(tags_that_fit(40.0, &["verbs", "a"]), 0);
     let long = ["spanish-verbs", "irregular", "x"];
     let fit = tags_that_fit(200.0, &long);
-    assert!(fit >= 1 && fit < 3, "{fit}");
+    assert!((1..3).contains(&fit), "{fit}");
 }

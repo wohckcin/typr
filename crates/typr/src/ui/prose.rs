@@ -10,7 +10,7 @@ pub fn prose(source: impl Fn() -> SharedString + 'static) -> impl IntoElement {
     text_view()
         .markdown(move || Some(source()))
         .text_sm()
-        .text_color(move || tokens::foreground())
+        .text_color(tokens::foreground)
 }
 
 pub use nsh_base::text_view::CodeBlock;
@@ -25,6 +25,6 @@ pub fn prose_with_blocks(
         .markdown(move || Some(source.clone()))
         .gap_3()
         .text_sm()
-        .text_color(move || tokens::foreground())
+        .text_color(tokens::foreground)
         .render_code_block(move |code: &CodeBlock| block(code))
 }

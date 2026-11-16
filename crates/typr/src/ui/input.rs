@@ -30,9 +30,9 @@ pub fn field_reachable(
         .text_sm()
         .rounded(tokens::radius)
         .border_1()
-        .border_color(move || tokens::border())
-        .focus(|s| s.border_color(move || tokens::ring()))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
+        .border_color(tokens::border)
+        .focus(|s| s.border_color(tokens::ring))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
 }
 
 /// A text field that also reports each edit, for a caller that keeps the text somewhere of its own.
@@ -57,9 +57,9 @@ pub fn field_with(
         .text_sm()
         .rounded(tokens::radius)
         .border_1()
-        .border_color(move || tokens::border())
-        .focus(|s| s.border_color(move || tokens::ring()))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
+        .border_color(tokens::border)
+        .focus(|s| s.border_color(tokens::ring))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
 }
 
 /// A text field that runs `on_submit` when Return is pressed in it, for a field that commits a
@@ -84,7 +84,7 @@ pub fn submit_field(
         .text_sm()
         .rounded(tokens::radius)
         .border_1()
-        .border_color(move || tokens::border())
-        .focus(|s| s.border_color(move || tokens::ring()))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
+        .border_color(tokens::border)
+        .focus(|s| s.border_color(tokens::ring))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
 }

@@ -9,7 +9,12 @@ use super::tokens;
 
 /// A row of tabs showing which section is selected; the caller shows the panel.
 pub fn tab_row(labels: &'static [&'static str], selected: Signal<usize>) -> impl IntoElement {
-    let mut row = tabs().flex_row().gap_1().p_1().rounded(tokens::radius).bg(move || tokens::hover());
+    let mut row = tabs()
+        .flex_row()
+        .gap_1()
+        .p_1()
+        .rounded(tokens::radius)
+        .bg(tokens::hover);
     for (index, label) in labels.iter().copied().enumerate() {
         let is_selected = move || selected.get() == index;
         row = row.child(
@@ -19,17 +24,23 @@ pub fn tab_row(labels: &'static [&'static str], selected: Signal<usize>) -> impl
                 .px_3()
                 .py_1()
                 .rounded(tokens::radius)
-                .selected_style(|s| s.bg(move || tokens::card()))
-                .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
-                .child(text(label).text_sm().text_color(move || tokens::foreground())),
+                .selected_style(|s| s.bg(tokens::card))
+                .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
+                .child(text(label).text_sm().text_color(tokens::foreground)),
         );
     }
     row
 }
 
 /// One value from a list of `(value, title)` pairs; the closed control shows the chosen title.
-pub fn choose(options: &'static [(&'static str, &'static str)], chosen: Signal<Option<SharedString>>) -> impl IntoElement {
-    let items: Vec<SelectItem> = options.iter().map(|(v, t)| SelectItem::new(*v, *t)).collect();
+pub fn choose(
+    options: &'static [(&'static str, &'static str)],
+    chosen: Signal<Option<SharedString>>,
+) -> impl IntoElement {
+    let items: Vec<SelectItem> = options
+        .iter()
+        .map(|(v, t)| SelectItem::new(*v, *t))
+        .collect();
     select()
         .items(items)
         .value(move || chosen.get())
@@ -42,7 +53,7 @@ pub fn choose(options: &'static [(&'static str, &'static str)], chosen: Signal<O
                 .justify_center()
                 .rounded(tokens::radius)
                 .border_1()
-                .border_color(move || tokens::border())
+                .border_color(tokens::border)
                 .child(text(move || chosen.get().unwrap_or("Choose".into())).text_sm()),
         )
 }
@@ -52,7 +63,11 @@ pub fn choose(options: &'static [(&'static str, &'static str)], chosen: Signal<O
 /// The row is a pressable view rather than a base button: a base button made inside the sidebar's
 /// reactive list is disposed with the list's previous render, and its `disabled` prop is then read
 /// from a dead owner (the engine logs "a prop read or written after its owner was disposed").
-pub fn list_row(title: impl IntoReactive<SharedString>, selected: impl Fn() -> bool + 'static, on_press: impl Fn() + 'static) -> impl IntoElement {
+pub fn list_row(
+    title: impl IntoReactive<SharedString>,
+    selected: impl Fn() -> bool + 'static,
+    on_press: impl Fn() + 'static,
+) -> impl IntoElement {
     // A row is a control like any other: it says what it is, answers hover and press, and shows the
     // keyboard's ring while the focus is on it.
     let selected = std::rc::Rc::new(selected);
@@ -68,7 +83,7 @@ pub fn list_row(title: impl IntoReactive<SharedString>, selected: impl Fn() -> b
         .bg(move || tokens::row_fill(fill()))
         // Hover is a wash weaker than the selected fill, and pressed is the fill a selection uses.
         .hover(|style| style.bg(move || tokens::hover().opacity(0.6)))
-        .active(|style| style.bg(move || tokens::selection()))
-        .focus_visible(|style| style.outline(px(2.0)).outline_color(move || tokens::ring()))
-        .child(text(title).text_sm().text_color(move || tokens::foreground()))
+        .active(|style| style.bg(tokens::selection))
+        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
+        .child(text(title).text_sm().text_color(tokens::foreground))
 }

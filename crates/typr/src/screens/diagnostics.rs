@@ -4,7 +4,12 @@
 
 use nsh_core::prelude::*;
 
-use crate::ui::{button::{Variant, button}, overlay::toast, status::badge, surface, tokens};
+use crate::ui::{
+    button::{Variant, button},
+    overlay::toast,
+    status::badge,
+    surface, tokens,
+};
 
 /// A command the app recorded as slow.
 #[derive(Clone, Debug, PartialEq)]
@@ -17,7 +22,9 @@ pub struct SlowCommand {
 
 /// The line a stopped library worker sets. It names the stoppage, once, and is absent otherwise.
 pub fn stoppage_message(stopped: bool) -> Option<&'static str> {
-    stopped.then_some("The library work stopped; the app keeps running and later actions will report failure.")
+    stopped.then_some(
+        "The library work stopped; the app keeps running and later actions will report failure.",
+    )
 }
 
 /// The diagnostics screen. `stopped` is the failure line's state; `slow` the recorded commands;
@@ -31,11 +38,17 @@ pub fn diagnostics(
 ) -> impl IntoElement {
     let mut slow_list = view().gap_2();
     if slow.is_empty() {
-        slow_list = slow_list.child(text("No slow commands recorded").text_sm().text_color(move || tokens::muted_foreground()));
+        slow_list = slow_list.child(
+            text("No slow commands recorded")
+                .text_sm()
+                .text_color(tokens::muted_foreground),
+        );
     }
     for command in slow {
         slow_list = slow_list.child(surface::card(
-            text(format!("{} · {} ms", command.name, command.millis)).text_sm().text_color(move || tokens::foreground()),
+            text(format!("{} · {} ms", command.name, command.millis))
+                .text_sm()
+                .text_color(tokens::foreground),
         ));
     }
     view()
@@ -43,7 +56,10 @@ pub fn diagnostics(
         .gap_4()
         .p_4()
         .child(dynamic(move || match stoppage_message(stopped.get()) {
-            Some(message) => text(message).text_sm().text_color(move || tokens::destructive()).into_element(),
+            Some(message) => text(message)
+                .text_sm()
+                .text_color(tokens::destructive)
+                .into_element(),
             None => view().into_element(),
         }))
         .child(badge("Slow commands"))

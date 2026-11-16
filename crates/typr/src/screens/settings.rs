@@ -11,7 +11,13 @@ use std::path::PathBuf;
 use nsh_core::prelude::*;
 use typr_core::store::Db;
 
-use crate::ui::{button::{Variant, button}, input::field, status::badge, toggle::toggle, tokens};
+use crate::ui::{
+    button::{Variant, button},
+    input::field,
+    status::badge,
+    toggle::toggle,
+    tokens,
+};
 
 /// The most new cards a day may be asked for.
 pub const NEW_CARD_CAP_MAX: u32 = 10_000;
@@ -24,7 +30,9 @@ pub fn check_new_card_cap(text: &str) -> Result<u32, String> {
         .parse()
         .map_err(|_| format!("New cards a day must be a whole number up to {NEW_CARD_CAP_MAX}"))?;
     if value > NEW_CARD_CAP_MAX {
-        return Err(format!("New cards a day must be {NEW_CARD_CAP_MAX} or less"));
+        return Err(format!(
+            "New cards a day must be {NEW_CARD_CAP_MAX} or less"
+        ));
     }
     Ok(value)
 }
@@ -89,11 +97,19 @@ impl LibraryInfo {
     /// the numbers rather than failing the screen.
     pub fn of(db: &Db) -> Self {
         let database = db.path().to_path_buf();
-        let bytes = std::fs::metadata(&database).map(|meta| meta.len()).unwrap_or(0);
+        let bytes = std::fs::metadata(&database)
+            .map(|meta| meta.len())
+            .unwrap_or(0);
         Self {
             schema: db.schema_facts().written,
-            attachments: database.parent().map(|dir| dir.join("attachments")).unwrap_or_default(),
-            logs: database.parent().map(|dir| dir.join("logs")).unwrap_or_default(),
+            attachments: database
+                .parent()
+                .map(|dir| dir.join("attachments"))
+                .unwrap_or_default(),
+            logs: database
+                .parent()
+                .map(|dir| dir.join("logs"))
+                .unwrap_or_default(),
             database,
             bytes,
         }
@@ -105,7 +121,7 @@ fn section(name: &'static str, body: impl IntoElement) -> impl IntoElement {
     // read as an empty field.
     view()
         .gap_2()
-        .child(text(name).text_xs().text_color(move || tokens::muted_foreground()))
+        .child(text(name).text_xs().text_color(tokens::muted_foreground))
         .child(body)
 }
 
@@ -115,13 +131,13 @@ fn path_row(label: &'static str, path: PathBuf) -> impl IntoElement {
     let reveal = path.clone();
     view()
         .gap_1()
-        .child(text(label).text_xs().text_color(move || tokens::muted_foreground()))
+        .child(text(label).text_xs().text_color(tokens::muted_foreground))
         .child(
             view()
                 .flex_row()
                 .items_center()
                 .gap_2()
-                .child(text(shown).text_sm().text_color(move || tokens::foreground()))
+                .child(text(shown).text_sm().text_color(tokens::foreground))
                 .child(button(
                     Variant::Ghost,
                     move || -> SharedString { format!("Show {label} in the file manager").into() },
@@ -163,15 +179,24 @@ pub fn settings(
             view()
                 .gap_2()
                 .child(field("New cards a day", values.cap_text))
-                .child(dynamic(move || {
-                    match values.refusal.get() {
-                        Some(reason) => text(reason).text_xs().text_color(move || tokens::destructive()).into_element(),
-                        None => view().into_element(),
-                    }
+                .child(dynamic(move || match values.refusal.get() {
+                    Some(reason) => text(reason)
+                        .text_xs()
+                        .text_color(tokens::destructive)
+                        .into_element(),
+                    None => view().into_element(),
                 }))
-                .child(view().flex_row().child(button(Variant::Default, "Apply", || false, accept))),
+                .child(view().flex_row().child(button(
+                    Variant::Default,
+                    "Apply",
+                    || false,
+                    accept,
+                ))),
         ))
-        .child(section("Appearance", toggle("Show review counts", values.show_counts)))
+        .child(section(
+            "Appearance",
+            toggle("Show review counts", values.show_counts),
+        ))
         .child(section(
             "Library",
             view()

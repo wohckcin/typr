@@ -583,7 +583,10 @@ fn a_cram_session_writes_no_schedule() {
     while session.hidden() > 0 {
         assert!(session.reveal());
     }
-    assert_eq!(session.grade(Grade::Remembered), Some((1, Grade::Remembered)));
+    assert_eq!(
+        session.grade(Grade::Remembered),
+        Some((1, Grade::Remembered))
+    );
     assert!(
         session.answer_here(),
         "the grade is taken here, not sent to the store"
@@ -606,7 +609,11 @@ fn a_cram_session_repeats_what_was_forgotten() {
     session.grade(Grade::Forgot);
     assert!(session.answer_here());
     assert_eq!(session.current().map(|e| e.card), Some(2));
-    assert_eq!(session.order(), vec![2, 1], "forgotten card is queued again");
+    assert_eq!(
+        session.order(),
+        vec![2, 1],
+        "forgotten card is queued again"
+    );
     assert!(!session.finished());
 
     // Remember card 2, then the forgotten card 1 returns and must be remembered to finish.
@@ -622,6 +629,12 @@ fn a_cram_session_repeats_what_was_forgotten() {
     }
     session.grade(Grade::Remembered);
     assert!(session.answer_here());
-    assert!(session.finished(), "the run ends only after every card was remembered");
-    assert_eq!(session.grades, vec![Grade::Forgot, Grade::Remembered, Grade::Remembered]);
+    assert!(
+        session.finished(),
+        "the run ends only after every card was remembered"
+    );
+    assert_eq!(
+        session.grades,
+        vec![Grade::Forgot, Grade::Remembered, Grade::Remembered]
+    );
 }

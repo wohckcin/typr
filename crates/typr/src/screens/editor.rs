@@ -5,14 +5,14 @@
 
 use std::path::{Path, PathBuf};
 
+use nsh_core::file_dialog::OpenDialog;
 use nsh_core::prelude::*;
 use nsh_core::{TouchEvent, TouchPhase};
-use nsh_core::file_dialog::OpenDialog;
 use std::rc::Rc;
 
 use typr_core::keymap::{Command, Surface};
-use typr_core::store::{MaskRect, MaskRow};
 use typr_core::sides;
+use typr_core::store::{MaskRect, MaskRow};
 
 use crate::screens::keymap::keystroke_of;
 
@@ -39,7 +39,9 @@ pub fn attach_image(source: &Path, root: &Path) -> std::io::Result<String> {
     let name = source
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "the file has no name"))?;
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "the file has no name")
+        })?;
     std::fs::create_dir_all(root)?;
     std::fs::copy(source, root.join(name))?;
     Ok(name.to_owned())
@@ -107,7 +109,9 @@ pub fn image_references(markdown: &str) -> Vec<String> {
     while let Some(at) = rest.find("![") {
         let after = &rest[at + 2..];
         let Some(close) = after.find("](") else { break };
-        let Some(end) = after[close + 2..].find(')') else { break };
+        let Some(end) = after[close + 2..].find(')') else {
+            break;
+        };
         found.push(after[close + 2..close + 2 + end].to_owned());
         rest = &after[close + 2 + end + 1..];
     }
@@ -131,12 +135,15 @@ pub struct Diagram {
     pub rows: Vec<MaskRow>,
 }
 
-
 /// The diagram pane: the picture, a cover per rectangle labelled with its group, a drag across it
 /// that adds a rectangle to the last group, and actions that merge the picked group into one
 /// rectangle or remove the picked rectangle.
 pub fn diagram_pane(diagram: Diagram, actions: Actions) -> impl IntoElement {
-    let Diagram { image, caption, rows } = diagram;
+    let Diagram {
+        image,
+        caption,
+        rows,
+    } = diagram;
     // How large the picture is drawn, and where a finger went down on it.
     let size = signal((300.0_f32, 200.0_f32));
     let from = signal(None::<(f32, f32)>);
@@ -196,7 +203,8 @@ pub fn diagram_pane(diagram: Diagram, actions: Actions) -> impl IntoElement {
                     let ended = position.or_else(|| to.get_untracked());
                     from.set(None);
                     to.set(None);
-                    let (Some(started), Some(ended), TouchPhase::End) = (started, ended, &event.phase)
+                    let (Some(started), Some(ended), TouchPhase::End) =
+                        (started, ended, &event.phase)
                     else {
                         return;
                     };
@@ -220,7 +228,11 @@ pub fn diagram_pane(diagram: Diagram, actions: Actions) -> impl IntoElement {
                 .on_layout(move |bounds: &Bounds<Points>| {
                     size.set((bounds.size.width.0, bounds.size.height.0));
                 })
-                .child(text("diagram").text_xs().text_color(move || tokens::muted_foreground()))
+                .child(
+                    text("diagram")
+                        .text_xs()
+                        .text_color(tokens::muted_foreground),
+                )
                 .child(prose(move || format!("![]({image})").into()))
                 .child(dynamic(move || {
                     let dims = size.get();
@@ -241,7 +253,7 @@ pub fn diagram_pane(diagram: Diagram, actions: Actions) -> impl IntoElement {
                                 .h(px(height))
                                 .bg(fill)
                                 .border_1()
-                                .border_color(move || tokens::selection())
+                                .border_color(tokens::selection)
                                 .accessible(true)
                                 .label(format!("rectangle in group {}", row.group))
                                 .child(text(format!("group {}", row.group)).text_xs()),
@@ -256,24 +268,35 @@ pub fn diagram_pane(diagram: Diagram, actions: Actions) -> impl IntoElement {
             view()
                 .flex_row()
                 .gap_2()
-                .child(button(Variant::Default, "Merge group", || false, move || {
-                    let (Some(index), Some(merge)) = (picked.get_untracked(), &merge) else {
-                        return;
-                    };
-                    let group = merge_rows[index].group;
-                    let rects: Vec<MaskRect> = merge_rows
-                        .iter()
-                        .filter(|row| row.group == group)
-                        .map(|row| row.rect)
-                        .collect();
-                    merge(group, rects);
-                }))
-                .child(button(Variant::Default, "Remove group", || false, move || {
-                    let (Some(index), Some(remove)) = (picked.get_untracked(), &remove_group) else {
-                        return;
-                    };
-                    remove(remove_rows[index].group);
-                })),
+                .child(button(
+                    Variant::Default,
+                    "Merge group",
+                    || false,
+                    move || {
+                        let (Some(index), Some(merge)) = (picked.get_untracked(), &merge) else {
+                            return;
+                        };
+                        let group = merge_rows[index].group;
+                        let rects: Vec<MaskRect> = merge_rows
+                            .iter()
+                            .filter(|row| row.group == group)
+                            .map(|row| row.rect)
+                            .collect();
+                        merge(group, rects);
+                    },
+                ))
+                .child(button(
+                    Variant::Default,
+                    "Remove group",
+                    || false,
+                    move || {
+                        let (Some(index), Some(remove)) = (picked.get_untracked(), &remove_group)
+                        else {
+                            return;
+                        };
+                        remove(remove_rows[index].group);
+                    },
+                )),
         )
 }
 
@@ -288,22 +311,30 @@ pub struct Card {
 
 impl Card {
     pub fn new(saved: impl Into<String>) -> Card {
-        Card { saved: saved.into(), ..Card::default() }
+        Card {
+            saved: saved.into(),
+            ..Card::default()
+        }
     }
 }
 
 /// What the editor reports while it is open: one boxed closure per action, so a screen that mounts
 /// it passes one value and the shell supplies the store behind it.
+/// A draft report: the text as it is typed.
+pub type DraftReport = Rc<dyn Fn(&str)>;
+/// A merge of rectangles into one group.
+pub type MergeMasks = Rc<dyn Fn(u32, Vec<MaskRect>)>;
+
 #[derive(Clone, Default)]
 pub struct Actions {
     pub save: Option<Rc<dyn Fn(String)>>,
-    pub draft: Option<Rc<dyn Fn(&str)>>,
+    pub draft: Option<DraftReport>,
     pub leave: Option<Rc<dyn Fn()>>,
     /// Leaving without the draft: the in-progress text is thrown away.
     pub discard: Option<Rc<dyn Fn()>>,
     pub attach: Option<Rc<dyn Fn(PathBuf) -> std::io::Result<String>>>,
     pub add_mask: Option<Rc<dyn Fn(u32, MaskRect)>>,
-    pub merge_masks: Option<Rc<dyn Fn(u32, Vec<MaskRect>)>>,
+    pub merge_masks: Option<MergeMasks>,
     pub remove_mask: Option<Rc<dyn Fn(MaskRect)>>,
     pub remove_group: Option<Rc<dyn Fn(u32)>>,
     pub clear_diagram: Option<Rc<dyn Fn()>>,
@@ -316,23 +347,38 @@ impl Actions {
     }
 
     pub fn save(self, f: impl Fn(String) + 'static) -> Actions {
-        Actions { save: Some(Rc::new(f)), ..self }
+        Actions {
+            save: Some(Rc::new(f)),
+            ..self
+        }
     }
 
     pub fn draft(self, f: impl Fn(&str) + 'static) -> Actions {
-        Actions { draft: Some(Rc::new(f)), ..self }
+        Actions {
+            draft: Some(Rc::new(f)),
+            ..self
+        }
     }
 
     pub fn leave(self, f: impl Fn() + 'static) -> Actions {
-        Actions { leave: Some(Rc::new(f)), ..self }
+        Actions {
+            leave: Some(Rc::new(f)),
+            ..self
+        }
     }
 
     pub fn discard(self, f: impl Fn() + 'static) -> Actions {
-        Actions { discard: Some(Rc::new(f)), ..self }
+        Actions {
+            discard: Some(Rc::new(f)),
+            ..self
+        }
     }
 
     pub fn attach(self, f: impl Fn(PathBuf) -> std::io::Result<String> + 'static) -> Actions {
-        Actions { attach: Some(Rc::new(f)), ..self }
+        Actions {
+            attach: Some(Rc::new(f)),
+            ..self
+        }
     }
 
     pub fn masks(
@@ -394,7 +440,11 @@ pub fn editor_with_draft(
 ) -> impl IntoElement {
     let save = on_save.clone();
     editor_card(
-        Card { saved: saved_text, draft: draft_text, ..Card::default() },
+        Card {
+            saved: saved_text,
+            draft: draft_text,
+            ..Card::default()
+        },
         attachments,
         Actions::new()
             .save(move |text| save.clone()(text))
@@ -415,7 +465,12 @@ pub struct Template {
 /// force), the field table, the image action, and the Save/Discard/Stay question before leaving
 /// unsaved work. Every action goes to `actions`; an omitted one does nothing.
 pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyElement {
-    let Card { saved: saved_text, draft: draft_text, template, diagram } = card;
+    let Card {
+        saved: saved_text,
+        draft: draft_text,
+        template,
+        diagram,
+    } = card;
     let on_save = actions.save.clone();
     let on_leave = actions.leave.clone();
     let on_attach = actions.attach.clone();
@@ -432,7 +487,12 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
             .p_4()
             .gap_2()
             .child(diagram_pane(diagram, masks))
-            .child(button(Variant::Default, "Clear the diagram", || false, move || asked.set(true)))
+            .child(button(
+                Variant::Default,
+                "Clear the diagram",
+                || false,
+                move || asked.set(true),
+            ))
             .child(clear_question(asking_clear, move || {
                 if let Some(clear) = &clear {
                     clear();
@@ -491,33 +551,38 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
                 .flex_row()
                 .items_center()
                 .gap_2()
-                        .child(state_badge)
-                        .child({
-                            // The way back, reachable without a key: it asks what the key asks.
-                            let leaving = on_leave.clone();
-                            let asking_again = asking;
-                            let saved_now = saved;
-                            let draft_now = draft;
-                            button(Variant::Ghost, "Back", || false, move || {
-                                if draft_now.with(|d| saved_now.with(|s| d != s)) {
-                                    asking_again.set(true);
-                                    return;
-                                }
-                                if let Some(leave) = &leaving {
-                                    leave();
-                                }
-                            })
-                            .into_element()
-                        })
-                        .child(dynamic(move || {
-                            let count = prompt_count(&draft.get());
-                            let label = match count {
-                                0 => "note".to_owned(),
-                                1 => "1 prompt".to_owned(),
-                                n => format!("{n} prompts"),
-                            };
-                            badge(label).into_element()
-                        })),
+                .child(state_badge)
+                .child({
+                    // The way back, reachable without a key: it asks what the key asks.
+                    let leaving = on_leave.clone();
+                    let asking_again = asking;
+                    let saved_now = saved;
+                    let draft_now = draft;
+                    button(
+                        Variant::Ghost,
+                        "Back",
+                        || false,
+                        move || {
+                            if draft_now.with(|d| saved_now.with(|s| d != s)) {
+                                asking_again.set(true);
+                                return;
+                            }
+                            if let Some(leave) = &leaving {
+                                leave();
+                            }
+                        },
+                    )
+                    .into_element()
+                })
+                .child(dynamic(move || {
+                    let count = prompt_count(&draft.get());
+                    let label = match count {
+                        0 => "note".to_owned(),
+                        1 => "1 prompt".to_owned(),
+                        n => format!("{n} prompts"),
+                    };
+                    badge(label).into_element()
+                })),
         )
         .child(
             view()
@@ -528,132 +593,163 @@ pub fn editor_card(card: Card, attachments: PathBuf, actions: Actions) -> AnyEle
                     view()
                         .flex_1()
                         .gap_2()
-                .child(source_with(
-                    draft,
-                    move |text: &str| {
-                        if let Some(report) = &report_draft {
-                            report(text);
-                        }
-                    },
-                    Some(&source_handle),
-                ))
-                .child(button(
-                    Variant::Primary,
-                    "Save",
-                    move || draft.with(|d| !has_content(d)),
-                    move || {
-                        let text = draft.get_untracked();
-                        saved.set(text.clone());
-                        if let Some(save) = &save_text {
-                            save(text);
-                        }
-                    },
-                ))
-                .child(dynamic({
-                    let switch = actions.switch_to_diagram.clone();
-                    let attach = attach_fn.clone();
-                    move || {
-                        let (Some(switch), Some(attach)) = (switch.clone(), attach.clone()) else {
-                            return view().into_element();
-                        };
-                        if has_content(&draft.get()) {
-                            return view().into_element();
-                        }
-                        button(Variant::Default, "Make it a diagram", || false, move || {
-                            let switch = switch.clone();
-                            let attach = attach.clone();
-                            spawn(async move {
-                                let answer = pick_paths(OpenDialog::files().multiple(false)).await;
-                                let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
-                                let Some(path) = paths.and_then(|paths| paths.into_iter().next()) else {
-                                    return;
+                        .child(source_with(
+                            draft,
+                            move |text: &str| {
+                                if let Some(report) = &report_draft {
+                                    report(text);
+                                }
+                            },
+                            Some(&source_handle),
+                        ))
+                        .child(button(
+                            Variant::Primary,
+                            "Save",
+                            move || draft.with(|d| !has_content(d)),
+                            move || {
+                                let text = draft.get_untracked();
+                                saved.set(text.clone());
+                                if let Some(save) = &save_text {
+                                    save(text);
+                                }
+                            },
+                        ))
+                        .child(dynamic({
+                            let switch = actions.switch_to_diagram.clone();
+                            let attach = attach_fn.clone();
+                            move || {
+                                let (Some(switch), Some(attach)) = (switch.clone(), attach.clone())
+                                else {
+                                    return view().into_element();
                                 };
-                                if let Ok(name) = attach(path) {
-                                    switch(name);
+                                if has_content(&draft.get()) {
+                                    return view().into_element();
                                 }
-                            });
-                        })
-                        .into_element()
-                    }
-                }))
-                .child({
-                    let attach = attach_fn.clone();
-                    button(
-                        Variant::Default,
-                        "Attach image",
-                        || false,
-                        move || {
-                            let attach = attach.clone();
-                            spawn(async move {
-                                let Some(attach) = attach else { return };
-                                    let answer = pick_paths(OpenDialog::files().multiple(true)).await;
-                                    let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
-                                    let Some(path) = paths.and_then(|paths| paths.into_iter().next()) else {
-                                        return;
-                                    };
-                                    match attach(path.clone()) {
-                                        Ok(name) => {
-                                            let reference = image_reference(
-                                                path.file_stem().and_then(|s| s.to_str()).unwrap_or("image"),
-                                                &name,
-                                            );
-                                            if !source::insert_at_caret(&source_handle, &reference) {
-                                                draft.update(|text| *text = format!("{text}\n{reference}"));
+                                button(
+                                    Variant::Default,
+                                    "Make it a diagram",
+                                    || false,
+                                    move || {
+                                        let switch = switch.clone();
+                                        let attach = attach.clone();
+                                        spawn(async move {
+                                            let answer =
+                                                pick_paths(OpenDialog::files().multiple(false))
+                                                    .await;
+                                            let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
+                                            let Some(path) =
+                                                paths.and_then(|paths| paths.into_iter().next())
+                                            else {
+                                                return;
+                                            };
+                                            if let Ok(name) = attach(path) {
+                                                switch(name);
                                             }
-                                            attach_error.set(None);
+                                        });
+                                    },
+                                )
+                                .into_element()
+                            }
+                        }))
+                        .child({
+                            let attach = attach_fn.clone();
+                            button(
+                                Variant::Default,
+                                "Attach image",
+                                || false,
+                                move || {
+                                    let attach = attach.clone();
+                                    spawn(async move {
+                                        let Some(attach) = attach else { return };
+                                        let answer =
+                                            pick_paths(OpenDialog::files().multiple(true)).await;
+                                        let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
+                                        let Some(path) =
+                                            paths.and_then(|paths| paths.into_iter().next())
+                                        else {
+                                            return;
+                                        };
+                                        match attach(path.clone()) {
+                                            Ok(name) => {
+                                                let reference = image_reference(
+                                                    path.file_stem()
+                                                        .and_then(|s| s.to_str())
+                                                        .unwrap_or("image"),
+                                                    &name,
+                                                );
+                                                if !source::insert_at_caret(
+                                                    &source_handle,
+                                                    &reference,
+                                                ) {
+                                                    draft.update(|text| {
+                                                        *text = format!("{text}\n{reference}")
+                                                    });
+                                                }
+                                                attach_error.set(None);
+                                            }
+                                            Err(error) => {
+                                                attach_error.set(Some(error.to_string().into()))
+                                            }
                                         }
-                                        Err(error) => attach_error.set(Some(error.to_string().into())),
-                                    }
-                                });
-                        },
-                    )
-                })
-                .child(dynamic(move || match attach_error.get() {
-                    Some(reason) => text(reason)
-                        .text_xs()
-                        .text_color(move || tokens::destructive())
-                        .into_element(),
-                    None => view().into_element(),
-                })),
-        )
-        .child(
-            view()
-                .flex_1()
-                .gap_3()
-                .child(dynamic(move || {
-                    let root = attachments.clone();
-                    let sides_of: Vec<String> = match &preview_template {
-                        // A templated card's text is the template rendered from its fields.
-                        Some(template) => {
-                            let rendered = template_preview(&template.text, &fields.get(), template.deck.as_deref());
-                            sides::split(&rendered).iter().map(|side| side.to_string()).collect()
-                        }
-                        None => sides::split(&draft.get()).iter().map(|side| side.to_string()).collect(),
-                    };
-                    let mut column = view().gap_3();
-                    for side in sides_of {
-                        let drawn = resolve_images(&preview_of(&side), &root);
-                        column = column.child(prose(move || drawn.clone().into()));
-                    }
-                    column.into_element()
-                }))
-                .child(dynamic(move || match &template {
-                    // The field table is the card's own only when a template is in force.
-                    Some(template) => field_table(
-                        template.fields.clone(),
-                        move |name, value| {
-                            fields.update(|rows| {
-                                match rows.iter_mut().find(|(field, _)| field == name) {
-                                    Some(row) => row.1 = value.to_owned(),
-                                    None => rows.push((name.to_owned(), value.to_owned())),
+                                    });
+                                },
+                            )
+                        })
+                        .child(dynamic(move || match attach_error.get() {
+                            Some(reason) => text(reason)
+                                .text_xs()
+                                .text_color(tokens::destructive)
+                                .into_element(),
+                            None => view().into_element(),
+                        })),
+                )
+                .child(
+                    view()
+                        .flex_1()
+                        .gap_3()
+                        .child(dynamic(move || {
+                            let root = attachments.clone();
+                            let sides_of: Vec<String> = match &preview_template {
+                                // A templated card's text is the template rendered from its fields.
+                                Some(template) => {
+                                    let rendered = template_preview(
+                                        &template.text,
+                                        &fields.get(),
+                                        template.deck.as_deref(),
+                                    );
+                                    sides::split(&rendered)
+                                        .iter()
+                                        .map(|side| side.to_string())
+                                        .collect()
                                 }
-                            });
-                        },
-                    )
-                    .into_element(),
-                    None => view().into_element(),
-                }))
-        )
+                                None => sides::split(&draft.get())
+                                    .iter()
+                                    .map(|side| side.to_string())
+                                    .collect(),
+                            };
+                            let mut column = view().gap_3();
+                            for side in sides_of {
+                                let drawn = resolve_images(&preview_of(&side), &root);
+                                column = column.child(prose(move || drawn.clone().into()));
+                            }
+                            column.into_element()
+                        }))
+                        .child(dynamic(move || match &template {
+                            // The field table is the card's own only when a template is in force.
+                            Some(template) => {
+                                field_table(template.fields.clone(), move |name, value| {
+                                    fields.update(|rows| {
+                                        match rows.iter_mut().find(|(field, _)| field == name) {
+                                            Some(row) => row.1 = value.to_owned(),
+                                            None => rows.push((name.to_owned(), value.to_owned())),
+                                        }
+                                    });
+                                })
+                                .into_element()
+                            }
+                            None => view().into_element(),
+                        })),
+                ),
         )
         .child(leave_decision(asking, move |answer| match answer {
             Answer::Save => {
@@ -700,7 +796,10 @@ pub fn leaving_choice(dirty: bool) -> Leaving {
 
 /// The question before a diagram is cleared: every rectangle is thrown away and the card becomes
 /// empty text.
-pub fn clear_question(open: Signal<bool>, on_clear: impl Fn() + Clone + 'static) -> impl IntoElement {
+pub fn clear_question(
+    open: Signal<bool>,
+    on_clear: impl Fn() + Clone + 'static,
+) -> impl IntoElement {
     let keep = open;
     let clear = on_clear;
     let asked = keep;
@@ -710,27 +809,44 @@ pub fn clear_question(open: Signal<bool>, on_clear: impl Fn() + Clone + 'static)
         let confirmed = confirmed.clone();
         view()
             .gap_3()
-            .child(text("Clear this diagram?").text_sm().text_color(move || tokens::foreground()))
+            .child(
+                text("Clear this diagram?")
+                    .text_sm()
+                    .text_color(tokens::foreground),
+            )
             .child(
                 text("Its picture and every rectangle go; it is edited as text afterwards.")
                     .text_xs()
-                    .text_color(move || tokens::muted_foreground()),
+                    .text_color(tokens::muted_foreground),
             )
             .child(
                 view()
                     .flex_row()
                     .gap_2()
-                    .child(button(Variant::Destructive, "Clear", || false, move || {
-                        confirmed.clone()();
-                        asked.set(false);
-                    }))
-                    .child(button(Variant::Default, "Stay", || false, move || asked.set(false))),
+                    .child(button(
+                        Variant::Destructive,
+                        "Clear",
+                        || false,
+                        move || {
+                            confirmed.clone()();
+                            asked.set(false);
+                        },
+                    ))
+                    .child(button(
+                        Variant::Default,
+                        "Stay",
+                        || false,
+                        move || asked.set(false),
+                    )),
             )
     })
 }
 
 /// The question a dirty editor asks: save, discard, or stay. `open` false hides it; Stay closes it.
-pub fn leave_decision(open: Signal<bool>, on_answer: impl Fn(Answer) + Clone + 'static) -> impl IntoElement {
+pub fn leave_decision(
+    open: Signal<bool>,
+    on_answer: impl Fn(Answer) + Clone + 'static,
+) -> impl IntoElement {
     let save = on_answer.clone();
     let discard = on_answer;
     decision(open, move || {
@@ -739,20 +855,39 @@ pub fn leave_decision(open: Signal<bool>, on_answer: impl Fn(Answer) + Clone + '
         let discard = discard.clone();
         view()
             .gap_3()
-            .child(text("Save this card before leaving?").text_sm().text_color(move || tokens::foreground()))
+            .child(
+                text("Save this card before leaving?")
+                    .text_sm()
+                    .text_color(tokens::foreground),
+            )
             .child(
                 view()
                     .flex_row()
                     .gap_2()
-                    .child(button(Variant::Primary, "Save and leave", || false, move || {
-                        save(Answer::Save);
-                        stay.set(false);
-                    }))
-                    .child(button(Variant::Default, "Discard", || false, move || {
-                        discard(Answer::Discard);
-                        stay.set(false);
-                    }))
-                    .child(button(Variant::Ghost, "Stay", || false, move || stay.set(false))),
+                    .child(button(
+                        Variant::Primary,
+                        "Save and leave",
+                        || false,
+                        move || {
+                            save(Answer::Save);
+                            stay.set(false);
+                        },
+                    ))
+                    .child(button(
+                        Variant::Default,
+                        "Discard",
+                        || false,
+                        move || {
+                            discard(Answer::Discard);
+                            stay.set(false);
+                        },
+                    ))
+                    .child(button(
+                        Variant::Ghost,
+                        "Stay",
+                        || false,
+                        move || stay.set(false),
+                    )),
             )
     })
 }
@@ -768,7 +903,10 @@ pub struct Field {
 
 /// The fields a card's template fills from, as the editor shows them: a value per name, computed
 /// rows read-only, and `on_edit(name, value)` when the user types one.
-pub fn field_table(fields: Vec<Field>, on_edit: impl Fn(&str, &str) + Clone + 'static) -> impl IntoElement {
+pub fn field_table(
+    fields: Vec<Field>,
+    on_edit: impl Fn(&str, &str) + Clone + 'static,
+) -> impl IntoElement {
     let mut column = view().gap_2().child(badge("Fields"));
     for row in fields {
         let name = row.name.clone();
@@ -779,8 +917,12 @@ pub fn field_table(fields: Vec<Field>, on_edit: impl Fn(&str, &str) + Clone + 's
                     .flex_row()
                     .items_center()
                     .gap_2()
-                    .child(text(row.name).text_xs().text_color(move || tokens::muted_foreground()))
-                    .child(text(row.value).text_sm().text_color(move || tokens::foreground()))
+                    .child(
+                        text(row.name)
+                            .text_xs()
+                            .text_color(tokens::muted_foreground),
+                    )
+                    .child(text(row.value).text_sm().text_color(tokens::foreground))
                     .child(badge("computed")),
             );
         } else {
@@ -789,7 +931,7 @@ pub fn field_table(fields: Vec<Field>, on_edit: impl Fn(&str, &str) + Clone + 's
             column = column.child(
                 view()
                     .gap_1()
-                    .child(text(name).text_xs().text_color(move || tokens::muted_foreground()))
+                    .child(text(name).text_xs().text_color(tokens::muted_foreground))
                     .child(field_with("Value", value, move |text| edit(&edited, text))),
             );
         }
@@ -827,5 +969,10 @@ pub fn rect_from_corners(size: (f32, f32), from: (f32, f32), to: (f32, f32)) -> 
 
 /// Where a cover sits inside a pane `size` points wide, in points: `(left, top, width, height)`.
 pub fn cover_box(size: (f32, f32), rect: typr_core::store::MaskRect) -> (f32, f32, f32, f32) {
-    (rect.x * size.0, rect.y * size.1, rect.w * size.0, rect.h * size.1)
+    (
+        rect.x * size.0,
+        rect.y * size.1,
+        rect.w * size.0,
+        rect.h * size.1,
+    )
 }

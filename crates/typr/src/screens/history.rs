@@ -20,7 +20,10 @@ pub struct Record {
 
 /// The number of reviews a card has had: every record except the learning-phase ones.
 pub fn review_count(records: &[Record]) -> usize {
-    records.iter().filter(|r| r.phase.as_ref() != "learn").count()
+    records
+        .iter()
+        .filter(|r| r.phase.as_ref() != "learn")
+        .count()
 }
 
 /// The history of one card: the count, then its records newest first, or an empty state.
@@ -28,14 +31,26 @@ pub fn history(records: Vec<Record>) -> impl IntoElement {
     let count = review_count(&records);
     let mut list = view().gap_2();
     if records.is_empty() {
-        list = list.child(text("No reviews yet").text_sm().text_color(move || tokens::muted_foreground()));
+        list = list.child(
+            text("No reviews yet")
+                .text_sm()
+                .text_color(tokens::muted_foreground),
+        );
     }
     for record in records.iter().rev() {
         list = list.child(surface::card(
             view()
                 .gap_1()
-                .child(text(format!("{} · {}", record.phase, record.grade)).text_sm().text_color(move || tokens::foreground()))
-                .child(text(format!("{} · due {}", record.at, record.due)).text_xs().text_color(move || tokens::muted_foreground())),
+                .child(
+                    text(format!("{} · {}", record.phase, record.grade))
+                        .text_sm()
+                        .text_color(tokens::foreground),
+                )
+                .child(
+                    text(format!("{} · due {}", record.at, record.due))
+                        .text_xs()
+                        .text_color(tokens::muted_foreground),
+                ),
         ));
     }
     view()

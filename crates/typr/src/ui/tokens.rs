@@ -76,7 +76,9 @@ pub fn destructive() -> AdaptiveColor {
 /// A misspelled token falls back to the page, which shows as a card with no canvas rather than
 /// silently looking plausible.
 pub fn review_backdrop() -> AdaptiveColor {
-    theme().color("review-backdrop").unwrap_or(theme().background)
+    theme()
+        .color("review-backdrop")
+        .unwrap_or(theme().background)
 }
 
 /// The radius of a card surface and of a small control inside one.
@@ -95,7 +97,6 @@ pub fn row_fill(selected: bool) -> AdaptiveColor {
     if selected { hover() } else { background() }
 }
 
-
 /// The height a card tile is estimated at before it is measured: the list's scroll bar uses it.
 pub fn tile_estimate() -> Points {
     px(96.0)
@@ -110,7 +111,11 @@ pub fn grid_columns(width: f32) -> u32 {
     let gap = 8.0;
     let padding = 32.0;
     let usable = (width - padding).max(0.0);
-    ((usable + gap) / (TILE_MIN_WIDTH + gap)).floor().max(1.0) as u32
+    let columns = ((usable + gap) / (TILE_MIN_WIDTH + gap)).floor().max(1.0);
+    // A window wider than four billion tiles is not worth a cast lint: saturate at the maximum.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let whole = columns.min(u32::MAX as f32) as u32;
+    whole
 }
 
 /// Roughly how many points a character of tag text takes, and a chip's own padding.

@@ -15,16 +15,32 @@ use typr_core::session::{Entry, Session};
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
-    study(Session::new(Queue::Due, entries), |_, _, _| true, || {}, || {})
+    study(
+        Session::new(Queue::Due, entries),
+        |_, _, _| true,
+        || {},
+        || {},
+    )
 }
 
 #[test]
 fn a_prompt_becomes_the_entry_it_names() {
     use typr_core::store::{CardKind, CardSummary, MaskRect, MaskRow};
-    let sides = CardSummary { id: 1, markdown: "gato\n---\ncat".to_owned(), sides: 2, ..CardSummary::default() };
-    assert!(entry_for(&sides, "fwd", 0).is_some(), "a two-sided card asks forwards");
+    let sides = CardSummary {
+        id: 1,
+        markdown: "gato\n---\ncat".to_owned(),
+        sides: 2,
+        ..CardSummary::default()
+    };
+    assert!(
+        entry_for(&sides, "fwd", 0).is_some(),
+        "a two-sided card asks forwards"
+    );
     assert!(entry_for(&sides, "rev", 0).is_some(), "and backwards");
-    assert!(entry_for(&sides, "cloze:1", 0).is_none(), "a prompt it does not hold");
+    assert!(
+        entry_for(&sides, "cloze:1", 0).is_none(),
+        "a prompt it does not hold"
+    );
 
     let hidden = CardSummary {
         id: 2,
@@ -41,13 +57,25 @@ fn a_prompt_becomes_the_entry_it_names() {
         image: Some("plate.png".to_owned()),
         caption: Some("The heart".to_owned()),
         masks: vec![
-            MaskRow { group: 1, rect: MaskRect::new(0.1, 0.1, 0.2, 0.2) },
-            MaskRow { group: 2, rect: MaskRect::new(0.4, 0.4, 0.2, 0.2) },
+            MaskRow {
+                group: 1,
+                rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
+            },
+            MaskRow {
+                group: 2,
+                rect: MaskRect::new(0.4, 0.4, 0.2, 0.2),
+            },
         ],
         ..CardSummary::default()
     };
-    assert!(entry_for(&diagram, "mask:1", 0).is_some(), "a diagram group");
-    assert!(entry_for(&diagram, "mask:3", 0).is_none(), "a group it no longer holds");
+    assert!(
+        entry_for(&diagram, "mask:1", 0).is_some(),
+        "a diagram group"
+    );
+    assert!(
+        entry_for(&diagram, "mask:3", 0).is_none(),
+        "a group it no longer holds"
+    );
 }
 
 #[test]
@@ -85,7 +113,12 @@ fn a_grade_is_sent_out_with_its_card() {
 #[component]
 fn Refusing() -> impl IntoElement {
     typr::ui::tokens::install();
-    study(Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]), |_, _, _| false, || {}, || {})
+    study(
+        Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]),
+        |_, _, _| false,
+        || {},
+        || {},
+    )
 }
 
 #[test]
@@ -118,7 +151,12 @@ fn Leaving() -> impl IntoElement {
     typr::ui::tokens::install();
     let left = signal(false);
     view()
-        .child(study(Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]), |_, _, _| true, move || left.set(true), || {}))
+        .child(study(
+            Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]),
+            |_, _, _| true,
+            move || left.set(true),
+            || {},
+        ))
         .child(text(move || format!("left={}", left.get())))
 }
 
@@ -134,7 +172,15 @@ fn escape_leaves_through_the_keymap_binding() -> Result<(), String> {
 #[component]
 fn Reverse() -> impl IntoElement {
     typr::ui::tokens::install();
-    study(Session::new(Queue::Due, vec![Entry::reverse(1, ["Question", "Answer"], 0)]), |_, _, _| true, || {}, || {})
+    study(
+        Session::new(
+            Queue::Due,
+            vec![Entry::reverse(1, ["Question", "Answer"], 0)],
+        ),
+        |_, _, _| true,
+        || {},
+        || {},
+    )
 }
 
 #[test]
@@ -148,7 +194,12 @@ fn a_reverse_review_shows_the_last_side_first() -> Result<(), String> {
 #[component]
 fn Cramming() -> impl IntoElement {
     typr::ui::tokens::install();
-    study(Session::cram(vec![Entry::sides(1, ["Front", "Back"], 0)]), |_, _, _| true, || {}, || {})
+    study(
+        Session::cram(vec![Entry::sides(1, ["Front", "Back"], 0)]),
+        |_, _, _| true,
+        || {},
+        || {},
+    )
 }
 
 #[test]
@@ -173,7 +224,9 @@ fn SettingsKey() -> impl IntoElement {
                 opened.set(true);
             },
         ))
-        .child(text(move || format!("settings={} on {}", opened.get(), card.get())))
+        .child(text(move || {
+            format!("settings={} on {}", opened.get(), card.get())
+        }))
 }
 
 #[test]

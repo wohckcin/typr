@@ -33,8 +33,12 @@ pub fn can_reveal(session: &Session) -> bool {
 pub fn entry_for(card: &CardSummary, key: &str, overdue: i64) -> Option<Entry> {
     if let Some(group) = key.strip_prefix("mask:") {
         let group: u32 = group.parse().ok()?;
-        let masks: Vec<typr_core::store::MaskRect> =
-            card.masks.iter().filter(|row| row.group == group).map(|row| row.rect).collect();
+        let masks: Vec<typr_core::store::MaskRect> = card
+            .masks
+            .iter()
+            .filter(|row| row.group == group)
+            .map(|row| row.rect)
+            .collect();
         if masks.is_empty() {
             return None;
         }
@@ -95,9 +99,11 @@ pub fn study(
         version.update(|v| *v += 1);
     };
     let grade = move |g: Grade| {
-        let sent = session.with(|s| s.grade(g).map(|(id, grade)| (id, grade)));
+        let sent = session.with(|s| s.grade(g));
         if let Some((id, grade)) = sent {
-            let key = session.with(|s| s.prompt_of(id).map(str::to_owned)).unwrap_or_default();
+            let key = session
+                .with(|s| s.prompt_of(id).map(str::to_owned))
+                .unwrap_or_default();
             let taken = grade_out(id, key, grade);
             refused.set(!taken);
             session.with(|s| {
@@ -165,14 +171,22 @@ pub fn study(
                     .gap_3()
                     .child(badge(format!("Session complete · {reviewed} reviewed")))
                     .child(
-                        text(format!("Remembered {remembered} · Forgot {forgot} · {due} due when you started"))
-                            .text_sm()
-                            .text_color(move || tokens::foreground()),
+                        text(format!(
+                            "Remembered {remembered} · Forgot {forgot} · {due} due when you started"
+                        ))
+                        .text_sm()
+                        .text_color(tokens::foreground),
                     )
-                    .child(view().flex_row().child(button(Variant::Default, "Back to the library", || false, move || leave.clone()())))
+                    .child(view().flex_row().child(button(
+                        Variant::Default,
+                        "Back to the library",
+                        || false,
+                        move || leave.clone()(),
+                    )))
                     .into_element();
             }
-            let lines: Vec<String> = session.with(|s| s.lines().iter().map(|(t, _)| t.to_string()).collect());
+            let lines: Vec<String> =
+                session.with(|s| s.lines().iter().map(|(t, _)| t.to_string()).collect());
             let mut column = view().gap_3();
             for line in lines {
                 column = column.child(prose(move || line.clone().into()));
@@ -191,14 +205,27 @@ pub fn study(
                 let forgot = grade_forgot.clone();
                 let remembered = grade_remembered.clone();
                 row = row
-                    .child(button(Variant::Destructive, "Forgot", || false, move || forgot(Grade::Forgot)))
-                    .child(button(Variant::Default, "Remembered", || false, move || remembered(Grade::Remembered)));
+                    .child(button(
+                        Variant::Destructive,
+                        "Forgot",
+                        || false,
+                        move || forgot(Grade::Forgot),
+                    ))
+                    .child(button(
+                        Variant::Default,
+                        "Remembered",
+                        || false,
+                        move || remembered(Grade::Remembered),
+                    ));
             }
             row.into_element()
         }))
         .child(dynamic(move || {
             if refused.get() {
-                text(REFUSED).text_sm().text_color(move || tokens::destructive()).into_element()
+                text(REFUSED)
+                    .text_sm()
+                    .text_color(tokens::destructive)
+                    .into_element()
             } else {
                 view().into_element()
             }
@@ -206,6 +233,9 @@ pub fn study(
         .child(dynamic(move || {
             version.get();
             let left = session.with(|s| s.remaining());
-            text(format!("{left} left")).text_xs().text_color(move || tokens::muted_foreground()).into_element()
+            text(format!("{left} left"))
+                .text_xs()
+                .text_color(tokens::muted_foreground)
+                .into_element()
         }))
 }

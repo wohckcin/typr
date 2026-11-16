@@ -7,7 +7,14 @@ use nsh_testing::Headless;
 use typr::screens::sidebar::{Group, Item, Sidebar, sidebar};
 
 fn item(key: &'static str, label: &'static str, group: Group) -> Item {
-    Item { key: key.into(), label: label.into(), group, parent: None, due: 0, has_children: false }
+    Item {
+        key: key.into(),
+        label: label.into(),
+        group,
+        parent: None,
+        due: 0,
+        has_children: false,
+    }
 }
 
 fn fixture() -> Vec<Item> {
@@ -17,7 +24,13 @@ fn fixture() -> Vec<Item> {
     let mut verbs = item("verbs", "Verbs", Group::Decks);
     verbs.parent = Some("spanish".into());
     let biology = item("biology", "Biology", Group::Decks);
-    vec![item("all", "All cards", Group::Navigation), spanish, verbs, biology, item("settings", "Settings", Group::Utilities)]
+    vec![
+        item("all", "All cards", Group::Navigation),
+        spanish,
+        verbs,
+        biology,
+        item("settings", "Settings", Group::Utilities),
+    ]
 }
 
 #[component]
@@ -32,7 +45,12 @@ fn Probe() -> impl IntoElement {
 }
 
 fn button_refresh(state: Sidebar) -> impl IntoElement {
-    typr::ui::button::button(typr::ui::button::Variant::Ghost, "Refresh", || false, move || state.refresh(fixture()))
+    typr::ui::button::button(
+        typr::ui::button::Variant::Ghost,
+        "Refresh",
+        || false,
+        move || state.refresh(fixture()),
+    )
 }
 
 fn start() -> Headless {
@@ -65,7 +83,7 @@ fn a_deck_with_work_shows_its_count_and_a_quiet_one_does_not() -> Result<(), Str
     let mut app = start();
     app.wait_for("Spanish")?;
     assert!(app.screen().shows("1"));
-    assert!(!app.screen().texts().iter().any(|t| t.to_string() == "0"));
+    assert!(!app.screen().texts().contains(&"0"));
     Ok(())
 }
 

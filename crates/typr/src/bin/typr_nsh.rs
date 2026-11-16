@@ -9,7 +9,10 @@ fn main() -> std::process::ExitCode {
     // The log is decided before anything can fail: the level from `TYPR_LOG`, the file in the app's
     // data folder. A quit flushes it after the platform's loop returns.
     match typr::paths::data_root() {
-        Ok(root) => match typr::logging::install(&typr::paths::logs_root(&root), typr::logging::level_from_env()) {
+        Ok(root) => match typr::logging::install(
+            &typr::paths::logs_root(&root),
+            typr::logging::level_from_env(),
+        ) {
             Ok(path) => log::info!("typr starts; log at {}", path.display()),
             Err(error) => eprintln!("typr: the log could not be installed: {error}"),
         },

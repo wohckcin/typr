@@ -14,7 +14,7 @@ pub fn source(value: Signal<String>) -> impl IntoElement {
         .on_change(move |text: &SharedString| value.set(text.to_string()))
         .flex_1()
         .border_1()
-        .border_color(move || tokens::border())
+        .border_color(tokens::border)
 }
 
 /// A handle on a source editor, so a screen can type into it at its caret.
@@ -51,7 +51,7 @@ pub fn source_with(
         })
         .flex_1()
         .border_1()
-        .border_color(move || tokens::border());
+        .border_color(tokens::border);
     match handle {
         Some(handle) => source.component_ref(handle).into_element(),
         None => source.into_element(),

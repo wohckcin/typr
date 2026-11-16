@@ -7,7 +7,12 @@ use nsh_testing::Headless;
 use typr::screens::history::{Record, history, review_count};
 
 fn record(phase: &'static str, grade: &'static str, at: &'static str) -> Record {
-    Record { phase: phase.into(), grade: grade.into(), at: at.into(), due: "tomorrow".into() }
+    Record {
+        phase: phase.into(),
+        grade: grade.into(),
+        at: at.into(),
+        due: "tomorrow".into(),
+    }
 }
 
 #[component]
@@ -30,7 +35,13 @@ fn Empty() -> impl IntoElement {
 
 #[test]
 fn the_count_leaves_out_learning_records() {
-    let records = vec![record("learn", "good", "a"), record("learn", "good", "b"), record("learn", "again", "c"), record("review", "good", "d"), record("review", "easy", "e")];
+    let records = vec![
+        record("learn", "good", "a"),
+        record("learn", "good", "b"),
+        record("learn", "again", "c"),
+        record("review", "good", "d"),
+        record("review", "easy", "e"),
+    ];
     assert_eq!(review_count(&records), 2);
 }
 

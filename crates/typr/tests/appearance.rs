@@ -9,8 +9,8 @@ use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr_core::keymap::Surface;
-use typr_core::session::{Entry, Session};
 use typr_core::screen::Queue;
+use typr_core::session::{Entry, Session};
 use typr_core::store::Snapshot;
 
 use typr::screens::diagnostics::{SlowCommand, diagnostics};
@@ -33,8 +33,15 @@ where
     config.environment.color_scheme = scheme;
     let mut app = Headless::start(config).expect("the screen starts");
     app.wait_for(selector).expect("the screen draws its text");
-    let style = app.screen().span_style(selector).expect("the style resolves");
-    (style.font_size.0.to_bits(), style.font_weight, style.color.0)
+    let style = app
+        .screen()
+        .span_style(selector)
+        .expect("the style resolves");
+    (
+        style.font_size.0.to_bits(),
+        style.font_weight,
+        style.color.0,
+    )
 }
 
 /// The theme colours a screen paints its text with, as a reference the check compares against.
@@ -47,13 +54,13 @@ enum Token {
 #[component]
 fn ForegroundRef() -> impl IntoElement {
     typr::ui::tokens::install();
-    text("ref").text_color(move || typr::ui::tokens::foreground())
+    text("ref").text_color(typr::ui::tokens::foreground)
 }
 
 #[component]
 fn MutedRef() -> impl IntoElement {
     typr::ui::tokens::install();
-    text("ref").text_color(move || typr::ui::tokens::muted_foreground())
+    text("ref").text_color(typr::ui::tokens::muted_foreground)
 }
 
 /// The packed colour `token` resolves to in `scheme`, read from a text painted with it.
@@ -69,10 +76,20 @@ macro_rules! check {
     ($test:ident, $screen:expr, $root:ty, $selector:expr, $token:expr) => {
         #[test]
         fn $test() {
-            let (size_light, weight_light, colour_light) = resolved::<$root>(ColorScheme::Light, $selector);
-            let (size_dark, weight_dark, colour_dark) = resolved::<$root>(ColorScheme::Dark, $selector);
-            assert_eq!(size_light, size_dark, "{} moved its font size between appearances", $screen);
-            assert_eq!(weight_light, weight_dark, "{} moved its weight between appearances", $screen);
+            let (size_light, weight_light, colour_light) =
+                resolved::<$root>(ColorScheme::Light, $selector);
+            let (size_dark, weight_dark, colour_dark) =
+                resolved::<$root>(ColorScheme::Dark, $selector);
+            assert_eq!(
+                size_light, size_dark,
+                "{} moved its font size between appearances",
+                $screen
+            );
+            assert_eq!(
+                weight_light, weight_dark,
+                "{} moved its weight between appearances",
+                $screen
+            );
             assert_eq!(
                 colour_light,
                 expected(ColorScheme::Light, $token),
@@ -85,7 +102,11 @@ macro_rules! check {
                 "{} does not resolve to the theme colour for that role in dark",
                 $screen
             );
-            assert_ne!(colour_light, colour_dark, "{} resolved one colour in both appearances", $screen);
+            assert_ne!(
+                colour_light, colour_dark,
+                "{} resolved one colour in both appearances",
+                $screen
+            );
         }
     };
 }
@@ -136,7 +157,11 @@ fn GridScreen() -> impl IntoElement {
 #[component]
 fn EditorScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    editor("Question".to_owned(), |_| {}, |_| Ok("unused.png".to_owned()))
+    editor(
+        "Question".to_owned(),
+        |_| {},
+        |_| Ok("unused.png".to_owned()),
+    )
 }
 
 #[component]
@@ -187,7 +212,10 @@ fn DiagnosticsScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     diagnostics(
         signal(false),
-        vec![SlowCommand { name: "load deck".into(), millis: 740 }],
+        vec![SlowCommand {
+            name: "load deck".into(),
+            millis: 740,
+        }],
         signal(None),
         || {},
         || {},
@@ -200,16 +228,76 @@ fn EmbedScreen() -> impl IntoElement {
     embedded("Body of the note", Vec::new(), "Note".to_owned())
 }
 
-check!(appearance_sidebar, "sidebar", SidebarScreen, "text:All cards", Token::Foreground);
-check!(appearance_library, "library", LibraryScreen, "text:Search", Token::Foreground);
-check!(appearance_grid, "grid", GridScreen, "text:Front", Token::Foreground);
-check!(appearance_editor, "editor", EditorScreen, "text:Question >> nth=1", Token::Foreground);
-check!(appearance_study, "study", StudyScreen, "text:Question", Token::Foreground);
-check!(appearance_history, "history", HistoryScreen, "text:/review · good/", Token::Foreground);
-check!(appearance_settings, "settings", SettingsScreen, "text:Review", Token::Muted);
-check!(appearance_keymap, "keymap", KeymapScreen, "text:Review cards that are due", Token::Foreground);
-check!(appearance_diagnostics, "diagnostics", DiagnosticsScreen, "text:Slow commands", Token::Muted);
-check!(appearance_embed, "embed", EmbedScreen, "text:Body of the note", Token::Foreground);
+check!(
+    appearance_sidebar,
+    "sidebar",
+    SidebarScreen,
+    "text:All cards",
+    Token::Foreground
+);
+check!(
+    appearance_library,
+    "library",
+    LibraryScreen,
+    "text:Search",
+    Token::Foreground
+);
+check!(
+    appearance_grid,
+    "grid",
+    GridScreen,
+    "text:Front",
+    Token::Foreground
+);
+check!(
+    appearance_editor,
+    "editor",
+    EditorScreen,
+    "text:Question >> nth=1",
+    Token::Foreground
+);
+check!(
+    appearance_study,
+    "study",
+    StudyScreen,
+    "text:Question",
+    Token::Foreground
+);
+check!(
+    appearance_history,
+    "history",
+    HistoryScreen,
+    "text:/review · good/",
+    Token::Foreground
+);
+check!(
+    appearance_settings,
+    "settings",
+    SettingsScreen,
+    "text:Review",
+    Token::Muted
+);
+check!(
+    appearance_keymap,
+    "keymap",
+    KeymapScreen,
+    "text:Review cards that are due",
+    Token::Foreground
+);
+check!(
+    appearance_diagnostics,
+    "diagnostics",
+    DiagnosticsScreen,
+    "text:Slow commands",
+    Token::Muted
+);
+check!(
+    appearance_embed,
+    "embed",
+    EmbedScreen,
+    "text:Body of the note",
+    Token::Foreground
+);
 
 /// The screens checked here are exactly the ones the crate declares: adding a screen without a
 /// light/dark check fails here, by name.
@@ -227,5 +315,9 @@ fn every_screen_has_a_light_and_dark_check() {
         "sidebar",
         "study",
     ];
-    assert_eq!(checked, typr::screens::NAMES, "a screen was added without a light/dark check");
+    assert_eq!(
+        checked,
+        typr::screens::NAMES,
+        "a screen was added without a light/dark check"
+    );
 }

@@ -4,12 +4,12 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr_core::store::{MaskRect, MaskRow};
 use typr::screens::editor::{
-    Answer, Field, Leaving, attach_image, editor, editor_with_draft, field_table, has_content,
-    Actions, Card, Diagram, cover_box, editor_card, image_reference, leave_decision, leaving_choice, prompt_count, rect_from_corners, Template,
-    resolve_images, template_preview,
+    Actions, Answer, Card, Diagram, Field, Leaving, Template, attach_image, cover_box, editor,
+    editor_card, editor_with_draft, field_table, has_content, image_reference, leave_decision,
+    leaving_choice, prompt_count, rect_from_corners, resolve_images, template_preview,
 };
+use typr_core::store::{MaskRect, MaskRow};
 
 #[component]
 fn Probe() -> impl IntoElement {
@@ -65,7 +65,10 @@ fn only_text_with_something_in_it_has_content() {
 #[test]
 fn a_hidden_answer_is_previewed_masked() {
     let shown = typr::screens::editor::preview_of("The {{hormone}} is made by the {{pancreas}}.");
-    assert!(!shown.contains("hormone") && !shown.contains("pancreas"), "{shown}");
+    assert!(
+        !shown.contains("hormone") && !shown.contains("pancreas"),
+        "{shown}"
+    );
 }
 
 #[test]
@@ -77,7 +80,10 @@ fn attaching_a_picture_copies_it_and_writes_its_reference() {
     let root = dir.path().join("attachments");
     let name = attach_image(&source, &root).expect("attach");
     assert_eq!(name, "cycle.png");
-    assert!(root.join(&name).is_file(), "the picture is copied beside the library");
+    assert!(
+        root.join(&name).is_file(),
+        "the picture is copied beside the library"
+    );
     assert_eq!(image_reference("cycle", &name), "![cycle](cycle.png)");
 }
 
@@ -135,8 +141,14 @@ fn an_attachment_reference_resolves_against_the_attachments_folder() {
     );
     // A reference that escapes the folder, or is absolute, is left as written: the renderer draws
     // its placeholder instead of loading something outside the library.
-    assert_eq!(resolve_images("![x](../secret.png)", root), "![x](../secret.png)");
-    assert_eq!(resolve_images("![x](/etc/passwd)", root), "![x](/etc/passwd)");
+    assert_eq!(
+        resolve_images("![x](../secret.png)", root),
+        "![x](../secret.png)"
+    );
+    assert_eq!(
+        resolve_images("![x](/etc/passwd)", root),
+        "![x](/etc/passwd)"
+    );
     assert_eq!(resolve_images("![x](a.png)", Path::new("")), "![x](a.png)");
 }
 
@@ -190,7 +202,10 @@ fn the_leave_question_answers_save_discard_or_stay() -> Result<(), String> {
     app.wait_for("Save this card before leaving?")?;
     app.press("role:button[Discard]")?;
     app.wait_for("answered=discard")?;
-    app.wait_for_gone("Save this card before leaving?", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone(
+        "Save this card before leaving?",
+        std::time::Duration::from_secs(5),
+    )?;
     Ok(())
 }
 
@@ -203,9 +218,21 @@ fn Fields() -> impl IntoElement {
         .child(text(move || format!("edited={}", edited.get())))
         .child(field_table(
             vec![
-                Field { name: "Word".to_owned(), value: "gato".to_owned(), computed: false },
-                Field { name: "Name".to_owned(), value: "gato".to_owned(), computed: true },
-                Field { name: "Deck".to_owned(), value: "Spanish".to_owned(), computed: true },
+                Field {
+                    name: "Word".to_owned(),
+                    value: "gato".to_owned(),
+                    computed: false,
+                },
+                Field {
+                    name: "Name".to_owned(),
+                    value: "gato".to_owned(),
+                    computed: true,
+                },
+                Field {
+                    name: "Deck".to_owned(),
+                    value: "Spanish".to_owned(),
+                    computed: true,
+                },
             ],
             move |name, value| edited.set(format!("{name}={value}")),
         ))
@@ -215,7 +242,11 @@ fn Fields() -> impl IntoElement {
 fn the_field_table_types_a_value_and_shows_computed_rows_read_only() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<Fields>())).unwrap();
     app.wait_for("Fields")?;
-    assert_eq!(app.screen().count("text:/computed/")?, 2, "both computed rows say so");
+    assert_eq!(
+        app.screen().count("text:/computed/")?,
+        2,
+        "both computed rows say so"
+    );
     app.wait_for("Spanish")?;
     app.type_text("text:gato", "s")?;
     app.wait_for("text:/edited=Word=gatos/")?;
@@ -224,22 +255,46 @@ fn the_field_table_types_a_value_and_shows_computed_rows_read_only() -> Result<(
 
 #[test]
 fn a_drag_across_the_picture_makes_a_fraction_rectangle() {
-    let rect = rect_from_corners((400.0, 200.0), (200.0, 100.0), (300.0, 150.0)).expect("a rectangle");
+    let rect =
+        rect_from_corners((400.0, 200.0), (200.0, 100.0), (300.0, 150.0)).expect("a rectangle");
     assert_eq!((rect.x, rect.y), (0.5, 0.5));
     assert_eq!((rect.w, rect.h), (0.25, 0.25));
     // The same fractions hold when the pane is drawn larger.
-    assert_eq!(cover_box((800.0, 400.0), rect), (400.0, 200.0, 200.0, 100.0));
+    assert_eq!(
+        cover_box((800.0, 400.0), rect),
+        (400.0, 200.0, 200.0, 100.0)
+    );
     // A drag up and left from the same place covers the region on that side of it.
-    let up_left = rect_from_corners((400.0, 200.0), (200.0, 100.0), (100.0, 50.0)).expect("a rectangle");
-    assert_eq!((up_left.x, up_left.y, up_left.w, up_left.h), (0.25, 0.25, 0.25, 0.25));
+    let up_left =
+        rect_from_corners((400.0, 200.0), (200.0, 100.0), (100.0, 50.0)).expect("a rectangle");
+    assert_eq!(
+        (up_left.x, up_left.y, up_left.w, up_left.h),
+        (0.25, 0.25, 0.25, 0.25)
+    );
 }
 
 #[test]
 fn a_click_or_a_twitch_adds_nothing() {
-    assert_eq!(rect_from_corners((400.0, 200.0), (100.0, 100.0), (100.0, 100.0)), None, "a click");
-    assert_eq!(rect_from_corners((400.0, 200.0), (100.0, 0.0), (102.0, 100.0)), None, "narrower than one percent");
-    assert_eq!(rect_from_corners((400.0, 200.0), (0.0, 100.0), (100.0, 101.0)), None, "shorter than one percent");
-    assert_eq!(rect_from_corners((0.0, 0.0), (0.0, 0.0), (100.0, 100.0)), None, "no pane yet");
+    assert_eq!(
+        rect_from_corners((400.0, 200.0), (100.0, 100.0), (100.0, 100.0)),
+        None,
+        "a click"
+    );
+    assert_eq!(
+        rect_from_corners((400.0, 200.0), (100.0, 0.0), (102.0, 100.0)),
+        None,
+        "narrower than one percent"
+    );
+    assert_eq!(
+        rect_from_corners((400.0, 200.0), (0.0, 100.0), (100.0, 101.0)),
+        None,
+        "shorter than one percent"
+    );
+    assert_eq!(
+        rect_from_corners((0.0, 0.0), (0.0, 0.0), (100.0, 100.0)),
+        None,
+        "no pane yet"
+    );
 }
 
 #[component]
@@ -251,17 +306,28 @@ fn Templated() -> impl IntoElement {
             template: Some(Template {
                 text: "<<Word>>\n---\n<<Meaning>>".to_owned(),
                 fields: vec![
-                    Field { name: "Word".to_owned(), value: "gato".to_owned(), computed: false },
-                    Field { name: "Meaning".to_owned(), value: "cat".to_owned(), computed: false },
-                    Field { name: "Name".to_owned(), value: "gato".to_owned(), computed: true },
+                    Field {
+                        name: "Word".to_owned(),
+                        value: "gato".to_owned(),
+                        computed: false,
+                    },
+                    Field {
+                        name: "Meaning".to_owned(),
+                        value: "cat".to_owned(),
+                        computed: false,
+                    },
+                    Field {
+                        name: "Name".to_owned(),
+                        value: "gato".to_owned(),
+                        computed: true,
+                    },
                 ],
                 deck: Some("Spanish".to_owned()),
             }),
             ..Card::default()
         },
         std::path::PathBuf::from("/tmp/typr-edit/attachments"),
-        Actions::new()
-            .attach(|_| Ok("unused.png".to_owned())),
+        Actions::new().attach(|_| Ok("unused.png".to_owned())),
     ))
 }
 
@@ -271,7 +337,11 @@ fn a_templated_card_shows_its_field_table_and_previews_the_template() -> Result<
     app.wait_for("Fields")?;
     app.wait_for("gato")?;
     app.wait_for("cat")?;
-    assert_eq!(app.screen().count("text:/computed/")?, 1, "only Name is computed");
+    assert_eq!(
+        app.screen().count("text:/computed/")?,
+        1,
+        "only Name is computed"
+    );
     Ok(())
 }
 
@@ -279,7 +349,10 @@ fn a_templated_card_shows_its_field_table_and_previews_the_template() -> Result<
 fn a_card_without_a_template_shows_no_field_table() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
     app.wait_for("Question")?;
-    assert!(!app.screen().shows("Fields"), "an untemplated card has no field table");
+    assert!(
+        !app.screen().shows("Fields"),
+        "an untemplated card has no field table"
+    );
     Ok(())
 }
 
@@ -290,9 +363,15 @@ fn LeavingProbe() -> impl IntoElement {
     let saved = signal(String::from("not saved"));
     view()
         .gap_2()
-        .child(text(move || format!("left={} saved={}", left.get(), saved.get())))
+        .child(text(move || {
+            format!("left={} saved={}", left.get(), saved.get())
+        }))
         .child(editor_card(
-            Card { saved: "saved text".to_owned(), draft: Some("saved text!".to_owned()), ..Card::default() },
+            Card {
+                saved: "saved text".to_owned(),
+                draft: Some("saved text!".to_owned()),
+                ..Card::default()
+            },
             std::path::PathBuf::new(),
             Actions::new()
                 .save(move |text| saved.set(text))
@@ -308,7 +387,10 @@ fn leaving_a_dirty_editor_asks_and_stay_keeps_it() -> Result<(), String> {
     app.press_key("escape")?;
     app.wait_for("Save this card before leaving?")?;
     app.press("role:button[Stay]")?;
-    app.wait_for_gone("Save this card before leaving?", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone(
+        "Save this card before leaving?",
+        std::time::Duration::from_secs(5),
+    )?;
     app.wait_for("text:/left=not left/")?;
     Ok(())
 }
@@ -387,8 +469,14 @@ fn DiagramCard() -> impl IntoElement {
                     image: "cat.png".to_owned(),
                     caption: "the cat".to_owned(),
                     rows: vec![
-                        MaskRow { group: 1, rect: MaskRect::new(0.1, 0.1, 0.2, 0.2) },
-                        MaskRow { group: 2, rect: MaskRect::new(0.6, 0.6, 0.2, 0.2) },
+                        MaskRow {
+                            group: 1,
+                            rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
+                        },
+                        MaskRow {
+                            group: 2,
+                            rect: MaskRect::new(0.6, 0.6, 0.2, 0.2),
+                        },
                     ],
                 }),
                 ..Card::default()
@@ -396,7 +484,9 @@ fn DiagramCard() -> impl IntoElement {
             std::path::PathBuf::new(),
             Actions::new()
                 .masks(
-                    move |group, rect| added.set(format!("{group} w={:.2} x={:.2}", rect.w, rect.x)),
+                    move |group, rect| {
+                        added.set(format!("{group} w={:.2} x={:.2}", rect.w, rect.x))
+                    },
                     move |group, rects| merged.set(format!("{group} n={}", rects.len())),
                     move |rect| removed.set(format!("w={:.2}", rect.w)),
                 )
@@ -421,7 +511,10 @@ fn a_diagram_card_shows_its_picture_its_caption_and_its_groups() -> Result<(), S
 fn a_drag_across_the_pane_adds_a_rectangle_to_the_last_group() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
     app.wait_for("the cat")?;
-    let by = Point { x: px(80.0), y: px(60.0) };
+    let by = Point {
+        x: px(80.0),
+        y: px(60.0),
+    };
     app.drag("text:diagram", by)?;
     app.wait_for("text:/added=2 /")?;
     let drawn = app.screen().texts().join(" ");
@@ -433,14 +526,18 @@ fn a_drag_across_the_pane_adds_a_rectangle_to_the_last_group() -> Result<(), Str
 fn a_click_on_the_pane_adds_nothing() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
     app.wait_for("the cat")?;
-    let nowhere = Point { x: px(0.0), y: px(0.0) };
+    let nowhere = Point {
+        x: px(0.0),
+        y: px(0.0),
+    };
     app.drag("text:diagram", nowhere)?;
     app.wait_for("text:/added=none/")?;
     Ok(())
 }
 
 #[test]
-fn merging_a_picked_group_reports_its_rectangles_and_removing_it_reports_the_group() -> Result<(), String> {
+fn merging_a_picked_group_reports_its_rectangles_and_removing_it_reports_the_group()
+-> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
     app.wait_for("the cat")?;
     app.press("role:button[group 1]")?;
@@ -456,7 +553,13 @@ fn merging_a_picked_group_reports_its_rectangles_and_removing_it_reports_the_gro
 fn scratch_roles2() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<DiagramCard>())).unwrap();
     app.wait_for("the cat")?;
-    for query in ["role:image", "[the picture]", "image", "label:the picture", "role:img[the picture]"] {
+    for query in [
+        "role:image",
+        "[the picture]",
+        "image",
+        "label:the picture",
+        "role:img[the picture]",
+    ] {
         println!("{query}={:?}", app.screen().count(query));
     }
     Ok(())
@@ -566,11 +669,17 @@ fn DynamicHolder() -> impl IntoElement {
     view()
         .flex_1()
         .gap_2()
-        .child(text(move || format!("tick={} left={}", tick.get(), left.get())))
+        .child(text(move || {
+            format!("tick={} left={}", tick.get(), left.get())
+        }))
         .child(dynamic(move || {
             let _ = tick.get();
             editor_card(
-                Card { saved: "saved text".to_owned(), draft: Some("saved text!".to_owned()), ..Card::default() },
+                Card {
+                    saved: "saved text".to_owned(),
+                    draft: Some("saved text!".to_owned()),
+                    ..Card::default()
+                },
                 std::path::PathBuf::new(),
                 Actions::new()
                     .attach(|_| Ok("unused.png".to_owned()))

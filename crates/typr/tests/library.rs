@@ -8,7 +8,15 @@ use typr_core::library_view::ViewMode;
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 fn card(id: i64, deck: i64, preview: &str, pinned: bool, position: i64) -> CardSummary {
-    CardSummary { id, deck, preview: preview.to_owned(), markdown: preview.to_owned(), pinned, position, ..CardSummary::default() }
+    CardSummary {
+        id,
+        deck,
+        preview: preview.to_owned(),
+        markdown: preview.to_owned(),
+        pinned,
+        position,
+        ..CardSummary::default()
+    }
 }
 
 fn fixture() -> Snapshot {
@@ -76,7 +84,17 @@ fn pinned_cards_come_first_and_archived_cards_are_not_listed() {
     archived.archived = true;
     let mut cards = fixture().cards;
     cards.push(archived);
-    let tiles = tiles_for(&cards_in(&Snapshot { cards: cards.clone(), ..Snapshot::default() }, Some("deck:1")), "", 0);
+    let tiles = tiles_for(
+        &cards_in(
+            &Snapshot {
+                cards: cards.clone(),
+                ..Snapshot::default()
+            },
+            Some("deck:1"),
+        ),
+        "",
+        0,
+    );
     let order: Vec<&str> = tiles.iter().map(|t| t.preview.as_ref()).collect();
     assert_eq!(order, vec!["adios", "hola"]);
 }

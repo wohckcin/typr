@@ -56,7 +56,7 @@ pub fn schedule_of(reviews: u32, due_at: Option<i64>, now_ms: i64) -> Schedule {
     match due_at {
         _ if reviews == 0 || due_at.is_none() => Schedule::New,
         Some(due) if due <= now_ms => Schedule::Due,
-        Some(due) => Schedule::Interval(((due - now_ms) / DAY_MS) as u32),
+        Some(due) => Schedule::Interval(u32::try_from((due - now_ms) / DAY_MS).unwrap_or(u32::MAX)),
         None => Schedule::New,
     }
 }
@@ -96,8 +96,7 @@ pub fn plain_preview(markdown: &str) -> String {
     }
     out.push_str(rest);
     out.replace("**", "")
-        .replace('`', "")
-        .replace('*', "")
+        .replace(['`', '*'], "")
         .replace("\n", " ")
         .trim()
         .to_owned()
@@ -114,7 +113,11 @@ pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
         id: card.id,
         preview: preview.into(),
         hidden_sides: (card.sides as usize).saturating_sub(1),
-        tags: card.tags.iter().map(|t| SharedString::from(t.clone())).collect(),
+        tags: card
+            .tags
+            .iter()
+            .map(|t| SharedString::from(t.clone()))
+            .collect(),
         schedule: schedule_of(card.reviews, card.due_at, now_ms),
         pinned: card.pinned,
     }
@@ -132,29 +135,44 @@ pub fn grid(
     view().flex_1().child(dynamic(move || {
         if tiles.with(Vec::is_empty) {
             let on_new = empty_new.clone();
-            let chord = typr_core::keymap::chord_of(typr_core::keymap::Surface::Library, typr_core::keymap::Command::NewCard)
-                .map(|c| c.to_string())
-                .unwrap_or_default();
+            let chord = typr_core::keymap::chord_of(
+                typr_core::keymap::Surface::Library,
+                typr_core::keymap::Command::NewCard,
+            )
+            .map(|c| c.to_string())
+            .unwrap_or_default();
             return view()
                 .p_4()
                 .child(badge("New card"))
-                .child(text(chord).text_xs().text_color(move || tokens::muted_foreground()))
-                .child(text("This deck has no cards yet").text_sm().text_color(move || tokens::muted_foreground()))
+                .child(text(chord).text_xs().text_color(tokens::muted_foreground))
+                .child(
+                    text("This deck has no cards yet")
+                        .text_sm()
+                        .text_color(tokens::muted_foreground),
+                )
                 .child(button_new(on_new))
                 .into_element();
         }
         let open = open.clone();
-        virtual_list(move || tiles.with(Vec::len), move |at| tile_cell(tiles, at, chosen, open.clone()))
-            .columns(move || tokens::grid_columns(content_width()))
-            .keys(move || tiles.with(|t| t.iter().map(|t| t.id).collect::<Vec<_>>()))
-            .estimated_item_size(tokens::tile_estimate())
-            .flex_1()
-            .into_element()
+        virtual_list(
+            move || tiles.with(Vec::len),
+            move |at| tile_cell(tiles, at, chosen, open.clone()),
+        )
+        .columns(move || tokens::grid_columns(content_width()))
+        .keys(move || tiles.with(|t| t.iter().map(|t| t.id).collect::<Vec<_>>()))
+        .estimated_item_size(tokens::tile_estimate())
+        .flex_1()
+        .into_element()
     }))
 }
 
 fn button_new(on_new: impl Fn() + 'static) -> impl IntoElement {
-    crate::ui::button::button(crate::ui::button::Variant::Default, "New card", || false, on_new)
+    crate::ui::button::button(
+        crate::ui::button::Variant::Default,
+        "New card",
+        || false,
+        on_new,
+    )
 }
 
 /// A cell of the list. It keeps no state: every binding reads the tile at its current index.
@@ -168,12 +186,11 @@ fn tile_cell(
     let preview = move || tile.with(|t| t.as_ref().map(|t| t.preview.clone()).unwrap_or_default());
     let hidden = move || tile.with(|t| t.as_ref().map_or(0, |t| t.hidden_sides));
     let schedule = move || {
-        let label = tile.with(|t| match t.as_ref().map(|t| t.schedule) {
+        tile.with(|t| match t.as_ref().map(|t| t.schedule) {
             Some(Schedule::New) | None => "New".to_owned(),
             Some(Schedule::Interval(days)) => format!("{days} days"),
             Some(Schedule::Due) => "Due".to_owned(),
-        });
-        label
+        })
     };
     let tag_row = move || {
         let tags = tile.with(|t| t.as_ref().map(|t| t.tags.clone()).unwrap_or_default());
@@ -198,26 +215,51 @@ fn tile_cell(
     let named = move || plain_preview(&preview()).into();
     // The keyboard's card wears a ring, so Enter's target is never a guess.
     let index = at.index();
-    let ring = move || if chosen.get() == index { tokens::selection() } else { tokens::background() };
-    crate::ui::button::tile_button(named, move || press(), view().rounded(tokens::radius).border_1().border_color(ring).child(surface::card(
+    let ring = move || {
+        if chosen.get() == index {
+            tokens::selection()
+        } else {
+            tokens::background()
+        }
+    };
+    crate::ui::button::tile_button(
+        named,
+        press,
         view()
-            .gap_2()
-            .child(prose(preview))
-            .child(dynamic(move || {
-                if !tile.with(|t| t.as_ref().is_some_and(|t| t.pinned)) {
-                    return view().into_element();
-                }
-                badge("Pinned").into_element()
-            }))
-            .child(dynamic(move || {
-                let n = hidden();
-                if n == 0 {
-                    return view().into_element();
-                }
-                let label = if n == 1 { "1 hidden side".to_owned() } else { format!("{n} hidden sides") };
-                text(label).text_xs().text_color(move || tokens::muted_foreground()).into_element()
-            }))
-            .child(text(schedule).text_xs().text_color(move || tokens::muted_foreground()))
-            .child(dynamic(move || tag_row().into_element())),
-    )))
+            .rounded(tokens::radius)
+            .border_1()
+            .border_color(ring)
+            .child(surface::card(
+                view()
+                    .gap_2()
+                    .child(prose(preview))
+                    .child(dynamic(move || {
+                        if !tile.with(|t| t.as_ref().is_some_and(|t| t.pinned)) {
+                            return view().into_element();
+                        }
+                        badge("Pinned").into_element()
+                    }))
+                    .child(dynamic(move || {
+                        let n = hidden();
+                        if n == 0 {
+                            return view().into_element();
+                        }
+                        let label = if n == 1 {
+                            "1 hidden side".to_owned()
+                        } else {
+                            format!("{n} hidden sides")
+                        };
+                        text(label)
+                            .text_xs()
+                            .text_color(tokens::muted_foreground)
+                            .into_element()
+                    }))
+                    .child(
+                        text(schedule)
+                            .text_xs()
+                            .text_color(tokens::muted_foreground),
+                    )
+                    .child(dynamic(move || tag_row().into_element())),
+            )),
+    )
 }

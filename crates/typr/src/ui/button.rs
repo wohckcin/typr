@@ -43,9 +43,9 @@ pub fn button(
         .rounded(tokens::radius)
         .bg(move || fill)
         .border_1()
-        .border_color(move || tokens::border())
+        .border_color(tokens::border)
         .active(|s| s.opacity(0.85))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
         .disabled_style(|s| s.opacity(0.5))
         .child(text(label).text_sm().text_color(move || text_color))
 }
@@ -76,9 +76,9 @@ pub fn button_labelled(
         .rounded(tokens::radius)
         .bg(move || fill)
         .border_1()
-        .border_color(move || tokens::border())
+        .border_color(tokens::border)
         .active(|s| s.opacity(0.85))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
         .disabled_style(|s| s.opacity(0.5))
         .child(text(label).text_sm().text_color(move || text_color))
 }
@@ -96,7 +96,13 @@ pub fn busy_button(
     busy: impl Fn() -> bool + Copy + 'static,
     on_press: impl Fn() + 'static,
 ) -> impl IntoElement {
-    let label = move || -> SharedString { if busy() { "Working…".into() } else { idle.into() } };
+    let label = move || -> SharedString {
+        if busy() {
+            "Working…".into()
+        } else {
+            idle.into()
+        }
+    };
     button(variant, label, busy, on_press)
 }
 
@@ -112,6 +118,6 @@ pub fn tile_button(
         .accessibility_label(move || Some(label()))
         .rounded(tokens::radius)
         .active(|s| s.opacity(0.9))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(move || tokens::ring()))
+        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
         .child(child)
 }

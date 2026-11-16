@@ -30,8 +30,23 @@ fn library_info() -> LibraryInfo {
 
 fn snapshot() -> Snapshot {
     Snapshot {
-        decks: vec![Deck { id: 1, parent: None, name: "Spanish".to_owned(), archived: false, reverse: None, template: None, view: Default::default() }],
-        cards: vec![CardSummary { id: 10, deck: 1, markdown: "gato\n---\ncat".to_owned(), preview: "gato".to_owned(), sides: 2, ..CardSummary::default() }],
+        decks: vec![Deck {
+            id: 1,
+            parent: None,
+            name: "Spanish".to_owned(),
+            archived: false,
+            reverse: None,
+            template: None,
+            view: Default::default(),
+        }],
+        cards: vec![CardSummary {
+            id: 10,
+            deck: 1,
+            markdown: "gato\n---\ncat".to_owned(),
+            preview: "gato".to_owned(),
+            sides: 2,
+            ..CardSummary::default()
+        }],
         ..Snapshot::default()
     }
 }
@@ -46,7 +61,11 @@ fn LibraryScreen() -> impl IntoElement {
 fn Editor() -> impl IntoElement {
     typr::ui::tokens::install();
     view().flex_1().child(editor_card(
-        Card { saved: "gato".to_owned(), draft: Some("gato!".to_owned()), ..Card::default() },
+        Card {
+            saved: "gato".to_owned(),
+            draft: Some("gato!".to_owned()),
+            ..Card::default()
+        },
         std::path::PathBuf::new(),
         Actions::new().attach(|_| Ok("unused.png".to_owned())),
     ))
@@ -56,13 +75,23 @@ fn Editor() -> impl IntoElement {
 fn StudyScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
-    study(Session::new(Queue::Due, entries), |_, _, _| true, || {}, || {})
+    study(
+        Session::new(Queue::Due, entries),
+        |_, _, _| true,
+        || {},
+        || {},
+    )
 }
 
 #[component]
 fn HistoryScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    history(vec![Record { phase: "review".into(), grade: "good".into(), at: "10:00".into(), due: "tomorrow".into() }])
+    history(vec![Record {
+        phase: "review".into(),
+        grade: "good".into(),
+        at: "10:00".into(),
+        due: "tomorrow".into(),
+    }])
 }
 
 #[component]
@@ -76,7 +105,10 @@ fn DiagnosticsScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     diagnostics(
         signal(false),
-        vec![SlowCommand { name: "SaveCard".into(), millis: 240 }],
+        vec![SlowCommand {
+            name: "SaveCard".into(),
+            millis: 240,
+        }],
         signal(None),
         || {},
         || {},
@@ -132,7 +164,12 @@ fn the_history_screen_survives_the_keyboard() -> Result<(), String> {
 #[test]
 fn the_settings_screen_names_its_controls_and_survives_the_keyboard() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<SettingsScreen>())).unwrap();
-    for control in ["Apply", "Show Database in the file manager", "Show Attachments in the file manager", "Show Log in the file manager"] {
+    for control in [
+        "Apply",
+        "Show Database in the file manager",
+        "Show Attachments in the file manager",
+        "Show Log in the file manager",
+    ] {
         app.wait_for(&format!("role:button[{control}]"))?;
     }
     keyboard_pass(&mut app, "Schema 12")
@@ -156,7 +193,10 @@ fn escape_dismisses_the_leave_question_without_leaving() -> Result<(), String> {
     // Escape's back press reaches the overlay's cancel (`Headless::back` is what the platforms
     // send), so the question closes without the card being left.
     app.back()?;
-    app.wait_for_gone("Save this card before leaving?", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone(
+        "Save this card before leaving?",
+        std::time::Duration::from_secs(5),
+    )?;
     app.wait_for("role:button[Back]")?;
     Ok(())
 }
@@ -168,7 +208,9 @@ fn a_larger_text_size_reaches_every_screen_without_losing_a_control() -> Result<
     let mut app = Headless::start(EngineConfig::new(Root::of::<LibraryScreen>())).unwrap();
     app.wait_for("role:button[Spanish]")?;
     let normal = app.screen().span_style("text:Spanish")?.font_size;
-    app.set_environment("a larger text size", |environment| environment.font_scale = 1.5)?;
+    app.set_environment("a larger text size", |environment| {
+        environment.font_scale = 1.5
+    })?;
     app.wait_for("role:button[Spanish]")?;
     let larger = app.screen().span_style("text:Spanish")?.font_size;
     assert!(

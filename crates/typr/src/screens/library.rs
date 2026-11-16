@@ -4,13 +4,15 @@
 use nsh_core::prelude::*;
 use typr_core::store::{CardSummary, Snapshot};
 
-use super::grid::{grid, tile_of, Tile};
+use super::grid::{Tile, grid, tile_of};
 use super::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
 use crate::ui::{input::field, tokens};
 
 /// Which cards a selection shows: every live card for `all`, or the cards of one deck `deck:<id>`.
 pub fn cards_in(snapshot: &Snapshot, selection: Option<&str>) -> Vec<CardSummary> {
-    let deck: Option<i64> = selection.and_then(|key| key.strip_prefix("deck:")).and_then(|id| id.parse().ok());
+    let deck: Option<i64> = selection
+        .and_then(|key| key.strip_prefix("deck:"))
+        .and_then(|id| id.parse().ok());
     snapshot
         .cards
         .iter()
@@ -28,7 +30,10 @@ pub fn tiles_for(cards: &[CardSummary], query: &str, now_ms: i64) -> Vec<Tile> {
         .filter(|card| needle.is_empty() || card.preview.to_lowercase().contains(&needle))
         .collect();
     matching.sort_by_key(|card| (!card.pinned, card.position));
-    matching.into_iter().map(|card| tile_of(card, now_ms)).collect()
+    matching
+        .into_iter()
+        .map(|card| tile_of(card, now_ms))
+        .collect()
 }
 
 /// The library screen over `snapshot`, with the sidebar's selection choosing the cards.
@@ -54,7 +59,7 @@ pub fn library(
     view()
         .flex_1()
         .flex_row()
-        .bg(move || tokens::background())
+        .bg(tokens::background)
         .child(sidebar(state))
         .child(
             view()

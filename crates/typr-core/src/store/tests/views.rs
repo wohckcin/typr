@@ -541,7 +541,10 @@ fn a_cram_sessions_filter_can_be_kept_as_a_view_and_never_on_its_own() {
     };
     // The cram selection is the filter the drill would walk; nothing is saved yet.
     assert_eq!(cram_selection(&db, &filter), vec![1]);
-    assert!(db.snapshot().expect("snapshot").views.is_empty(), "a view is not created on its own");
+    assert!(
+        db.snapshot().expect("snapshot").views.is_empty(),
+        "a view is not created on its own"
+    );
 
     let id = match db
         .apply(
@@ -562,5 +565,9 @@ fn a_cram_sessions_filter_can_be_kept_as_a_view_and_never_on_its_own() {
     assert_eq!(views[0].id, id);
     assert_eq!(views[0].name, "Exam drill");
     assert_eq!(views[0].spec, filter, "the filter is stored unchanged");
-    assert_eq!(cram_selection(&db, &views[0].spec), vec![1], "it selects the same cards");
+    assert_eq!(
+        cram_selection(&db, &views[0].spec),
+        vec![1],
+        "it selects the same cards"
+    );
 }

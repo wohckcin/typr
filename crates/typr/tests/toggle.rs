@@ -14,7 +14,9 @@ fn Probe() -> impl IntoElement {
         .gap_2()
         .child(check("Remember", box_on))
         .child(toggle("Sound", switch_on))
-        .child(text(move || format!("box={} switch={}", box_on.get(), switch_on.get())))
+        .child(text(move || {
+            format!("box={} switch={}", box_on.get(), switch_on.get())
+        }))
 }
 
 fn start() -> Headless {

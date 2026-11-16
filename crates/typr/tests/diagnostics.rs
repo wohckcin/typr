@@ -13,7 +13,10 @@ fn Probe() -> impl IntoElement {
     let result = signal(None::<SharedString>);
     view().child(diagnostics(
         stopped,
-        vec![SlowCommand { name: "load deck".into(), millis: 740 }],
+        vec![SlowCommand {
+            name: "load deck".into(),
+            millis: 740,
+        }],
         result,
         move || result.set(Some("Imported 3 cards".into())),
         move || result.set(Some("Exported".into())),

@@ -23,8 +23,17 @@ fn fixture() -> Snapshot {
     let spanish = deck(1, None, "Spanish");
     let verbs = deck(2, Some(1), "Verbs");
     let biology = deck(3, None, "Biology");
-    let due_card = CardSummary { id: 10, deck: 2, due_at: Some(100), ..CardSummary::default() };
-    Snapshot { decks: vec![spanish, verbs, biology], cards: vec![due_card], ..Snapshot::default() }
+    let due_card = CardSummary {
+        id: 10,
+        deck: 2,
+        due_at: Some(100),
+        ..CardSummary::default()
+    };
+    Snapshot {
+        decks: vec![spanish, verbs, biology],
+        cards: vec![due_card],
+        ..Snapshot::default()
+    }
 }
 
 #[component]
@@ -66,7 +75,11 @@ fn a_tag_shows_under_tags_with_its_name_only() -> Result<(), String> {
     fn Tagged() -> impl IntoElement {
         typr::ui::tokens::install();
         let snapshot = Snapshot {
-            cards: vec![CardSummary { id: 1, tags: vec!["spanish/verbs".to_owned()], ..CardSummary::default() }],
+            cards: vec![CardSummary {
+                id: 1,
+                tags: vec!["spanish/verbs".to_owned()],
+                ..CardSummary::default()
+            }],
             ..Snapshot::default()
         };
         typr::shell::shell(snapshot, true)
@@ -96,14 +109,20 @@ fn library_on_disk(name: &str) -> std::path::PathBuf {
     std::fs::create_dir_all(&root).unwrap();
     let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
     let deck = match db.apply(
-        &typr_core::store::Command::CreateDeck { parent: None, name: "Spanish".to_owned() },
+        &typr_core::store::Command::CreateDeck {
+            parent: None,
+            name: "Spanish".to_owned(),
+        },
         0,
     ) {
         Ok(typr_core::store::Outcome::Deck(id)) => id,
         other => panic!("deck: {other:?}"),
     };
     db.apply(
-        &typr_core::store::Command::CreateCard { deck, markdown: "gato\n---\ncat".to_owned() },
+        &typr_core::store::Command::CreateCard {
+            deck,
+            markdown: "gato\n---\ncat".to_owned(),
+        },
         0,
     )
     .unwrap();
@@ -135,7 +154,10 @@ fn diagram_on_disk(name: &str) -> std::path::PathBuf {
     std::fs::create_dir_all(&root).unwrap();
     let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
     let deck = match db.apply(
-        &typr_core::store::Command::CreateDeck { parent: None, name: "Biology".to_owned() },
+        &typr_core::store::Command::CreateDeck {
+            parent: None,
+            name: "Biology".to_owned(),
+        },
         0,
     ) {
         Ok(typr_core::store::Outcome::Deck(id)) => id,
@@ -162,7 +184,10 @@ fn a_drag_on_a_diagram_card_writes_its_rectangle_to_the_library() -> Result<(), 
     app.wait_for("the cell")?;
     app.press("role:button[the cell]")?;
     app.wait_for("diagram")?;
-    let by = Point { x: px(80.0), y: px(60.0) };
+    let by = Point {
+        x: px(80.0),
+        y: px(60.0),
+    };
     app.drag("text:diagram", by)?;
     app.wait_for("group 1")?;
     // The editor writes through the store, so a second look at the library file sees the rectangle.
@@ -170,7 +195,10 @@ fn a_drag_on_a_diagram_card_writes_its_rectangle_to_the_library() -> Result<(), 
     let mut masks = Vec::new();
     for _ in 0..40 {
         let cards = reader.snapshot().unwrap().cards;
-        masks = cards.first().map(|card| card.masks.clone()).unwrap_or_default();
+        masks = cards
+            .first()
+            .map(|card| card.masks.clone())
+            .unwrap_or_default();
         if !masks.is_empty() {
             break;
         }
@@ -195,9 +223,22 @@ fn clearing_a_diagram_turns_the_card_into_text_in_the_library() -> Result<(), St
     app.wait_for("Save")?;
     app.wait_for_gone("Clear the diagram", std::time::Duration::from_secs(5))?;
     let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
-    let card = reader.snapshot().unwrap().cards.first().cloned().expect("the card");
-    assert_eq!(card.kind, typr_core::store::CardKind::Text, "the library holds a text card now");
-    assert!(card.image.is_none() && card.masks.is_empty(), "the picture and rectangles are gone");
+    let card = reader
+        .snapshot()
+        .unwrap()
+        .cards
+        .first()
+        .cloned()
+        .expect("the card");
+    assert_eq!(
+        card.kind,
+        typr_core::store::CardKind::Text,
+        "the library holds a text card now"
+    );
+    assert!(
+        card.image.is_none() && card.masks.is_empty(),
+        "the picture and rectangles are gone"
+    );
     Ok(())
 }
 
@@ -216,7 +257,10 @@ fn a_draft_survives_a_restart_until_it_is_discarded() -> Result<(), String> {
     app.press("role:button[Back]")?;
     app.wait_for("Save this card before leaving?")?;
     app.press("role:button[Stay]")?;
-    app.wait_for_gone("Save this card before leaving?", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone(
+        "Save this card before leaving?",
+        std::time::Duration::from_secs(5),
+    )?;
     drop(app);
 
     // A second launch opens on the draft it left behind, marked unsaved.
@@ -256,7 +300,10 @@ fn the_diagnostics_row_opens_the_screen_with_both_transfer_entry_points() -> Res
     app.wait_for("Import")?;
     app.wait_for("Export")?;
     app.press_key("escape")?;
-    app.wait_for_gone("No slow commands recorded", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone(
+        "No slow commands recorded",
+        std::time::Duration::from_secs(5),
+    )?;
     Ok(())
 }
 
@@ -265,14 +312,23 @@ fn an_export_opens_as_a_library_and_a_foreign_file_is_refused_by_name() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let db = typr_core::store::Db::open(&dir.path().join("typr.sqlite3")).expect("the library");
     let deck = match db
-        .apply(&typr_core::store::Command::CreateDeck { parent: None, name: "Spanish".to_owned() }, 0)
+        .apply(
+            &typr_core::store::Command::CreateDeck {
+                parent: None,
+                name: "Spanish".to_owned(),
+            },
+            0,
+        )
         .expect("deck")
     {
         typr_core::store::Outcome::Deck(id) => id,
         other => panic!("deck: {other:?}"),
     };
     db.apply(
-        &typr_core::store::Command::CreateCard { deck, markdown: "gato\n---\ncat".to_owned() },
+        &typr_core::store::Command::CreateCard {
+            deck,
+            markdown: "gato\n---\ncat".to_owned(),
+        },
         0,
     )
     .expect("card");
@@ -281,19 +337,34 @@ fn an_export_opens_as_a_library_and_a_foreign_file_is_refused_by_name() {
     let line = typr::shell::export_to(&db, &target);
     assert_eq!(line, format!("Exported to {}", target.display()));
     assert_eq!(
-        typr_core::store::Db::open(&target).expect("the export opens").snapshot().expect("snapshot").cards.len(),
+        typr_core::store::Db::open(&target)
+            .expect("the export opens")
+            .snapshot()
+            .expect("snapshot")
+            .cards
+            .len(),
         1,
         "the export reopens as a library with the card in it"
     );
     // Exporting again to the same path is refused rather than overwriting the earlier export.
-    assert!(typr::shell::export_to(&db, &target).contains("already exists") || typr::shell::export_to(&db, &target).contains("exists"));
+    assert!(
+        typr::shell::export_to(&db, &target).contains("already exists")
+            || typr::shell::export_to(&db, &target).contains("exists")
+    );
 
     // A file the transfer cannot recognise is refused, and the line names it.
     let foreign = dir.path().join("holiday.zip");
     std::fs::write(&foreign, b"not an archive").expect("the file");
     let refused = typr::shell::import_from(&db, &foreign, dir.path());
-    assert!(refused.contains("holiday.zip"), "the line names the file: {refused}");
-    assert_eq!(db.snapshot().expect("snapshot").cards.len(), 1, "nothing was written");
+    assert!(
+        refused.contains("holiday.zip"),
+        "the line names the file: {refused}"
+    );
+    assert_eq!(
+        db.snapshot().expect("snapshot").cards.len(),
+        1,
+        "nothing was written"
+    );
 }
 
 #[test]
@@ -341,8 +412,17 @@ fn a_due_session_opens_from_the_library_and_grades_back_to_the_store() -> Result
     app.wait_for("text:/Session complete · 1 reviewed/")?;
     // The grade reached the store: the card has a review recorded through the shell.
     let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
-    let card = reader.snapshot().unwrap().cards.first().cloned().expect("the card");
+    let card = reader
+        .snapshot()
+        .unwrap()
+        .cards
+        .first()
+        .cloned()
+        .expect("the card");
     let reviews = reader.review_count(card.id).expect("the reviews");
-    assert!(reviews >= 1, "the session's grade was written through the shell: {reviews}");
+    assert!(
+        reviews >= 1,
+        "the session's grade was written through the shell: {reviews}"
+    );
     Ok(())
 }

@@ -10,8 +10,8 @@ pub fn badge(label: impl IntoReactive<SharedString>) -> impl IntoElement {
         .px_2()
         .rounded(tokens::radius)
         .border_1()
-        .border_color(move || tokens::border())
-        .child(text(label).text_xs().text_color(move || tokens::muted_foreground()))
+        .border_color(tokens::border)
+        .child(text(label).text_xs().text_color(tokens::muted_foreground))
 }
 
 /// What a screen shows when it has nothing: what is missing, and the action that fills it.
@@ -20,18 +20,22 @@ pub fn empty(message: &'static str, action: impl IntoElement) -> impl IntoElemen
         .p_6()
         .gap_3()
         .items_center()
-        .child(text(message).text_color(move || tokens::muted_foreground()))
+        .child(text(message).text_color(tokens::muted_foreground))
         .child(action)
 }
 
 /// A pulsing placeholder of a known shape while content loads.
 pub fn skeleton() -> impl IntoElement {
-    view().h(px(16.0)).w(px(160.0)).rounded(tokens::radius).bg(move || tokens::hover())
+    view()
+        .h(px(16.0))
+        .w(px(160.0))
+        .rounded(tokens::radius)
+        .bg(tokens::hover)
 }
 
 /// Reserved for an indeterminate wait: a control that is working, not a decoration.
 pub fn spinner_label(label: &'static str) -> impl IntoElement {
-    text(label).text_sm().text_color(move || tokens::muted_foreground())
+    text(label).text_sm().text_color(tokens::muted_foreground)
 }
 
 /// A key's name, drawn as a small keycap.
@@ -40,6 +44,6 @@ pub fn keycap(chord: impl IntoReactive<SharedString>) -> impl IntoElement {
         .px_2()
         .rounded(tokens::radius)
         .border_1()
-        .border_color(move || tokens::border())
-        .child(text(chord).text_xs().text_color(move || tokens::muted_foreground()))
+        .border_color(tokens::border)
+        .child(text(chord).text_xs().text_color(tokens::muted_foreground))
 }

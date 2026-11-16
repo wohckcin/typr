@@ -8,7 +8,11 @@
 use nsh_core::prelude::*;
 use typr_core::keymap::{Binding, Chord, Command, Key, Mods, Surface, bindings_of, chord_of};
 
-use crate::ui::{input::{field, submit_field}, status::keycap, surface, tokens};
+use crate::ui::{
+    input::{field, submit_field},
+    status::keycap,
+    surface, tokens,
+};
 
 /// Reads an NSH keystroke string into a chord. `mod` is Command on Apple platforms and Control
 /// elsewhere, as NSH defines it; `None` for a stroke the table cannot hold.
@@ -73,7 +77,11 @@ fn shift_base(c: char) -> Option<&'static str> {
         '>' => ".",
         '?' => "/",
         '~' => "`",
-        'A'..='Z' => return Some(Box::leak(c.to_ascii_lowercase().to_string().into_boxed_str())),
+        'A'..='Z' => {
+            return Some(Box::leak(
+                c.to_ascii_lowercase().to_string().into_boxed_str(),
+            ));
+        }
         _ => return None,
     })
 }
@@ -130,14 +138,19 @@ pub fn keystroke_of_chord(chord: Chord) -> Option<String> {
         Chord::Key(Key::Up) => Some("up".to_owned()),
         Chord::Key(Key::Down) => Some("down".to_owned()),
         Chord::Key(Key::Backspace) => Some("backspace".to_owned()),
-        Chord::Modified { key: Key::Char(c), mods } => Some(char_keystroke(c, mods)),
+        Chord::Modified {
+            key: Key::Char(c),
+            mods,
+        } => Some(char_keystroke(c, mods)),
         _ => None,
     }
 }
 
 /// The rows the panel shows for `surface`: the command's label and the chord it is bound to.
 pub fn rows(surface: Surface) -> Vec<(&'static str, String)> {
-    bindings_of(surface).map(|b: &Binding| (b.command.label(), b.chord.to_string())).collect()
+    bindings_of(surface)
+        .map(|b: &Binding| (b.command.label(), b.chord.to_string()))
+        .collect()
 }
 
 /// The rows whose label contains `query`, ignoring case; the whole list when it is empty.
@@ -152,7 +165,11 @@ pub fn visible_rows(surface: Surface, query: &str) -> Vec<(&'static str, String)
 fn row_views(rows: Vec<(&'static str, String)>) -> impl IntoElement {
     let mut list = view().gap_2();
     if rows.is_empty() {
-        list = list.child(text("No matching command").text_sm().text_color(move || tokens::muted_foreground()));
+        list = list.child(
+            text("No matching command")
+                .text_sm()
+                .text_color(tokens::muted_foreground),
+        );
     }
     for (label, chord) in rows {
         list = list.child(surface::card(
@@ -160,7 +177,7 @@ fn row_views(rows: Vec<(&'static str, String)>) -> impl IntoElement {
                 .flex_row()
                 .justify_between()
                 .items_center()
-                .child(text(label).text_sm().text_color(move || tokens::foreground()))
+                .child(text(label).text_sm().text_color(tokens::foreground))
                 .child(keycap(chord)),
         ));
     }
@@ -182,7 +199,9 @@ pub fn keymap_panel(surface: Surface) -> impl IntoElement {
         view()
             .gap_3()
             .child(field("Filter commands", query))
-            .child(dynamic(move || row_views(visible_rows(surface, &query.get())).into_element()))
+            .child(dynamic(move || {
+                row_views(visible_rows(surface, &query.get())).into_element()
+            }))
             .into_element()
     }))
 }
@@ -190,7 +209,10 @@ pub fn keymap_panel(surface: Surface) -> impl IntoElement {
 /// The palette for `surface`: typing a query narrows the surface's commands, and Enter runs the
 /// first one left. A command the surface does not bind is never offered, because the list comes
 /// from the one binding table.
-pub fn palette(surface: Surface, on_run: impl Fn(&'static str) + Clone + 'static) -> impl IntoElement {
+pub fn palette(
+    surface: Surface,
+    on_run: impl Fn(&'static str) + Clone + 'static,
+) -> impl IntoElement {
     let query = signal(String::new());
     let typing = query;
     let run = on_run.clone();
@@ -199,7 +221,10 @@ pub fn palette(surface: Surface, on_run: impl Fn(&'static str) + Clone + 'static
         .gap_3()
         .p_4()
         .child(submit_field("Run a command", query, move |_| {
-            if let Some((label, _)) = visible_rows(surface, &typing.get_untracked()).into_iter().next() {
+            if let Some((label, _)) = visible_rows(surface, &typing.get_untracked())
+                .into_iter()
+                .next()
+            {
                 run(label);
             }
         }))
@@ -207,7 +232,11 @@ pub fn palette(surface: Surface, on_run: impl Fn(&'static str) + Clone + 'static
             let rows = visible_rows(surface, &query.get());
             let mut list = view().gap_2();
             if rows.is_empty() {
-                list = list.child(text("No matching command").text_sm().text_color(move || tokens::muted_foreground()));
+                list = list.child(
+                    text("No matching command")
+                        .text_sm()
+                        .text_color(tokens::muted_foreground),
+                );
             }
             for (label, chord) in rows {
                 list = list.child(surface::card(
@@ -215,7 +244,7 @@ pub fn palette(surface: Surface, on_run: impl Fn(&'static str) + Clone + 'static
                         .flex_row()
                         .justify_between()
                         .items_center()
-                        .child(text(label).text_sm().text_color(move || tokens::foreground()))
+                        .child(text(label).text_sm().text_color(tokens::foreground))
                         .child(keycap(chord)),
                 ));
             }

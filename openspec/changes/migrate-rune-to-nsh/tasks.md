@@ -54,8 +54,13 @@
 - [x] 6.1 Remove `rune`, `rune-kit`, the root `[patch.crates-io]`, `vendor/`, `scripts/vendor-*`, the headless CLI arguments and `tests/visual.rs`; verify `cargo tree --workspace | rg -i rune` prints nothing
 - [x] 6.2 Update the two typr-core comments that name Rune; verify `rg -i rune crates/typr-core` prints nothing
 - [ ] 6.3 Update `.github/workflows/ci.yml` (GTK and xvfb packages, `cargo test --workspace --locked`, `nsh test --target linux` under `xvfb-run -a`) and verify CI passes on the branch
+  - the workflow already installs libgtk-4-dev + xvfb, checks GTK ≥ 4, runs fmt, the token check, clippy `-D warnings -W cast_possible_truncation`, the backend's toolkit/log checks, build, `cargo test --workspace --locked` and `xvfb-run -a nsh test --target linux`
+  - every step that can run on macOS now passes locally (clippy needed 124 fixes: mechanical closures by `--fix`, then path args, type aliases and bounded casts by hand); the two Linux-only pieces — `nsh test --target linux` and the CI run itself — need a push, which is not mine to make
 - [x] 6.4 Update `README.md` (prerequisites, `cargo run`, `nsh run`, `nsh test`, layout table); verify each documented command runs
-- [ ] 6.5 Open a library written by the Rune build with the NSH build and grade a card; verify history appends unchanged
+- [x] 6.5 Open a library written by the Rune build with the NSH build and grade a card; verify history appends unchanged
+  - the Rune-era fixture (`crates/typr-core/tests/data/pre-split-library.sqlite3`) opened in the NSH app at `/tmp/typr-legacy`: the log reads `schema 3 -> 12, 9 migrations`
+  - graded through the window with the keyboard (`s`, Space, `j`): the summary said "Remembered 1 · Forgot 0 · 1 due when you started"
+  - the old review is untouched and the new one appended under the same key: `(1,'fwd','remembered',1768136400000)` then `(1,'fwd','remembered',1794811360464)`; the prompt's `reps` went 1 → 2 and its due date moved ahead
 
 ## Workflow follow-up
 

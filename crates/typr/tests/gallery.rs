@@ -27,37 +27,76 @@ fn Gallery() -> impl IntoElement {
     let ticked = signal(false);
     let sound = signal(false);
     let saving = signal(false);
-    let commands: Vec<(&'static str, Box<dyn Fn()>)> = vec![(
-        "Rename",
-        Box::new(move || renamed.set(true)),
-    )];
+    let commands: typr::ui::overlay::Commands =
+        vec![("Rename", Box::new(move || renamed.set(true)))];
     view()
         .gap_3()
         .p_4()
         .child(field("Search", draft))
         .child(check("Remember", ticked))
         .child(toggle("Sound", sound))
-        .child(text(move || format!("typed={} ticked={} sound={}", draft.with(|d| d.len()), ticked.get(), sound.get())))
+        .child(text(move || {
+            format!(
+                "typed={} ticked={} sound={}",
+                draft.with(|d| d.len()),
+                ticked.get(),
+                sound.get()
+            )
+        }))
         .child(tab_row(TABS, tab))
         .child(text(move || format!("tab={}", tab.get())))
-        .child(list_row("First row", move || row.get() == 0, move || row.set(0)))
-        .child(list_row("Second row", move || row.get() == 1, move || row.set(1)))
+        .child(list_row(
+            "First row",
+            move || row.get() == 0,
+            move || row.set(0),
+        ))
+        .child(list_row(
+            "Second row",
+            move || row.get() == 1,
+            move || row.set(1),
+        ))
         .child(text(move || format!("row={}", row.get())))
-        .child(button(Variant::Primary, "Open", || false, move || open.set(true)))
+        .child(button(
+            Variant::Primary,
+            "Open",
+            || false,
+            move || open.set(true),
+        ))
         .child(decision(open, move || {
             view()
                 .gap_2()
                 .child(text("Confirm the change?"))
-                .child(button(Variant::Default, "Close", || false, move || open.set(false)))
+                .child(button(
+                    Variant::Default,
+                    "Close",
+                    || false,
+                    move || open.set(false),
+                ))
         }))
-        .child(button(Variant::Destructive, "Notify", || false, move || message.set(Some("Saved".into()))))
+        .child(button(
+            Variant::Destructive,
+            "Notify",
+            || false,
+            move || message.set(Some("Saved".into())),
+        ))
         .child(toast(message))
-        .child(command_menu(button(Variant::Ghost, "More", || false, || {}), commands))
-        .child(anchored(button(Variant::Ghost, "Details", || false, || {}), text("Shipped")))
+        .child(command_menu(
+            button(Variant::Ghost, "More", || false, || {}),
+            commands,
+        ))
+        .child(anchored(
+            button(Variant::Ghost, "Details", || false, || {}),
+            text("Shipped"),
+        ))
         .child(choose(&[("apple", "Apple"), ("kiwi", "Kiwi")], chosen))
         .child(text(move || format!("renamed={}", renamed.get())))
         .child(button(Variant::Default, "Locked", || true, || {}))
-        .child(busy_button(Variant::Primary, "Save", move || saving.get(), move || saving.set(true)))
+        .child(busy_button(
+            Variant::Primary,
+            "Save",
+            move || saving.get(),
+            move || saving.set(true),
+        ))
 }
 
 fn start() -> Headless {

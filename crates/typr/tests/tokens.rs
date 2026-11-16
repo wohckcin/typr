@@ -41,7 +41,11 @@ fn planted(source: &str) -> (tempfile::TempDir, PathBuf) {
 #[test]
 fn every_screen_draws_with_the_tokens() {
     let result = check(&[]);
-    assert!(result.ok, "a screen writes a literal or a base control:\n{}", result.report);
+    assert!(
+        result.ok,
+        "a screen writes a literal or a base control:\n{}",
+        result.report
+    );
 }
 
 #[test]
@@ -65,7 +69,11 @@ fn a_base_control_import_is_refused() {
     let (_dir, file) = planted("use nsh_base::button;\nfn view() {}\n");
     let result = check(&[&file]);
     assert!(!result.ok, "the check let a base control through");
-    assert!(result.report.contains("use nsh_base::button"), "{}", result.report);
+    assert!(
+        result.report.contains("use nsh_base::button"),
+        "{}",
+        result.report
+    );
 }
 
 #[test]

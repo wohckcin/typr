@@ -7,13 +7,20 @@ use nsh_testing::Headless;
 use typr::screens::embed::{Cards, embedded};
 
 fn cards() -> Cards {
-    vec![("Photosynthesis".to_owned(), "Light becomes sugar.".to_owned())]
+    vec![(
+        "Photosynthesis".to_owned(),
+        "Light becomes sugar.".to_owned(),
+    )]
 }
 
 #[component]
 fn Note() -> impl IntoElement {
     typr::ui::tokens::install();
-    embedded("Before ![[Photosynthesis]] after", cards(), "Note".to_owned())
+    embedded(
+        "Before ![[Photosynthesis]] after",
+        cards(),
+        "Note".to_owned(),
+    )
 }
 
 #[component]
@@ -64,7 +71,13 @@ fn Nested() -> impl IntoElement {
 fn a_nested_embed_draws_a_marker_naming_the_card_not_its_content() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<Nested>())).unwrap();
     app.wait_for("“Outer” embeds another card")?;
-    assert!(!app.screen().shows("Outer body"), "the nested body was drawn");
-    assert!(!app.screen().shows("Inner body"), "the inner card was drawn");
+    assert!(
+        !app.screen().shows("Outer body"),
+        "the nested body was drawn"
+    );
+    assert!(
+        !app.screen().shows("Inner body"),
+        "the inner card was drawn"
+    );
     Ok(())
 }

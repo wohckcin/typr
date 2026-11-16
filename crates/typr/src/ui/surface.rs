@@ -10,15 +10,15 @@ pub fn card(content: impl IntoElement) -> impl IntoElement {
         .p_4()
         .gap_2()
         .rounded(tokens::radius)
-        .bg(move || tokens::card())
+        .bg(tokens::card)
         .border_1()
-        .border_color(move || tokens::border())
+        .border_color(tokens::border)
         .child(content)
 }
 
 /// A hairline between rows or sections: one device pixel, drawn once by its owner.
 pub fn separator() -> impl IntoElement {
-    view().h(px(1.0)).w_full().bg(move || tokens::border())
+    view().h(px(1.0)).w_full().bg(tokens::border)
 }
 
 /// A tile-shaped placeholder for a slot with nothing in it yet: a dashed border, not a filled card.
@@ -29,6 +29,6 @@ pub fn placeholder(content: impl IntoElement) -> impl IntoElement {
         .rounded(tokens::radius)
         .border_1()
         .border_dashed()
-        .border_color(move || tokens::border())
+        .border_color(tokens::border)
         .child(content)
 }

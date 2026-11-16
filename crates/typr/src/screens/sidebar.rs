@@ -11,7 +11,7 @@ use typr_core::keymap::{Command, Surface, chord_of};
 use typr_core::store::{Id, Snapshot};
 
 use crate::ui::{
-    button::{Variant, button, button_labelled},
+    button::{Variant, button_labelled},
     choice::list_row,
     status::badge,
     tokens,
@@ -34,7 +34,13 @@ pub enum Group {
 
 impl Group {
     /// Every group, in drawing order.
-    pub const ALL: [Group; 5] = [Group::Navigation, Group::Decks, Group::Views, Group::Tags, Group::Utilities];
+    pub const ALL: [Group; 5] = [
+        Group::Navigation,
+        Group::Decks,
+        Group::Views,
+        Group::Tags,
+        Group::Utilities,
+    ];
 
     /// The heading the group draws above its rows.
     pub fn label(self) -> &'static str {
@@ -77,7 +83,11 @@ pub struct Sidebar {
 
 impl Sidebar {
     /// A sidebar over `items`, with the library open or closed and the chord that focuses search.
-    pub fn new(items: Vec<Item>, library_open: bool, search_chord: impl Into<SharedString>) -> Self {
+    pub fn new(
+        items: Vec<Item>,
+        library_open: bool,
+        search_chord: impl Into<SharedString>,
+    ) -> Self {
         // The whole library is in force until another row is chosen, so the grid and the sidebar
         // agree about what is shown.
         let first = items.first().map(|item| item.key.clone());
@@ -102,12 +112,13 @@ impl Sidebar {
 
     /// Folds `key`'s subtree away, or opens it again.
     pub fn toggle_collapsed(&self, key: &SharedString) {
-        self.collapsed.update(|folded| match folded.iter().position(|k| k == key) {
-            Some(at) => {
-                folded.remove(at);
-            }
-            None => folded.push(key.clone()),
-        });
+        self.collapsed
+            .update(|folded| match folded.iter().position(|k| k == key) {
+                Some(at) => {
+                    folded.remove(at);
+                }
+                None => folded.push(key.clone()),
+            });
     }
 
     /// The key of the row in force, if any.
@@ -117,7 +128,11 @@ impl Sidebar {
 
     /// The key of the row in force, or `none`.
     pub fn selected_text(&self) -> String {
-        self.selected.with(|s| s.as_ref().map(|k| k.to_string()).unwrap_or_else(|| "none".into()))
+        self.selected.with(|s| {
+            s.as_ref()
+                .map(|k| k.to_string())
+                .unwrap_or_else(|| "none".into())
+        })
     }
 
     fn is_collapsed(&self, key: &SharedString) -> bool {
@@ -135,7 +150,10 @@ impl Sidebar {
                         if self.is_collapsed(&key) {
                             return false;
                         }
-                        parent = items.iter().find(|i| i.key == key).and_then(|i| i.parent.clone());
+                        parent = items
+                            .iter()
+                            .find(|i| i.key == key)
+                            .and_then(|i| i.parent.clone());
                     }
                     true
                 })
@@ -152,7 +170,7 @@ pub fn sidebar(state: Sidebar) -> impl IntoElement {
         .p_3()
         .gap_3()
         .border_r_1()
-        .border_color(move || tokens::border())
+        .border_color(tokens::border)
         .child(search_row(state))
         .child(library_state(state));
     // One dynamic for every group: one owner for the rows, so a row's controls are not rebuilt
@@ -160,13 +178,19 @@ pub fn sidebar(state: Sidebar) -> impl IntoElement {
     column.child(dynamic(move || {
         let mut groups = view().gap_3();
         for group in Group::ALL {
-            let rows: Vec<Item> = state.visible().into_iter().filter(|item| item.group == group).collect();
+            let rows: Vec<Item> = state
+                .visible()
+                .into_iter()
+                .filter(|item| item.group == group)
+                .collect();
             if rows.is_empty() {
                 continue;
             }
-            let mut section = view()
-                .gap_1()
-                .child(text(group.label()).text_xs().text_color(move || tokens::muted_foreground()));
+            let mut section = view().gap_1().child(
+                text(group.label())
+                    .text_xs()
+                    .text_color(tokens::muted_foreground),
+            );
             for item in rows {
                 section = section.child(row_view(state, item));
             }
@@ -181,16 +205,28 @@ fn search_row(state: Sidebar) -> impl IntoElement {
         .flex_row()
         .items_center()
         .justify_between()
-        .child(text("Search").text_sm().text_color(move || tokens::foreground()))
-        .child(dynamic(move || badge(state.search_chord.get()).into_element()))
+        .child(text("Search").text_sm().text_color(tokens::foreground))
+        .child(dynamic(move || {
+            badge(state.search_chord.get()).into_element()
+        }))
 }
 
 fn library_state(state: Sidebar) -> impl IntoElement {
-    text(move || if state.library_open.get() { "Library open" } else { "Library closed" })
-        .text_sm()
-        .text_color(move || {
-            if state.library_open.get() { tokens::muted_foreground() } else { tokens::destructive() }
-        })
+    text(move || {
+        if state.library_open.get() {
+            "Library open"
+        } else {
+            "Library closed"
+        }
+    })
+    .text_sm()
+    .text_color(move || {
+        if state.library_open.get() {
+            tokens::muted_foreground()
+        } else {
+            tokens::destructive()
+        }
+    })
 }
 
 fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
@@ -200,11 +236,15 @@ fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
     let fold = key.clone();
     let folded = key.clone();
     let named_fold = key.clone();
-    let mut row = view().flex_row().items_center().gap_1().child(view().flex_1().child(list_row(
-        item.label.clone(),
-        move || state.selected.with(|s| s.as_ref() == Some(&in_force)),
-        move || state.select(&press),
-    )));
+    let mut row = view()
+        .flex_row()
+        .items_center()
+        .gap_1()
+        .child(view().flex_1().child(list_row(
+            item.label.clone(),
+            move || state.selected.with(|s| s.as_ref() == Some(&in_force)),
+            move || state.select(&press),
+        )));
     if item.due > 0 {
         row = row.child(badge(item.due.to_string()));
     }
@@ -213,9 +253,19 @@ fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
         let named = item.label.clone();
         row = row.child(button_labelled(
             Variant::Ghost,
-            move || -> SharedString { if state.is_collapsed(&folded) { "▸".into() } else { "▾".into() } },
             move || -> SharedString {
-                let action = if state.is_collapsed(&named_fold) { "Expand" } else { "Collapse" };
+                if state.is_collapsed(&folded) {
+                    "▸".into()
+                } else {
+                    "▾".into()
+                }
+            },
+            move || -> SharedString {
+                let action = if state.is_collapsed(&named_fold) {
+                    "Expand"
+                } else {
+                    "Collapse"
+                };
                 format!("{action} {named}").into()
             },
             || false,
@@ -229,9 +279,17 @@ fn row_view(state: Sidebar, item: Item) -> impl IntoElement {
 /// (`due` comes from [`typr_core`]'s subtree counts, so a parent counts its children), the saved
 /// views, and Settings.
 pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
-    let live: Vec<_> = snapshot.decks.iter().filter(|deck| !deck.archived).collect();
+    let live: Vec<_> = snapshot
+        .decks
+        .iter()
+        .filter(|deck| !deck.archived)
+        .collect();
     let live_ids: HashSet<Id> = live.iter().map(|deck| deck.id).collect();
-    let parents: HashSet<Id> = live.iter().filter_map(|deck| deck.parent).filter(|p| live_ids.contains(p)).collect();
+    let parents: HashSet<Id> = live
+        .iter()
+        .filter_map(|deck| deck.parent)
+        .filter(|p| live_ids.contains(p))
+        .collect();
     let mut items = vec![Item {
         key: "all".into(),
         label: "All cards".into(),
@@ -245,7 +303,10 @@ pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
             key: format!("deck:{}", deck.id).into(),
             label: deck.name.clone().into(),
             group: Group::Decks,
-            parent: deck.parent.filter(|p| live_ids.contains(p)).map(|p| format!("deck:{p}").into()),
+            parent: deck
+                .parent
+                .filter(|p| live_ids.contains(p))
+                .map(|p| format!("deck:{p}").into()),
             due: due.get(&deck.id).copied().unwrap_or(0) as usize,
             has_children: parents.contains(&deck.id),
         });
@@ -256,7 +317,13 @@ pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
         for branch in branches {
             out.push(Item {
                 key: format!("tag:{}", branch.path).into(),
-                label: branch.path.rsplit('/').next().unwrap_or(&branch.path).to_owned().into(),
+                label: branch
+                    .path
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&branch.path)
+                    .to_owned()
+                    .into(),
                 group: Group::Tags,
                 parent: parent.map(|p| format!("tag:{p}").into()),
                 due: 0,
@@ -298,14 +365,25 @@ pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
 /// The chord that focuses search, read from the keymap table rather than written here; empty when
 /// the library surface binds none.
 pub fn search_chord() -> String {
-    chord_of(Surface::Library, Command::FocusSearch).map(|chord| chord.to_string()).unwrap_or_default()
+    chord_of(Surface::Library, Command::FocusSearch)
+        .map(|chord| chord.to_string())
+        .unwrap_or_default()
 }
 
 /// How many prompts are due in each deck's subtree at `now_ms`: a due card counts for its own deck
 /// and every deck above it. Archived decks, archived cards and trashed cards count for nothing.
 pub fn due_counts(snapshot: &Snapshot, now_ms: i64) -> HashMap<Id, u32> {
-    let parents: HashMap<Id, Option<Id>> = snapshot.decks.iter().map(|deck| (deck.id, deck.parent)).collect();
-    let archived: HashSet<Id> = snapshot.decks.iter().filter(|deck| deck.archived).map(|deck| deck.id).collect();
+    let parents: HashMap<Id, Option<Id>> = snapshot
+        .decks
+        .iter()
+        .map(|deck| (deck.id, deck.parent))
+        .collect();
+    let archived: HashSet<Id> = snapshot
+        .decks
+        .iter()
+        .filter(|deck| deck.archived)
+        .map(|deck| deck.id)
+        .collect();
     let mut counts: HashMap<Id, u32> = HashMap::new();
     for card in &snapshot.cards {
         let Some(due_at) = card.due_at else {

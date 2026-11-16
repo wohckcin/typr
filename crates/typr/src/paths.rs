@@ -5,23 +5,23 @@
 //! app's data folder, and `TYPR_DATA_DIR` overrides it, which is how a test or an isolated run keeps
 //! out of the real one.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use nsh_core::prelude::data_dir;
 use typr_core::store::{Db, StoreError};
 
 /// The library's file inside the app's data folder.
-pub fn database_path(root: &PathBuf) -> PathBuf {
+pub fn database_path(root: &Path) -> PathBuf {
     root.join("typr.sqlite3")
 }
 
 /// Where a card's attached images are copied.
-pub fn attachments_root(root: &PathBuf) -> PathBuf {
+pub fn attachments_root(root: &Path) -> PathBuf {
     root.join("attachments")
 }
 
 /// Where the app writes its log.
-pub fn logs_root(root: &PathBuf) -> PathBuf {
+pub fn logs_root(root: &Path) -> PathBuf {
     root.join("logs")
 }
 

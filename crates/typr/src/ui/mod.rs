@@ -7,12 +7,12 @@
 
 pub mod button;
 pub mod choice;
+pub mod input;
+pub mod motion;
 pub mod overlay;
 pub mod prose;
 pub mod source;
-pub mod input;
 pub mod status;
 pub mod surface;
 pub mod toggle;
-pub mod motion;
 pub mod tokens;
