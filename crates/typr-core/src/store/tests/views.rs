@@ -519,3 +519,48 @@ fn a_deck_without_a_view_reads_as_grid() {
         "a deck that never chose a view is a grid, not unreadable"
     );
 }
+
+#[test]
+fn a_cram_sessions_filter_can_be_kept_as_a_view_and_never_on_its_own() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Biology");
+    let _ = card(&mut db, deck, "front\n---\nback");
+    db.apply(
+        &Command::SetTags {
+            card: 1,
+            tags: vec!["exam".to_string()],
+        },
+        NOON,
+    )
+    .expect("tag");
+
+    let filter = ViewSpec {
+        tags: vec!["exam".to_string()],
+        ..ViewSpec::default()
+    };
+    // The cram selection is the filter the drill would walk; nothing is saved yet.
+    assert_eq!(cram_selection(&db, &filter), vec![1]);
+    assert!(db.snapshot().expect("snapshot").views.is_empty(), "a view is not created on its own");
+
+    let id = match db
+        .apply(
+            &Command::CreateView {
+                spec: filter.clone(),
+                name: "Exam drill".to_string(),
+            },
+            NOON,
+        )
+        .expect("save the drill")
+    {
+        Outcome::View(id) => id,
+        other => panic!("saving the drill: {other:?}"),
+    };
+
+    let views = db.snapshot().expect("snapshot").views;
+    assert_eq!(views.len(), 1, "only the saved drill exists");
+    assert_eq!(views[0].id, id);
+    assert_eq!(views[0].name, "Exam drill");
+    assert_eq!(views[0].spec, filter, "the filter is stored unchanged");
+    assert_eq!(cram_selection(&db, &views[0].spec), vec![1], "it selects the same cards");
+}

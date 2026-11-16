@@ -103,7 +103,7 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - The screen takes a `typr_core::session::Session`, so due, new, reverse and cram are chosen by the caller. Reveal, grades, Back, Shuffle and Leave come from the review keymap table.
 - A refused grade shows "The grade was not saved. Grade again to retry." and leaves the card answerable.
 - Queue rules are typr-core behaviour. Named typr-core tests for them: `session/tests.rs` (`a_forgotten_new_card_returns_last_in_the_queue`, `a_forgotten_due_card_returns_when_its_relearning_step_lands`, `quitting_five_of_twelve_leaves_seven_to_answer`, `a_reshuffle_reorders_only_within_one_due_day`, `a_prompt_arriving_mid_session_joins_the_end`, `a_refused_grade_frees_the_card_again`, `a_reverse_entry_shows_the_last_side_first`, `a_cram_session_starts_with_every_entry_queued`); `store/tests/review.rs` (`the_new_queue_stops_at_the_cap_and_resumes_the_next_day`); `store/tests/cards.rs` (`a_queue_can_be_scoped_to_one_deck`); `store/tests/views.rs` (`a_cram_selection_ignores_due_dates_and_the_cap`).
-- Not covered by a named test, so 4.4 is not ticked: a cram run writes no schedule, a cram run repeats what was forgotten, and a cram run can be kept as a view.
+- Cram session behaviour is covered by named tests: `session/tests.rs` (`a_cram_session_writes_no_schedule`, `a_cram_session_repeats_what_was_forgotten`, `one_card_three_passes`, `a_cram_session_starts_with_every_entry_queued`) and `store/tests/views.rs` (`a_cram_sessions_filter_can_be_kept_as_a_view_and_never_on_its_own`, `a_cram_selection_ignores_due_dates_and_the_cap`, `a_cram_selection_matches_the_list`).
 
 ## Task 4.8 embeds
 

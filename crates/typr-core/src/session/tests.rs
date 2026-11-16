@@ -573,3 +573,55 @@ fn one_card_three_passes() {
         vec![Grade::Forgot, Grade::Forgot, Grade::Remembered]
     );
 }
+
+#[test]
+fn a_cram_session_writes_no_schedule() {
+    // A cram answer is settled inside the session: no store id is awaited and nothing leaves the run
+    // except the in-memory grade and queue move.
+    let mut session = Session::cram(vec![Entry::sides(1, ["front", "back"], 3)]);
+
+    while session.hidden() > 0 {
+        assert!(session.reveal());
+    }
+    assert_eq!(session.grade(Grade::Remembered), Some((1, Grade::Remembered)));
+    assert!(
+        session.answer_here(),
+        "the grade is taken here, not sent to the store"
+    );
+    assert!(!session.gradeable(), "nothing waits for a store answer");
+    assert_eq!(session.remaining(), 0);
+    assert!(session.finished());
+    assert_eq!(session.grades, vec![Grade::Remembered]);
+    assert_eq!(session.mode(), Mode::Cram);
+}
+
+#[test]
+fn a_cram_session_repeats_what_was_forgotten() {
+    let mut session = Session::cram(vec![entry(1, &["front"]), entry(2, &["front"])]);
+
+    // Forget card 1: it returns to the end of this run and card 2 comes next.
+    while session.hidden() > 0 {
+        assert!(session.reveal());
+    }
+    session.grade(Grade::Forgot);
+    assert!(session.answer_here());
+    assert_eq!(session.current().map(|e| e.card), Some(2));
+    assert_eq!(session.order(), vec![2, 1], "forgotten card is queued again");
+    assert!(!session.finished());
+
+    // Remember card 2, then the forgotten card 1 returns and must be remembered to finish.
+    while session.hidden() > 0 {
+        assert!(session.reveal());
+    }
+    session.grade(Grade::Remembered);
+    assert!(session.answer_here());
+    assert_eq!(session.current().map(|e| e.card), Some(1));
+
+    while session.hidden() > 0 {
+        assert!(session.reveal());
+    }
+    session.grade(Grade::Remembered);
+    assert!(session.answer_here());
+    assert!(session.finished(), "the run ends only after every card was remembered");
+    assert_eq!(session.grades, vec![Grade::Forgot, Grade::Remembered, Grade::Remembered]);
+}
