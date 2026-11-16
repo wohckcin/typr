@@ -36,8 +36,8 @@
 ## 5. Screenshot baselines
 
 - [x] 5.1 Each screen's Rust test renders it in the light and the dark appearance, asserts the same text resolves to the same size and weight, and that its colour changes with the appearance; a screen with no such test fails by name
-- [ ] 5.2 Delete `tests/visual.rs`, the scene table and `tests/baselines/`; CI drops the baseline record/compare steps (the rest moves to 6.3)
-- [ ] 5.3 State in `DESIGN.md` that appearance is verified by resolved styles, not captured images, and that no screenshot pipeline remains
+- [x] 5.2 Delete `tests/visual.rs` and `tests/baselines/` (the Rune scene table goes with the Rune binary in 6.1); CI drops the baseline record/compare steps (the rest moves to 6.3)
+- [x] 5.3 State in `DESIGN.md` that appearance is verified by resolved styles, not captured images, and that no screenshot pipeline remains
 
 ## 6. Remove Rune and finish
 

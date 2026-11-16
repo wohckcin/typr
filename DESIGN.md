@@ -78,3 +78,16 @@ screen lands (task 4.10).
 | Progress of an import or export | indeterminate spinner label (no animation; see design.md 3.2) | n/a |
 | Result line appears | toast fades in, `BASE` | instant |
 | Toast clears | fades out, `FAST`, after `TOAST_MS` | instant |
+
+## Appearance, without pictures
+
+Appearance is verified by the styles a screen resolves to, not by captured images. `tests/appearance.rs`
+renders every screen in the light and the dark appearance and reads `screen().span_style(..)`: the same
+text must keep its font size and weight, and its colour must be the theme's for that appearance, so the
+two differ. `tests/tokens.rs` refuses a spacing, type, radius or colour literal in a screen, so the
+colour cannot be one the theme does not name.
+
+There is no screenshot pipeline in this repository: no scene list, no `tests/visual.rs`, no baseline
+images and no `TYPR_*` environment. `nsh_testing`'s headless driver has no `screenshot` at all, and
+`nsh test --target` is not used. If a visual regression needs a picture later, it is added as a
+separate, explicit step rather than as the gate every screen runs through.
