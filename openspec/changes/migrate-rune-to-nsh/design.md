@@ -113,3 +113,8 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 ## Task 4.5 history
 
 - `screens/history.rs` lists every record newest first with phase, grade, time and due date; `review_count` excludes learning-phase records. `tests/history.rs` verifies count, order and the empty state.
+
+
+## Task 4.6 settings/preferences
+
+- The NSH screen accepts and refuses values (limit named, previous kept). `tests/settings.rs` adds `an_accepted_cap_persists_across_a_restart` against a temp `typr_core::store::Db`, and core settings tests cover validation, corrupt values, and round-trips. UI reachability-from-session/library and "paths shown" are part of 4.10's finishing/accessibility wiring.
