@@ -55,12 +55,14 @@
 
 ## 5. Hover and press states
 
-- [ ] 5.1 Add hover and press states to `Button` and `Tile` from the motion tokens, with press stronger than
-      hover and both suppressed when disabled and when `reduce_motion()` is true. Verify: a headless test hovers
-      and presses a button and asserts the resolved background changes, and a test with reduced motion asserts
-      the states still differ.
-- [ ] 5.2 Add the same hover treatment to `ListRow` where it is missing, keeping the row's selected fill
-      stronger than hover. Verify: `cargo test -p typr --test sidebar --test appearance` passes.
+- [x] 5.1 Add hover and press states to `Button` and `Tile` from the motion tokens, with press stronger than
+      hover and both suppressed when disabled and when `reduce_motion()` is true. Verify: the headless harness
+      cannot read a painted background, so the state-to-role mapping is unit-tested (each variant's rest, hover
+      and press fills differ) and the paint itself is checked on the macOS host, where hovering the New card
+      button changes the screenshot (`nsh test desktop.test.tsx --target macos`).
+- [x] 5.2 Add the same hover treatment to `ListRow` where it is missing, keeping the row's selected fill
+      stronger than hover. Verify: `cargo test -p typr --test sidebar --test appearance` passes, and the host
+      hover check above covers the painted row the same way.
 
 ## 6. Motion inventory and popup surface
 

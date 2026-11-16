@@ -7,7 +7,11 @@ use nsh_base::button as base_button;
 use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
-use super::{motion, size::Size, tokens};
+use super::{
+    motion::{self, PRESS_SCALE},
+    size::Size,
+    tokens,
+};
 
 /// What a button is for. The variant sets its colours.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PropEnum)]
@@ -23,14 +27,68 @@ pub enum Variant {
     Destructive,
 }
 
+/// The interaction state a fill is drawn for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum State {
+    Rest,
+    Hover,
+    Press,
+}
+
+/// A fill by role, before the theme resolves it: what the control paints in a state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Fill {
+    /// The selection colour, at a percent of its strength.
+    Selection(u8),
+    /// The card surface.
+    Card,
+    /// The hover wash, at a percent of its strength.
+    Hover(u8),
+    /// Nothing at rest.
+    Clear,
+    /// The destructive colour, at a percent of its strength.
+    Destructive(u8),
+}
+
+/// A fill's colour in the theme.
+fn resolve(fill: Fill) -> AdaptiveColor {
+    fn at(color: AdaptiveColor, percent: u8) -> AdaptiveColor {
+        color.opacity(f32::from(percent) / 100.0)
+    }
+    match fill {
+        Fill::Selection(percent) => at(tokens::selection(), percent),
+        Fill::Card => tokens::card(),
+        Fill::Hover(percent) => at(tokens::hover(), percent),
+        Fill::Clear => at(tokens::background(), 0),
+        Fill::Destructive(percent) => at(tokens::destructive(), percent),
+    }
+}
+
 impl Variant {
-    /// The fill and the text colour the variant draws with.
+    /// The fill and the text colour the variant draws with at rest.
     fn colors(self) -> (AdaptiveColor, AdaptiveColor) {
-        match self {
-            Variant::Primary => (tokens::selection(), tokens::selection_foreground()),
-            Variant::Default => (tokens::card(), tokens::foreground()),
-            Variant::Ghost => (tokens::background().opacity(0.0), tokens::foreground()),
-            Variant::Destructive => (tokens::destructive(), tokens::selection_foreground()),
+        let text = match self {
+            Variant::Primary | Variant::Destructive => tokens::selection_foreground(),
+            Variant::Default | Variant::Ghost => tokens::foreground(),
+        };
+        (resolve(self.fill(State::Rest)), text)
+    }
+
+    /// What the control paints in `state`: a wash over the rest fill, deeper when pressed.
+    fn fill(self, state: State) -> Fill {
+        match (self, state) {
+            (Variant::Primary, State::Rest) => Fill::Selection(100),
+            (Variant::Primary, State::Hover) => Fill::Selection(85),
+            (Variant::Primary, State::Press) => Fill::Selection(75),
+            (Variant::Destructive, State::Rest) => Fill::Destructive(100),
+            (Variant::Destructive, State::Hover) => Fill::Destructive(85),
+            (Variant::Destructive, State::Press) => Fill::Destructive(75),
+            (Variant::Default, State::Rest) => Fill::Card,
+            (Variant::Default, State::Hover) => Fill::Hover(100),
+            (Variant::Default, State::Press) => Fill::Hover(90),
+            (Variant::Ghost, State::Rest) => Fill::Clear,
+            (Variant::Ghost, State::Hover) => Fill::Hover(60),
+            (Variant::Ghost, State::Press) => Fill::Hover(90),
         }
     }
 }
@@ -65,7 +123,8 @@ pub enum ButtonEvent {
 /// A button, filled with the variant's colours and sized from the scale.
 #[component]
 pub fn Button(props: ButtonProps, cx: Scope<ButtonEvent>) -> impl IntoElement {
-    let (fill, text_color) = props.variant.get_untracked().colors();
+    let variant = props.variant.get_untracked();
+    let (fill, text_color) = variant.colors();
     let sized = props.size.get_untracked();
     base_button()
         .disabled(move || props.disabled.get())
@@ -80,7 +139,17 @@ pub fn Button(props: ButtonProps, cx: Scope<ButtonEvent>) -> impl IntoElement {
         .bg(move || fill)
         .border_1()
         .border_color(tokens::border)
-        .active(|style| style.opacity(0.85))
+        .transition_colors()
+        .transition_transform()
+        .duration(motion::INSTANT)
+        .hover(move |style| style.bg(move || resolve(variant.fill(State::Hover))))
+        .active(move |style| {
+            if reduce_motion() {
+                style.bg(move || resolve(variant.fill(State::Press)))
+            } else {
+                style.bg(move || resolve(variant.fill(State::Press))).scale(PRESS_SCALE)
+            }
+        })
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
         .disabled_style(|style| style.opacity(0.5))
         .child(sized.text(props.label).text_color(move || text_color))
@@ -114,7 +183,16 @@ pub fn Tile(props: TileProps, cx: Scope<TileEvent>) -> impl IntoElement {
         .on_press(move || cx.emit(TileEvent::Press))
         .accessibility_label(move || Some(props.label.get()))
         .rounded(sized.radius())
-        .active(|style| style.opacity(0.9))
+        .transition_transform()
+        .duration(motion::FAST)
+        .hover(|style| style.bg(tokens::hover().opacity(0.6)))
+        .active(move |style| {
+            if reduce_motion() {
+                style.bg(tokens::hover().opacity(0.9))
+            } else {
+                style.bg(tokens::hover().opacity(0.9)).scale(PRESS_SCALE)
+            }
+        })
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
         .child(props.children)
 }
@@ -143,4 +221,38 @@ pub fn busy_button(
         })
         .disabled(busy)
         .on_press(on_press)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_variant_paints_a_different_fill_in_each_state() {
+        for variant in [
+            Variant::Primary,
+            Variant::Default,
+            Variant::Ghost,
+            Variant::Destructive,
+        ] {
+            let rest = variant.fill(State::Rest);
+            let hover = variant.fill(State::Hover);
+            let press = variant.fill(State::Press);
+            assert_ne!(rest, hover, "{variant:?} changes when hovered");
+            assert_ne!(hover, press, "{variant:?} deepens when pressed");
+            assert_ne!(rest, press, "{variant:?} differs from rest when pressed");
+        }
+    }
+
+    #[test]
+    fn the_press_fill_is_mapped_without_motion() {
+        // Reduced motion skips the scale only, so the fills stay apart whatever the setting says.
+        for variant in [Variant::Primary, Variant::Default, Variant::Ghost] {
+            assert_ne!(
+                variant.fill(State::Hover),
+                variant.fill(State::Press),
+                "{variant:?} keeps hover and press apart"
+            );
+        }
+    }
 }

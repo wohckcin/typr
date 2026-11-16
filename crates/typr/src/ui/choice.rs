@@ -6,7 +6,7 @@ use nsh_base::{SelectItem, select, tab, tabs};
 use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
-use super::tokens;
+use super::{motion, tokens};
 
 /// A tab row's props.
 #[derive(Clone, PartialEq, Props)]
@@ -122,9 +122,12 @@ pub fn ListRow(props: ListRowProps, cx: Scope<ListRowEvent>) -> impl IntoElement
         .py_1()
         .rounded(tokens::radius)
         .bg(move || tokens::row_fill(props.selected.get()))
-        // Hover is a wash weaker than the selected fill, and pressed is the fill a selection uses.
+        // Hover is a wash weaker than the selected fill, and a press deepens it; a row does not
+        // scale, because its fill is the state.
+        .transition_colors()
+        .duration(motion::INSTANT)
         .hover(|style| style.bg(move || tokens::hover().opacity(0.6)))
-        .active(|style| style.bg(tokens::selection))
+        .active(|style| style.bg(move || tokens::hover().opacity(0.9)))
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
         .child(text(props.title).text_sm().text_color(tokens::foreground))
 }

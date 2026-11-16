@@ -2,6 +2,7 @@
 // `nsh test` runs them headless. They only read the app, because the real host uses the library in
 // the user's data folder and a test must not write to it.
 
+import { platform } from "nsh";
 import { expect, open, test } from "nsh/test";
 
 test("the app opens with its navigation", async () => {
@@ -33,4 +34,17 @@ test("Settings opens and Escape returns to the library", async () => {
   await app.keyboard.press("escape");
   await app.waitFor("text:All cards");
   expect(app.texts()).toContain("All cards");
+});
+
+test("a button answers the pointer where there is one", async () => {
+  const app = await open(".");
+  await app.waitFor("role:button[New card]");
+  // A headless run opens the app as a phone, which has no pointer; the host gives it one.
+  if (!platform.desktop) return;
+  const rest = await app.screenshot();
+  await app.hover("role:button[New card]");
+  const hovered = await app.screenshot();
+  // The two pictures differ only where the button is, which is the wash coming in.
+  expect(hovered.length).toBe(rest.length);
+  expect(rest.every((byte, at) => byte === hovered[at])).toBe(false);
 });

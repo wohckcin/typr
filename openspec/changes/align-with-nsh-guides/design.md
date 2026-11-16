@@ -94,6 +94,15 @@ constructor and documents why it has no `Default`, because its fields are signal
 owner and a default value would own signals nobody created. Keeping the structs exhaustive was the alternative,
 rejected because the guides treat a public field set as a compatibility surface.
 
+### The state fills are a mapping, and the paint is checked on a host
+
+`Variant::fill(state)` maps a variant and an interaction state to a role (`Selection(85)`, `Hover(60)`,
+`Card`, `Clear`), and `resolve` turns the role into a theme colour. The mapping is a pure value, so a unit test
+proves rest, hover and press differ without a reactive runtime; calling the token accessors in a test would
+panic, because they need the engine's environment. Painting is a different claim, and the headless harness
+keeps no view style or screenshot, so `desktop.test.tsx` compares two screenshots around a hover on the macOS
+host and skips that step where the app opens as a phone.
+
 ### The sidebar's search chord stays a signal
 
 `Sidebar` is `Copy`, and about fifteen closures in `shell.rs` capture it by value: one guard per library key,
