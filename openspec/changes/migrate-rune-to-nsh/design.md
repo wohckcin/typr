@@ -146,5 +146,6 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 
 ## Task 5.1 appearance in both themes
 
-- `tests/appearance.rs` renders every screen in `ColorScheme::Light` and `Dark` and reads the resolved style with `screen().span_style`: font size (bits) and weight must be equal, the colour must differ. `screens::NAMES` lists the ported modules and the test asserts its own list equals it, so a new screen without a check fails by name.
+- `tests/appearance.rs` renders every screen in `ColorScheme::Light` and `Dark` and reads the resolved style with `screen().span_style`: font size (bits) and weight must be equal, and the colour must equal a reference text painted with the same token (`tokens::foreground` or `tokens::muted_foreground`), so it is the theme's colour for that role and appearance, not merely a different one.
+- `screens::NAMES` and the test's own list must agree. Both are hand-maintained: a module added without touching either is not caught, and the guard fires only when a name is added to `NAMES` without its check. Rust cannot enumerate modules, so there is no drift-free form; adding a screen means adding its name and its check together.
 - No images: `Headless` has no screenshot at all (the method lives on a private driver and returns "a screenshot needs a real platform"), and `nsh test --target` cannot run until Rune is removed (it resolves `.nsh/rust/*` against Rune's root-only patches).
