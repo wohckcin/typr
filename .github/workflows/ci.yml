@@ -47,9 +47,9 @@ jobs:
           sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
           pkg-config --modversion gtk4 gstreamer-1.0
 
-      # rust-toolchain.toml pins the channel, so rustup installs 1.99.1 without being told.
-      - name: Install the pinned toolchain
-        run: rustup show
+      # mise.toml pins Rust and the nsh CLI; the action installs both and puts their shims on PATH.
+      - name: Install the tools
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
 
       # The registry and the workspace's own artifacts, pruned to what a fresh build needs: the
       # action drops incremental state, old dependency builds and the app's own stale output. Only
@@ -110,8 +110,8 @@ jobs:
           sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
           pkg-config --modversion gtk4 gstreamer-1.0
 
-      - name: Install the pinned toolchain
-        run: rustup show
+      - name: Install the tools
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
 
       # A cache of its own: this job builds the Linux development host as well as the crate.
       - name: Cache the build
@@ -120,21 +120,6 @@ jobs:
           shared-key: linux-app
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # nsh.dev's script installs a release whole (its runtimes live beside bin/nsh) and links it
-      # into ~/.local/bin; ~/.nsh is ~70 MB and changes only when the pin does.
-      - name: Cache the Native Shell CLI
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.nsh
-          key: nsh-${{ runner.os }}-v0.5.1
-
-      - name: Install the Native Shell CLI
-        run: |
-          set -euo pipefail
-          curl -fsSL https://nsh.dev/install.sh | NSH_VERSION=v0.5.1 sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/nsh" --version
 
       # `desktop.test.tsx` opens the app and reads its screens; headless it needs no display. The
       # file is named on purpose: `nsh test` with no argument also runs the crate's Rust tests,

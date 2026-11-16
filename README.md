@@ -23,10 +23,17 @@ fails on a spacing, type, radius or colour literal, or on a `nsh_base` control u
 
 ## Prerequisites
 
-- Rust `1.99.1` — pinned by `rust-toolchain.toml`.
-- The `nsh` CLI (`nsh --version` reports `0.5.1`), for `nsh run`, `nsh test` and `nsh check`.
-- **Linux only:** `libgtk-4-dev` (GTK 4.14 or newer) and its runtime libraries to build and run.
-  CI runs the screens under `xvfb-run`.
+- [mise](https://mise.jdx.dev), which installs the pinned tools: Rust `1.99.1` and the `nsh` CLI
+  `0.5.1`, both from `mise.toml`.
+
+  ```sh
+  mise install     # Rust and nsh, at the versions mise.toml pins
+  mise exec -- nsh test desktop.test.tsx   # or activate mise in the shell and drop `mise exec --`
+  ```
+
+  `rust-toolchain.toml` carries the same Rust pin for a machine without mise.
+- **Linux only:** `libgtk-4-dev` (GTK 4.14 or newer), GStreamer's dev packages and their runtime
+  libraries, to build and run; CI installs them and the screens run headless.
 
 ## Build and run
 
