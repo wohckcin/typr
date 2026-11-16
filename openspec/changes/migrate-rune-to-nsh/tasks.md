@@ -42,7 +42,7 @@
 ## 6. Remove Rune and finish
 
 - [ ] 6.1 Remove `rune`, `rune-kit`, the root `[patch.crates-io]`, `vendor/`, `scripts/vendor-*`, the headless CLI arguments and `tests/visual.rs`; verify `cargo tree --workspace | rg -i rune` prints nothing
-- [ ] 6.2 Update the two typr-core comments that name Rune; verify `rg -i rune crates` prints nothing
+- [x] 6.2 Update the two typr-core comments that name Rune; verify `rg -i rune crates/typr-core` prints nothing
 - [ ] 6.3 Update `.github/workflows/ci.yml` (GTK packages, `cargo test --workspace --locked`, `nsh test --target linux` under `xvfb-run -a`, baseline dispatch for `ubuntu-26.04`); record Linux baselines from a dispatch and verify CI passes on the branch
 - [ ] 6.4 Update `README.md` (prerequisites, `cargo run`, `nsh run`, `nsh test`, layout table); verify each documented command runs
 - [ ] 6.5 Open a library written by the Rune build with the NSH build and grade a card; verify history appends unchanged

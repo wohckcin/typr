@@ -2,7 +2,7 @@
 //!
 //! Dispatch, the shortcut panel, the keycap hints and the palette all read this table, so a chord cannot
 //! mean one thing when it is pressed and another when it is drawn. The types here name no toolkit crate:
-//! `Chord::from_event` lives in the desktop crate, which is where `rune::KeyEvent` exists.
+//! `Chord::from_event` lives in the desktop crate, which is where the toolkit's key event exists.
 
 use std::fmt;
 

@@ -146,7 +146,7 @@ fn dropping_the_handle_writes_what_was_sent() {
         store
             .create_card(1, "mitochondria\n---\nthe powerhouse")
             .expect("sent");
-        // No close(): the drop is the quit, and Rune's AppSpec has no quit hook to call one.
+        // No close(): the drop is the quit, and the app has no quit hook to call one.
     }
 
     let db = Db::open(&path).expect("reopen");
