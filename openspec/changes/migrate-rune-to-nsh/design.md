@@ -182,8 +182,12 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - NOT mounted: the occlusion pane. `rect_from_drag` and `cover_box` are tested only as functions; nothing draws covers, takes a drag, or calls `AddMask`/`MergeMasks`/`RemoveMask`, and the text↔diagram switch is not built.
 - NOT wired: no caller supplies the store callbacks, so `on_save`/`on_attach`/`on_draft`/`on_leave` are exercised only by tests; the shell still has no editor route.
 
-## Task 4.3 closed
+## Task 4.3: what is built, and what is not
 
 - The editor mounts the source and preview, the image action, the field table when a template is in force, the prompt caption, the Save/Discard/Stay question, and the diagram pane (picture, caption, covers placed by `cover_box`, drag through `rect_from_corners`, a group strip whose pick feeds `Merge group` and `Remove`).
 - The shell routes: the sidebar selection drives a grid whose tiles open `Route::Editor(id)`; Escape returns. Saving writes `SaveCard` and clears `SetDraft`; each keystroke writes `SetDraft` without re-publishing the snapshot, so typing does not rebuild the editor; masks write `AddMask`, `MergeMasks`, `RemoveMask`. Attach copies through `editor::attach_image` into the library's attachments folder.
 - Tests that prove it: editor suite (28) covers the panes and answers; the shell suite opens a card from its tile, returns on Escape, and drags a rectangle on a diagram card then reads the row back from the library file (6).
+- Not built, so 4.3 stays unticked:
+  - The text↔diagram switch. No action creates a diagram card or switches a card's kind; only `CreateDiagram` from the store makes one, which the tests use directly. The spec's rules (switch only an empty card, refuse otherwise) have no UI to apply to.
+  - Removing a whole group. `Remove` sends one rectangle to `RemoveMask`; there is no group-removal command in the store, so "a group that has been reviewed is removed" is only reachable by merging first and then removing the one rectangle.
+  - Covers stating their group on their own. Covers are absolutely placed views with a text child; in every headless snapshot the covers, and the text in them, were absent from the accessibility tree, so "which group each rectangle belongs to" is proven only by the group strip's buttons.
