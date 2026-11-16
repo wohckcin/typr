@@ -40,5 +40,5 @@ fn finish(code: std::process::ExitCode) -> std::process::ExitCode {
 
 #[cfg(target_os = "linux")]
 fn finish(code: nsh_platform_linux::gtk4::glib::ExitCode) -> std::process::ExitCode {
-    std::process::ExitCode::from(u8::try_from(code.into_raw()).unwrap_or(1))
+    std::process::ExitCode::from(code.get())
 }
