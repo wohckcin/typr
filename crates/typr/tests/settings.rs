@@ -44,3 +44,22 @@ fn an_accepted_cap_takes_effect_at_once() -> Result<(), String> {
     app.wait_for("text:/cap=35/")?;
     Ok(())
 }
+
+#[test]
+fn an_accepted_cap_persists_across_a_restart() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("typr.sqlite3");
+    let db = typr_core::store::Db::open(&path).expect("open");
+    db.apply(
+        &typr_core::store::Command::SetSetting {
+            key: typr_core::store::SettingKey::NewPerDay,
+            value: typr_core::store::SettingValue::Number(35),
+        },
+        0,
+    )
+    .expect("store cap");
+    drop(db);
+
+    let reopened = typr_core::store::Db::open(&path).expect("reopen");
+    assert_eq!(reopened.settings().expect("settings").new_per_day, 35);
+}

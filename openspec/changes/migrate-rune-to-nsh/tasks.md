@@ -26,7 +26,7 @@
 - [x] 4.2 Library and card grid/tiles on `virtual_list` with keyed rows; verify `card-library`, `card-grid`, `deck-views` scenarios including a recycling scroll test
 - [ ] 4.3 Card editor and attachments (`pick_paths`, image tiles); verify `card-editor` scenarios
 - [x] 4.4 Study session and review canvas with keyboard grading via `on_key`; verify `study-session` and `review-scheduling` UI scenarios
-- [ ] 4.5 History; verify its flow tests
+- [x] 4.5 History; verify its flow tests
 - [ ] 4.6 Settings/preferences; verify `preferences` scenarios and persistence across a restart with a temp library
 - [ ] 4.7 Keymap panel and palette, with `Chord::from_event` rewritten for NSH key events; verify `keymap-panel` scenarios
 - [x] 4.8 Embeds and markdown rendering per the spike's decision; verify `card-embeds` scenarios

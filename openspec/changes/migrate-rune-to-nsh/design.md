@@ -109,3 +109,7 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 
 - `screens/embed.rs` rewrites embeds with typr-core's `markdown_ext::expand`, then draws each `typr-embed` fence with the body, `typr-embed-missing` with "No card named …", and a self-embed with a marker.
 - A nested embed (an embed inside an embedded body) draws "“Name” embeds another card" instead of the body or the inner card; `tests/embed.rs` checks both are absent.
+
+## Task 4.5 history
+
+- `screens/history.rs` lists every record newest first with phase, grade, time and due date; `review_count` excludes learning-phase records. `tests/history.rs` verifies count, order and the empty state.
