@@ -96,6 +96,21 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+      # The screens run through the nsh CLI, which this image does not ship. nsh.dev's script
+      # installs a release whole (its runtimes live beside bin/nsh) and links it into ~/.local/bin.
+      - name: Cache the Native Shell CLI
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nsh
+          key: nsh-${{ runner.os }}-v0.5.1
+
+      - name: Install the Native Shell CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL https://nsh.dev/install.sh | NSH_VERSION=v0.5.1 sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/nsh" --version
+
       # The screens draw on the GTK host, which needs a display: xvfb supplies one.
       - name: Test the screens on the Linux host
         run: xvfb-run -a nsh test --target linux
