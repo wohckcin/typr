@@ -12,57 +12,46 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# The job reads the repository and uploads one artifact. Anything wider is a credential a step
-# could spend.
+# The jobs read the repository; the app job also uploads one artifact. Anything wider is a
+# credential a step could spend.
 permissions:
   contents: read
 
 env:
-  # Logs are read in a terminal with colour, and a cached target is only correct if nothing in it is
-  # incremental.
+  # Logs are read in a terminal with colour.
   CARGO_TERM_COLOR: always
+  # A cached target is only correct if nothing in it is incremental, and a debug build's symbols are
+  # most of its bytes: neither is wanted on a runner.
   CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
   RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    # The label selects the Ubuntu 26 image family; any build of it runs these steps, which compare
-    # nothing against recorded pictures.
+  # Fast feedback: the checks read sources and compile the workspace, and need no display or system
+  # library beyond what the image has.
+  checks:
     runs-on: ubuntu-26.04
-    timeout-minutes: 40
+    timeout-minutes: 30
     steps:
       # Actions are pinned to a commit, not a tag: a tag is a moving pointer its owner can repoint.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # Native Shell's Linux host is GTK 4 (14 or newer) for its views and GStreamer for its media.
-      # The dev packages are what pkg-config and the linker need to build the host; the screens
-      # themselves run headless, so no display is needed.
-      - name: Install GTK and GStreamer
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
-          pkg-config --modversion gtk4 gstreamer-1.0
-
       # rust-toolchain.toml pins the channel, so rustup installs 1.99.1 without being told.
       - name: Install the pinned toolchain
         run: rustup show
 
-      # The registry, the git checkouts of the pinned crates and the build itself. The key carries the
-      # lockfile and the toolchain channel, so a dependency bump or a compiler bump misses this cache
-      # rather than restoring objects the current build cannot use.
-      - name: Cache the registry and the build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # The registry and the workspace's own artifacts, pruned to what a fresh build needs: the
+      # action drops incremental state, old dependency builds and the app's own stale output. Only
+      # `main` writes a cache, so a branch restores main's and adds no entries of its own.
+      - name: Cache the build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: linux
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Format
         run: cargo fmt --all --check
@@ -91,15 +80,41 @@ jobs:
             exit 1
           fi
 
-      - name: Build
-        run: cargo build --workspace --locked
-
       - name: Test
         run: cargo test --workspace --locked
 
-      # The screens are Rust tests, so `cargo test` above already ran them. The TSX test that drives
-      # the whole app needs the CLI: nsh.dev's script installs a release whole (its runtimes live
-      # beside bin/nsh) and links it into ~/.local/bin.
+  # The app driven through the CLI on the Linux host. Separate so it runs beside `checks`: the
+  # Linux host's GTK and GStreamer packages and its build are the slow part, and nothing in
+  # `checks` waits on them.
+  app:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Native Shell's Linux host is GTK 4 (14 or newer) for its views and GStreamer for its media.
+      # The dev packages are what pkg-config and the linker need to build the host.
+      - name: Install GTK and GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          pkg-config --modversion gtk4 gstreamer-1.0
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      # The same cache the checks job writes, restored: the crate it builds is the same crate.
+      - name: Cache the build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # nsh.dev's script installs a release whole (its runtimes live beside bin/nsh) and links it
+      # into ~/.local/bin; ~/.nsh is ~70 MB and changes only when the pin does.
       - name: Cache the Native Shell CLI
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -117,7 +132,7 @@ jobs:
       - name: Test the app through the CLI
         run: nsh test --junit test-results.xml
 
-      # The one artifact the job uploads, whatever the tests said, so a red run can be read later.
+      # The one artifact the workflow uploads, whatever the tests said, so a red run can be read.
       - name: Upload the test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -125,4 +140,3 @@ jobs:
           name: test-results
           path: test-results.xml
           if-no-files-found: warn
-
