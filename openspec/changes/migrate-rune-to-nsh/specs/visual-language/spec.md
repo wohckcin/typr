@@ -22,23 +22,25 @@ SHALL keep the same token set in light and dark themes.
 - **WHEN** a screen module's imports are inspected
 - **THEN** it builds controls from the app's `ui` module and does not construct base controls directly
 
-### Requirement: The appearance is checked against a baseline
+### Requirement: The appearance is checked by the styles it resolves to
 
-The system SHALL capture each screen on every supported platform, in light and dark, SHALL compare
-each capture with a committed baseline image for that platform, SHALL fail on a difference larger than
-the stated tolerance, and SHALL fail when a screen or a baseline is missing.
+The system SHALL exercise every screen headlessly in the light and the dark appearance, SHALL assert
+that the same text resolves to the same size and weight in both, SHALL assert that its colour is the
+theme's colour for that role and appearance and so changes between them, and SHALL fail when a screen
+has no such check rather than skipping it.
 
-#### Scenario: An unchanged screen matches
+#### Scenario: Dimensions do not move with the appearance
 
-- **WHEN** a screen is captured and nothing changed
-- **THEN** its baseline comparison passes in both appearances
+- **WHEN** a screen is rendered in the light appearance and then in the dark one
+- **THEN** the same text resolves to the same font size and weight, and only its colour differs
 
-#### Scenario: A changed screen fails
+#### Scenario: A screen's colour comes from the theme
 
-- **WHEN** a spacing token changes
-- **THEN** at least one baseline comparison fails and names the screen and appearance
+- **WHEN** a screen's text is read in each appearance
+- **THEN** its colour is the theme colour for that role and appearance, not a literal, so changing the
+  theme changes it
 
-#### Scenario: A new scene needs a baseline
+#### Scenario: A screen without the check fails
 
-- **WHEN** a screen capture is added without a baseline image
-- **THEN** the comparison fails rather than skipping it
+- **WHEN** a screen module has no headless check in both appearances
+- **THEN** the appearance check fails and names the screen, rather than skipping it

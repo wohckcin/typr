@@ -143,3 +143,8 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - Not done: image occlusion (diagram rectangles), templates and fields in the editor, and recovery of an unsaved draft. 4.3 stays unticked.
 
 - `editor_with_draft` opens on an unsaved draft, marks it "Unsaved", and reports each edit so the caller can write the draft down (`tests/editor.rs` checks the restore and the badge). Headless cannot type into the source editor (it exposes no input role), so the typing report is wired but not driven by a test.
+
+## Task 5.1 appearance in both themes
+
+- `tests/appearance.rs` renders every screen in `ColorScheme::Light` and `Dark` and reads the resolved style with `screen().span_style`: font size (bits) and weight must be equal, the colour must differ. `screens::NAMES` lists the ported modules and the test asserts its own list equals it, so a new screen without a check fails by name.
+- No images: `Headless` has no screenshot at all (the method lives on a private driver and returns "a screenshot needs a real platform"), and `nsh test --target` cannot run until Rune is removed (it resolves `.nsh/rust/*` against Rune's root-only patches).
