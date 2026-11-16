@@ -8,20 +8,38 @@ use nsh_core::prelude::*;
 
 use super::tokens;
 
+/// A tab row's props.
+#[derive(Clone, PartialEq, Props)]
+pub struct TabRowProps {
+    /// The sections, in drawing order.
+    pub labels: Prop<Vec<SharedString>>,
+    /// Which one is selected.
+    #[prop(default)]
+    pub selected: Prop<usize>,
+}
+
+/// What a tab row reports.
+#[derive(Event)]
+pub enum TabRowEvent {
+    /// The section chosen.
+    Select(usize),
+}
+
 /// A row of tabs showing which section is selected; the caller shows the panel.
-pub fn tab_row(labels: &'static [&'static str], selected: Signal<usize>) -> impl IntoElement {
+#[component]
+pub fn TabRow(props: TabRowProps, cx: Scope<TabRowEvent>) -> impl IntoElement {
+    let labels = props.labels.get_untracked();
     let mut row = tabs()
         .flex_row()
         .gap_1()
         .p_1()
         .rounded(tokens::radius)
         .bg(tokens::hover);
-    for (index, label) in labels.iter().copied().enumerate() {
-        let is_selected = move || selected.get() == index;
+    for (index, label) in labels.into_iter().enumerate() {
         row = row.child(
             tab()
-                .selected(is_selected)
-                .on_press(move |_: &()| selected.set(index))
+                .selected(move || props.selected.get() == index)
+                .on_press(move |_: &()| cx.emit(TabRowEvent::Select(index)))
                 .px_3()
                 .py_1()
                 .rounded(tokens::radius)
@@ -33,19 +51,30 @@ pub fn tab_row(labels: &'static [&'static str], selected: Signal<usize>) -> impl
     row
 }
 
-/// One value from a list of `(value, title)` pairs; the closed control shows the chosen title.
-pub fn choose(
-    options: &'static [(&'static str, &'static str)],
-    chosen: Signal<Option<SharedString>>,
-) -> impl IntoElement {
-    let items: Vec<SelectItem> = options
-        .iter()
-        .map(|(v, t)| SelectItem::new(*v, *t))
-        .collect();
+/// A chooser's props.
+#[derive(Clone, PartialEq, Props)]
+pub struct ChooseProps {
+    /// The options, each with the value it reports.
+    pub options: Prop<Vec<SelectItem>>,
+    /// The value in force, if one is.
+    #[prop(default)]
+    pub chosen: Prop<Option<SharedString>>,
+}
+
+/// What a chooser reports.
+#[derive(Event)]
+pub enum ChooseEvent {
+    /// The value chosen.
+    Change(Option<SharedString>),
+}
+
+/// One value from a list; the closed control shows the chosen title.
+#[component]
+pub fn Choose(props: ChooseProps, cx: Scope<ChooseEvent>) -> impl IntoElement {
     select()
-        .items(items)
-        .value(move || chosen.get())
-        .on_change(move |next: &Option<SharedString>| chosen.set(next.clone()))
+        .items(props.options.get_untracked())
+        .value(move || props.chosen.get())
+        .on_change(move |next: &Option<SharedString>| cx.emit(ChooseEvent::Change(next.clone())))
         .accessibility_label("Choose")
         .trigger(
             view()
@@ -55,7 +84,7 @@ pub fn choose(
                 .rounded(tokens::radius)
                 .border_1()
                 .border_color(tokens::border)
-                .child(text(move || chosen.get().unwrap_or("Choose".into())).text_sm()),
+                .child(text(move || props.chosen.get().unwrap_or("Choose".into())).text_sm()),
         )
 }
 

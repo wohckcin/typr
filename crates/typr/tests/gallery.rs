@@ -1,6 +1,7 @@
 //! The ui gallery: every component the app's screens are built from, in one place, pressed by
 //! the user's steps. A component that breaks here breaks every screen that uses it.
 
+use nsh_base::SelectItem;
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
@@ -58,7 +59,16 @@ fn Gallery() -> impl IntoElement {
                 sound.get()
             )
         }))
-        .child(tab_row(TABS, tab))
+        .child(
+            tab_row()
+                .labels(
+                    TABS.iter()
+                        .map(|label| SharedString::from(*label))
+                        .collect::<Vec<_>>(),
+                )
+                .selected(move || tab.get())
+                .on_select(move |index: &usize| tab.set(*index)),
+        )
         .child(text(move || format!("tab={}", tab.get())))
         .child(
             list_row()
@@ -113,7 +123,15 @@ fn Gallery() -> impl IntoElement {
                 .on_press(|| {}),
             text("Shipped"),
         ))
-        .child(choose(&[("apple", "Apple"), ("kiwi", "Kiwi")], chosen))
+        .child(
+            choose()
+                .options(vec![
+                    SelectItem::new("apple", "Apple"),
+                    SelectItem::new("kiwi", "Kiwi"),
+                ])
+                .chosen(move || chosen.get())
+                .on_change(move |next: &Option<SharedString>| chosen.set(next.clone())),
+        )
         .child(text(move || format!("renamed={}", renamed.get())))
         .child(
             button()

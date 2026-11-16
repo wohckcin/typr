@@ -227,14 +227,20 @@ pub fn palette(
         .flex_1()
         .gap_3()
         .p_4()
-        .child(submit_field("Run a command", query, move |_| {
-            if let Some((label, _)) = visible_rows(surface, &typing.get_untracked())
-                .into_iter()
-                .next()
-            {
-                run(label);
-            }
-        }))
+        .child(
+            submit_field()
+                .placeholder("Run a command")
+                .value(move || SharedString::from(query.get()))
+                .on_change(move |text: &String| typing.set(text.clone()))
+                .on_submit(move |_: &String| {
+                    if let Some((label, _)) = visible_rows(surface, &typing.get_untracked())
+                        .into_iter()
+                        .next()
+                    {
+                        run(label);
+                    }
+                }),
+        )
         .child(dynamic(move || {
             let rows = visible_rows(surface, &query.get());
             let mut list = view().gap_2();

@@ -69,19 +69,35 @@ pub fn field_reachable(
         .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
 }
 
-/// A text field that runs `on_submit` when Return is pressed in it, for a field that commits a
-/// command (the palette) rather than editing a value that saves elsewhere.
-pub fn submit_field(
-    placeholder: &'static str,
-    value: Signal<String>,
-    on_submit: impl Fn(&str) + 'static,
-) -> impl IntoElement {
+/// A committing field's props.
+#[derive(Clone, PartialEq, Props)]
+pub struct SubmitFieldProps {
+    /// The words shown while it is empty.
+    pub placeholder: Prop<SharedString>,
+    /// The text in it.
+    #[prop(default)]
+    pub value: Prop<SharedString>,
+}
+
+/// What a committing field reports.
+#[derive(Event)]
+pub enum SubmitFieldEvent {
+    /// The whole text, after an edit.
+    Change(String),
+    /// The text, when Return was pressed in it.
+    Submit(String),
+}
+
+/// A text field that reports Return as its own event, for a field that commits a command (the
+/// palette) rather than editing a value that saves elsewhere.
+#[component]
+pub fn SubmitField(props: SubmitFieldProps, cx: Scope<SubmitFieldEvent>) -> impl IntoElement {
     input()
-        .value(move || value.get())
-        .on_change(move |text: &str| value.set(text.to_owned()))
+        .value(move || props.value.get().to_string())
+        .on_change(move |text: &str| cx.emit(SubmitFieldEvent::Change(text.to_owned())))
         .submit_behavior(SubmitBehavior::Submit)
-        .on_submit(on_submit)
-        .placeholder(placeholder)
+        .on_submit(move |text: &str| cx.emit(SubmitFieldEvent::Submit(text.to_owned())))
+        .placeholder(move || props.placeholder.get().to_string())
         .text_color(move || color(tokens::foreground()))
         .placeholder_color(move || color(tokens::muted_foreground()))
         .caret_color(move || color(tokens::foreground()))
@@ -92,6 +108,6 @@ pub fn submit_field(
         .rounded(tokens::radius)
         .border_1()
         .border_color(tokens::border)
-        .focus(|s| s.border_color(tokens::ring))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
+        .focus(|style| style.border_color(tokens::ring))
+        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
 }
