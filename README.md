@@ -44,6 +44,7 @@ what is on screen. There are no screenshots and no scene files.
 cargo test --workspace                  # the whole workspace, headless
 cargo test -p typr appearance           # one test binary
 nsh test desktop.test.tsx               # the app driven through its own screens, headless
+nsh test                                # the app crate's Rust tests, then the TSX files
 nsh test --target macos desktop.test.tsx # the same steps in an AppKit window
 nsh check                               # type checks plus `cargo check --all-targets`
 ```
@@ -54,8 +55,9 @@ folder, and the shell states that ("Library closed") while still showing the lib
 field's contents cannot be read back on the macOS host, so the test proves the search field is
 reachable and the chord works, not what the field then holds.
 
-Running the Rust tests is what `cargo test` does; `nsh test --target` runs the TSX files only, so it
-does not substitute for them.
+`nsh test` runs the app crate's Rust tests (154) and then the TSX files, but not `typr-core`'s: the
+workspace's 483 tests are `cargo test --workspace`'s job, and `nsh test --target` runs the TSX files
+only, so neither substitutes for it.
 
 Appearance is checked by the styles a screen resolves to, not by pictures: `tests/appearance.rs`
 renders every screen in light and dark and asserts that the same text keeps its size and weight and

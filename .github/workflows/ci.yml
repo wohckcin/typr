@@ -138,9 +138,11 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/nsh" --version
 
-      # `desktop.test.tsx` opens the app and reads its screens; headless it needs no display.
+      # `desktop.test.tsx` opens the app and reads its screens; headless it needs no display. The
+      # file is named on purpose: `nsh test` with no argument also runs the crate's Rust tests,
+      # which the checks job already ran against the whole workspace.
       - name: Test the app through the CLI
-        run: nsh test --junit test-results.xml
+        run: nsh test desktop.test.tsx --junit test-results.xml
 
       # The one artifact the workflow uploads, whatever the tests said, so a red run can be read.
       - name: Upload the test results
