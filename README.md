@@ -3,8 +3,8 @@
 A local-first flashcard app in the shape of Mochi: write markdown cards, review them on a spaced
 schedule, keep every byte on your own disk. Built on [Native Shell](https://nsh.dev).
 
-Status: the port from Rune to Native Shell is in flight; what the app promises lives in
-`openspec/specs/`, the work in `openspec/changes/`.
+Status: the port from Rune to Native Shell is merged; what the app promises lives in
+`openspec/specs/`, and a change in flight in `openspec/changes/`.
 
 ## Layout
 
@@ -24,7 +24,7 @@ fails on a spacing, type, radius or colour literal, or on a `nsh_base` control u
 ## Prerequisites
 
 - Rust `1.99.1` — pinned by `rust-toolchain.toml`.
-- The `nsh` CLI (`nsh --version` reports `0.5.0`), for `nsh run` and `nsh test`.
+- The `nsh` CLI (`nsh --version` reports `0.5.1`), for `nsh run`, `nsh test` and `nsh check`.
 - **Linux only:** `libgtk-4-dev` (GTK 4.14 or newer) and its runtime libraries to build and run.
   CI runs the screens under `xvfb-run`.
 
@@ -41,11 +41,19 @@ Behaviour is tested headlessly: each test opens the app on the real engine, pres
 what is on screen. There are no screenshots and no scene files.
 
 ```sh
-cargo test --workspace             # the whole workspace
-cargo test -p typr appearance      # one test binary
-nsh test                           # the same tests, plus any TSX test files
-nsh check                          # type checks plus `cargo check --all-targets`
+cargo test --workspace                  # the whole workspace, headless
+cargo test -p typr appearance           # one test binary
+nsh test desktop.test.tsx               # the app driven through its own screens, headless
+nsh test --target macos desktop.test.tsx # the same steps in an AppKit window
+nsh check                               # type checks plus `cargo check --all-targets`
 ```
+
+`desktop.test.tsx` reads the app rather than writing to it: the real host opens the library in your
+data folder, so its tests only press keys and assert what is on screen. A headless run has no data
+folder, and the shell states that ("Library closed") while still showing the library's grid.
+
+Running the Rust tests is what `cargo test` does; `nsh test --target` runs the TSX files only, so it
+does not substitute for them.
 
 Appearance is checked by the styles a screen resolves to, not by pictures: `tests/appearance.rs`
 renders every screen in light and dark and asserts that the same text keeps its size and weight and

@@ -97,7 +97,23 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
-      # The screens are Rust tests, so `cargo test` above already ran them (headless, no display).
-      # `nsh test --target linux` is for TSX test files, which this app has none of: it exits with
-      # "no test files in ." and the crates' tests are what it would have run.
+      # The screens are Rust tests, so `cargo test` above already ran them. The TSX test that drives
+      # the whole app needs the CLI: nsh.dev's script installs a release whole (its runtimes live
+      # beside bin/nsh) and links it into ~/.local/bin.
+      - name: Cache the Native Shell CLI
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nsh
+          key: nsh-${{ runner.os }}-v0.5.1
+
+      - name: Install the Native Shell CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL https://nsh.dev/install.sh | NSH_VERSION=v0.5.1 sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/nsh" --version
+
+      # `desktop.test.tsx` opens the app and reads its screens; headless it needs no display.
+      - name: Test the app through the CLI
+        run: nsh test --junit test-results.xml
 

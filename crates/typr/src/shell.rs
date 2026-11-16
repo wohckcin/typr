@@ -21,7 +21,10 @@ use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
 use crate::screens::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
 use crate::screens::study::{entries_for, study};
-use crate::ui::{input::field_reachable, surface, tokens};
+use crate::ui::{
+    input::{field, field_reachable},
+    tokens,
+};
 
 /// How long a store command may take before the diagnostics screen lists it, in milliseconds.
 const SLOW_COMMAND_MS: u32 = 100;
@@ -86,6 +89,19 @@ pub fn shell_with(
     let due = due_counts(&snapshot, SystemClock.now_ms());
     let state = Sidebar::new(items_from(&snapshot, &due), library_open, search_chord());
     let cap = snapshot.settings.new_per_day;
+    // Without a store the screen still shows the library it read: a blank work area would leave a
+    // reader guessing whether the app works.
+    let snapshot = Rc::new(snapshot);
+    let query = signal(String::new());
+    let chosen = signal(0_usize);
+    let tiles = {
+        let snapshot = snapshot.clone();
+        let with = state;
+        computed(move || {
+            let cards = cards_in(&snapshot, with.selected_key().as_deref());
+            tiles_for(&cards, &query.get(), SystemClock.now_ms())
+        })
+    };
     // Escape leaves the screen the work area is showing, back to the whole library. The library
     // table binds no Leave command, so the key is the one every screen uses for it.
     on_key("escape", move |_| state.select(&"all".into()));
@@ -107,7 +123,13 @@ pub fn shell_with(
                 )
                 .into_element();
             }
-            view().p_4().child(surface::separator()).into_element()
+            view()
+                .flex_1()
+                .p_4()
+                .gap_2()
+                .child(field("Search cards", query))
+                .child(grid(tiles, chosen, || {}, |_| {}))
+                .into_element()
         })))
 }
 
