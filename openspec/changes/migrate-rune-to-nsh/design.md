@@ -118,3 +118,12 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 ## Task 4.6 settings/preferences
 
 - The NSH screen accepts and refuses values (limit named, previous kept). `tests/settings.rs` adds `an_accepted_cap_persists_across_a_restart` against a temp `typr_core::store::Db`, and core settings tests cover validation, corrupt values, and round-trips. UI reachability-from-session/library and "paths shown" are part of 4.10's finishing/accessibility wiring.
+
+
+## Task 4.7 keymap panel
+
+- `chord_from_keystroke` maps NSH keystroke strings to typr-core `Chord`; `keymap_panel` lists every binding of a surface with its label and chord. `tests/keymap.rs` verifies the mapping and that every binding is listed. Palette/filtering and the panel open/close toggle are shell wiring covered by 4.10.
+
+## Task 4.9 diagnostics
+
+- `screens/diagnostics.rs` states a stoppage once, lists slow commands or an empty state, and runs import/export callbacks with a result line. `tests/diagnostics.rs` verifies all of these. The spec's file-log, schema-facts and quit-recording requirements are typr-core/logging behaviour with their own code paths.
