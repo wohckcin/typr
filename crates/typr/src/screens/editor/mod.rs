@@ -7,24 +7,28 @@ use std::path::{Path, PathBuf};
 
 use nsh_core::file_dialog::OpenDialog;
 use nsh_core::prelude::*;
-use nsh_core::{TouchEvent, TouchPhase};
 
 use nsh_core::element::{JsObject, Prop};
 use typr_core::keymap::{Command, Surface};
 use typr_core::sides;
-use typr_core::store::{MaskRect, MaskRow};
 
 use crate::screens::keymap::keystroke_of;
 
 use crate::ui::{
     button::{Variant, button},
-    input::field,
-    overlay::decision,
     prose::prose,
     source::{self, source_with},
     status::badge,
     tokens,
 };
+
+mod diagram;
+mod dialogs;
+mod fields;
+
+pub use diagram::{Cover, Diagram, Rect, cover_box, diagram_pane, rect_from_corners};
+pub use dialogs::{Answer, Leaving, clear_question, leave_decision, leaving_choice};
+pub use fields::{Field, field_table, template_preview};
 
 /// Whether the text holds anything once trimmed; an empty card is not saved.
 pub fn has_content(markdown: &str) -> bool {
@@ -127,217 +131,6 @@ pub fn preview_of(side: &str) -> String {
     }
 }
 
-/// One cover on a diagram's picture: the group it belongs to, and its rectangle as fractions of
-/// the picture.
-#[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
-pub struct Cover {
-    pub group: u32,
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl Cover {
-    /// A store row as the pane draws it.
-    pub fn of(row: &MaskRow) -> Cover {
-        Cover {
-            group: row.group,
-            x: row.rect.x,
-            y: row.rect.y,
-            w: row.rect.w,
-            h: row.rect.h,
-        }
-    }
-
-    /// The rectangle the store holds.
-    fn rect(&self) -> MaskRect {
-        Rect {
-            x: self.x,
-            y: self.y,
-            w: self.w,
-            h: self.h,
-        }
-        .rect()
-    }
-}
-
-/// A diagram card's picture, its caption, and the rectangles drawn on it.
-#[derive(Clone, Debug, Default, PartialEq, JsObject)]
-pub struct Diagram {
-    pub image: String,
-    pub caption: String,
-    pub rows: Vec<Cover>,
-}
-
-/// The diagram pane: the picture, a cover per rectangle labelled with its group, a drag across it
-/// that adds a rectangle to the last group, and actions that merge the picked group into one
-/// rectangle or remove the picked group.
-pub fn diagram_pane(diagram: Diagram, cx: Scope<EditorEvent>) -> impl IntoElement {
-    let Diagram {
-        image,
-        caption,
-        rows,
-    } = diagram;
-    // How large the picture is drawn, and where a finger went down on it.
-    let size = signal((300.0_f32, 200.0_f32));
-    let from = signal(None::<(f32, f32)>);
-    let to = signal(None::<(f32, f32)>);
-    let picked = signal(None::<usize>);
-    // The groups in the order they first appear, so the strip is stable as rectangles are added.
-    let mut groups: Vec<u32> = Vec::new();
-    for row in &rows {
-        if !groups.contains(&row.group) {
-            groups.push(row.group);
-        }
-    }
-    // A drag joins the last group, so repeated drags build one answer.
-    let group = groups.last().copied().unwrap_or(1);
-    let layer_rows = rows.clone();
-    let merge_rows = rows.clone();
-    let remove_rows = rows;
-    let mut strip = view().flex_row().gap_2();
-    for (index, row) in layer_rows.clone().into_iter().enumerate() {
-        strip = strip.child(
-            button()
-                .variant(Variant::Default)
-                .label(format!("group {}", row.group))
-                .disabled(|| false)
-                .on_press(move || picked.set(Some(index))),
-        );
-    }
-    view()
-        .flex_1()
-        .gap_2()
-        .claim_touches(TouchClaim::on_move())
-        // A drag across the picture runs from where the finger went down to where it lifted.
-        .on_touch(move |event: &TouchEvent| {
-            let (width, height) = size.get_untracked();
-            // The picture takes the touches itself (`PointerEvents::BoxOnly`), so a finger's
-            // position is already relative to it.
-            let position = event
-                .points
-                .first()
-                .map(|point| (point.location.x.0, point.location.y.0));
-            match event.phase {
-                TouchPhase::Start => {
-                    if let Some(at) = position {
-                        from.set(Some(at));
-                        to.set(Some(at));
-                    }
-                }
-                TouchPhase::Move => {
-                    if let Some(at) = position {
-                        to.set(Some(at));
-                    }
-                }
-                TouchPhase::End | TouchPhase::Cancel => {
-                    let started = from.get_untracked();
-                    let ended = position.or_else(|| to.get_untracked());
-                    from.set(None);
-                    to.set(None);
-                    let (Some(started), Some(ended), TouchPhase::End) =
-                        (started, ended, &event.phase)
-                    else {
-                        return;
-                    };
-                    let Some(rect) = rect_from_corners((width, height), started, ended) else {
-                        return;
-                    };
-                    cx.emit(EditorEvent::AddMask(Cover {
-                        group,
-                        x: rect.x,
-                        y: rect.y,
-                        w: rect.w,
-                        h: rect.h,
-                    }));
-                }
-            }
-        })
-        .child(
-            view()
-                .flex_1()
-                .overflow_hidden()
-                .accessible(true)
-                .role(AccessibilityRole::Image)
-                .label("the picture")
-                .pointer_events(PointerEvents::BoxOnly)
-                .on_layout(move |bounds: &Bounds<Points>| {
-                    size.set((bounds.size.width.0, bounds.size.height.0));
-                })
-                .child(
-                    text("diagram")
-                        .text_xs()
-                        .text_color(tokens::muted_foreground),
-                )
-                .child(prose().source(move || SharedString::from(format!("![]({image})"))))
-                .child(dynamic(move || {
-                    let dims = size.get();
-                    let selected = picked.get();
-                    let mut layer = view().absolute().inset(tokens::flush());
-                    for (index, row) in layer_rows.clone().into_iter().enumerate() {
-                        let (left, top, width, height) = cover_box(dims, row.rect());
-                        let fill = move || match selected == Some(index) {
-                            true => tokens::selection(),
-                            false => tokens::selection().opacity(0.25),
-                        };
-                        layer = layer.child(
-                            view()
-                                .absolute()
-                                .left(px(left))
-                                .top(px(top))
-                                .w(px(width))
-                                .h(px(height))
-                                .bg(fill)
-                                .border_1()
-                                .border_color(tokens::selection)
-                                .accessible(true)
-                                .label(format!("rectangle in group {}", row.group))
-                                .child(text(format!("group {}", row.group)).text_xs()),
-                        );
-                    }
-                    layer.into_element()
-                })),
-        )
-        .child(text(caption).text_sm())
-        .child(strip)
-        .child(
-            view()
-                .flex_row()
-                .gap_2()
-                .child(
-                    button()
-                        .variant(Variant::Default)
-                        .label("Merge group")
-                        .disabled(|| false)
-                        .on_press(move || {
-                            let Some(index) = picked.get_untracked() else {
-                                return;
-                            };
-                            let group = merge_rows[index].group;
-                            let rects: Vec<Rect> = merge_rows
-                                .iter()
-                                .filter(|row| row.group == group)
-                                .map(|row| Rect::of(row.rect()))
-                                .collect();
-                            cx.emit(EditorEvent::MergeMasks(MergedMasks { group, rects }));
-                        }),
-                )
-                .child(
-                    button()
-                        .variant(Variant::Default)
-                        .label("Remove group")
-                        .disabled(|| false)
-                        .on_press(move || {
-                            let Some(index) = picked.get_untracked() else {
-                                return;
-                            };
-                            cx.emit(EditorEvent::RemoveMaskGroup(remove_rows[index].group));
-                        }),
-                ),
-        )
-}
-
 /// A template in force on the card: its text, the fields it fills from, and the deck's name.
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
 pub struct Template {
@@ -364,36 +157,41 @@ pub struct EditorProps {
     pub attachments: Prop<SharedString>,
 }
 
-/// A change to a diagram's covers.
-/// A rectangle as fractions of the picture.
-#[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
-pub struct Rect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl Rect {
-    fn of(rect: MaskRect) -> Rect {
-        Rect {
-            x: rect.x,
-            y: rect.y,
-            w: rect.w,
-            h: rect.h,
-        }
-    }
-
-    fn rect(self) -> MaskRect {
-        MaskRect::new(self.x, self.y, self.w, self.h)
-    }
-}
-
-/// One group's rectangles merged into one that holds them all.
+/// The card's text, as the editor reports it.
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
-pub struct MergedMasks {
+pub struct CardText {
+    /// The whole text.
+    pub text: String,
+}
+
+/// One rectangle dragged onto the picture, and the group it joins.
+#[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
+pub struct MaskAdded {
+    /// The cover the drag drew.
+    pub mask: Cover,
+}
+
+/// One group's rectangles, to be replaced by the one that holds them all.
+#[derive(Clone, Debug, Default, PartialEq, JsObject)]
+pub struct GroupMerge {
+    /// The group the rectangles belong to.
     pub group: u32,
+    /// Every rectangle of that group.
     pub rects: Vec<Rect>,
+}
+
+/// One group of covers, to be let go.
+#[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
+pub struct MaskGroup {
+    /// The group's number.
+    pub group: u32,
+}
+
+/// The picture a card becomes a diagram of.
+#[derive(Clone, Debug, Default, PartialEq, JsObject)]
+pub struct DiagramStart {
+    /// The picture's name, already copied beside the library.
+    pub name: String,
 }
 
 /// What the editor reports: the card's text, and every edit to what it draws. The caller writes
@@ -401,23 +199,23 @@ pub struct MergedMasks {
 #[derive(Event)]
 pub enum EditorEvent {
     /// The text, to write down as the card.
-    Save(String),
+    Save(CardText),
     /// The text as it is typed, to keep as the draft.
-    Draft(String),
+    Draft(CardText),
     /// Leaving, with nothing unsaved.
     Leave,
     /// Leaving without the draft: the in-progress text is thrown away.
     Discard,
     /// A rectangle dragged on the picture.
-    AddMask(Cover),
+    AddMask(MaskAdded),
     /// One group's rectangles to replace with the one that holds them all.
-    MergeMasks(MergedMasks),
+    MergeMasks(GroupMerge),
     /// Every rectangle of a group let go.
-    RemoveMaskGroup(u32),
+    RemoveMaskGroup(MaskGroup),
     /// The picture and every rectangle let go; the card is text again.
     ClearDiagram,
     /// The card becomes a diagram of the picture copied under `name`.
-    DiagramFromImage(String),
+    StartDiagram(DiagramStart),
 }
 
 /// The whole editor: the source or the diagram pane, the preview (from the template when one is in
@@ -547,7 +345,11 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                         .gap_2()
                         .child(source_with(
                             draft,
-                            move |text: &str| cx.emit(EditorEvent::Draft(text.to_owned())),
+                            move |text: &str| {
+                                cx.emit(EditorEvent::Draft(CardText {
+                                    text: text.to_owned(),
+                                }))
+                            },
                             Some(&source_handle),
                         ))
                         .child(
@@ -558,7 +360,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                 .on_press(move || {
                                     let text = draft.get_untracked();
                                     saved.set(text.clone());
-                                    cx.emit(EditorEvent::Save(text));
+                                    cx.emit(EditorEvent::Save(CardText { text }));
                                 }),
                         )
                         .child(dynamic({
@@ -585,7 +387,9 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                                 return;
                                             };
                                             if let Ok(name) = attach_image(&path, root.as_path()) {
-                                                cx.emit(EditorEvent::DiagramFromImage(name));
+                                                cx.emit(EditorEvent::StartDiagram(DiagramStart {
+                                                    name,
+                                                }));
                                             }
                                         });
                                     })
@@ -624,7 +428,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                                         *text = format!("{text}\n{reference}")
                                                     });
                                                     let text = draft.get_untracked();
-                                                    cx.emit(EditorEvent::Draft(text));
+                                                    cx.emit(EditorEvent::Draft(CardText { text }));
                                                 }
                                                 attach_error.set(None);
                                             }
@@ -698,7 +502,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                 let text = draft.get_untracked();
                 if has_content(&text) {
                     saved.set(text.clone());
-                    cx.emit(EditorEvent::Save(text));
+                    cx.emit(EditorEvent::Save(CardText { text }));
                 }
                 cx.emit(EditorEvent::Leave);
             }
@@ -707,220 +511,4 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
             }
         }))
         .into_element()
-}
-/// What leaving a card with unsaved edits does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Leaving {
-    /// Nothing to lose: leave.
-    Leave,
-    /// Ask first.
-    Ask,
-}
-
-/// The user's answer when asked.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Answer {
-    Save,
-    Discard,
-}
-
-/// Whether leaving needs the user's answer first.
-pub fn leaving_choice(dirty: bool) -> Leaving {
-    if dirty { Leaving::Ask } else { Leaving::Leave }
-}
-
-/// The question before a diagram is cleared: every rectangle is thrown away and the card becomes
-/// empty text.
-pub fn clear_question(
-    open: Signal<bool>,
-    on_clear: impl Fn() + Clone + 'static,
-) -> impl IntoElement {
-    let keep = open;
-    let clear = on_clear;
-    let asked = keep;
-    let confirmed = clear;
-    decision(open, move || {
-        let asked = asked;
-        let confirmed = confirmed.clone();
-        view()
-            .gap_3()
-            .child(
-                text("Clear this diagram?")
-                    .text_sm()
-                    .text_color(tokens::foreground),
-            )
-            .child(
-                text("Its picture and every rectangle go; it is edited as text afterwards.")
-                    .text_xs()
-                    .text_color(tokens::muted_foreground),
-            )
-            .child(
-                view()
-                    .flex_row()
-                    .gap_2()
-                    .child(
-                        button()
-                            .variant(Variant::Destructive)
-                            .label("Clear")
-                            .disabled(|| false)
-                            .on_press(move || {
-                                confirmed.clone()();
-                                asked.set(false);
-                            }),
-                    )
-                    .child(
-                        button()
-                            .variant(Variant::Default)
-                            .label("Stay")
-                            .disabled(|| false)
-                            .on_press(move || asked.set(false)),
-                    ),
-            )
-    })
-}
-
-/// The question a dirty editor asks: save, discard, or stay. `open` false hides it; Stay closes it.
-pub fn leave_decision(
-    open: Signal<bool>,
-    on_answer: impl Fn(Answer) + Clone + 'static,
-) -> impl IntoElement {
-    let save = on_answer.clone();
-    let discard = on_answer;
-    decision(open, move || {
-        let stay = open;
-        let save = save.clone();
-        let discard = discard.clone();
-        view()
-            .gap_3()
-            .child(
-                text("Save this card before leaving?")
-                    .text_sm()
-                    .text_color(tokens::foreground),
-            )
-            .child(
-                view()
-                    .flex_row()
-                    .gap_2()
-                    .child(
-                        button()
-                            .variant(Variant::Primary)
-                            .label("Save and leave")
-                            .disabled(|| false)
-                            .on_press(move || {
-                                save(Answer::Save);
-                                stay.set(false);
-                            }),
-                    )
-                    .child(
-                        button()
-                            .variant(Variant::Default)
-                            .label("Discard")
-                            .disabled(|| false)
-                            .on_press(move || {
-                                discard(Answer::Discard);
-                                stay.set(false);
-                            }),
-                    )
-                    .child(
-                        button()
-                            .variant(Variant::Ghost)
-                            .label("Stay")
-                            .disabled(|| false)
-                            .on_press(move || stay.set(false)),
-                    ),
-            )
-    })
-}
-
-/// One row of a card's field table: the name a template uses, the value typed for it, and whether
-/// the app computes it (which makes it read-only).
-#[derive(Clone, Debug, Default, PartialEq, JsObject)]
-pub struct Field {
-    pub name: String,
-    pub value: String,
-    pub computed: bool,
-}
-
-/// The fields a card's template fills from, as the editor shows them: a value per name, computed
-/// rows read-only, and `on_edit(name, value)` when the user types one.
-pub fn field_table(
-    fields: Vec<Field>,
-    on_edit: impl Fn(&str, &str) + Clone + 'static,
-) -> impl IntoElement {
-    let mut column = view().gap_2().child(badge().label("Fields"));
-    for row in fields {
-        let name = row.name.clone();
-        let edit = on_edit.clone();
-        if row.computed {
-            column = column.child(
-                view()
-                    .flex_row()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        text(row.name)
-                            .text_xs()
-                            .text_color(tokens::muted_foreground),
-                    )
-                    .child(text(row.value).text_sm().text_color(tokens::foreground))
-                    .child(badge().label("computed")),
-            );
-        } else {
-            let value = signal(row.value);
-            let edited = name.clone();
-            column = column.child(
-                view()
-                    .gap_1()
-                    .child(text(name).text_xs().text_color(tokens::muted_foreground))
-                    .child(
-                        field()
-                            .placeholder("Value")
-                            .value(move || SharedString::from(value.get()))
-                            .on_change(move |text: &String| {
-                                value.set(text.clone());
-                                edit(&edited, text);
-                            }),
-                    ),
-            );
-        }
-    }
-    column
-}
-
-/// A card's text as its template renders it, for the editor's preview of a templated card.
-pub fn template_preview(template: &str, fields: &[(String, String)], deck: Option<&str>) -> String {
-    typr_core::template::render_card(template, fields, deck)
-}
-
-/// The rectangle between two points on the picture, as fractions of the pane `size` points wide.
-///
-/// `None` when either side is under one percent — the spec's floor — so a click or a twitch adds
-/// nothing, and when the pane has no size yet.
-pub fn rect_from_corners(size: (f32, f32), from: (f32, f32), to: (f32, f32)) -> Option<MaskRect> {
-    let (pane_w, pane_h) = size;
-    if pane_w <= 0.0 || pane_h <= 0.0 {
-        return None;
-    }
-    let fraction = |value: f32, span: f32| (value / span).clamp(0.0, 1.0);
-    let x0 = fraction(from.0.min(to.0), pane_w);
-    let x1 = fraction(from.0.max(to.0), pane_w);
-    let y0 = fraction(from.1.min(to.1), pane_h);
-    let y1 = fraction(from.1.max(to.1), pane_h);
-    // The far edge is clamped twice over: a drag that runs off the picture ends at its edge, and
-    // the sum stays within one without a float-error overshoot the store would refuse.
-    let rect = MaskRect::new(x0, y0, (x1 - x0).min(1.0 - x0), (y1 - y0).min(1.0 - y0));
-    if rect.w < 0.01 || rect.h < 0.01 || !rect.inside_the_image() {
-        return None;
-    }
-    Some(rect)
-}
-
-/// Where a cover sits inside a pane `size` points wide, in points: `(left, top, width, height)`.
-pub fn cover_box(size: (f32, f32), rect: typr_core::store::MaskRect) -> (f32, f32, f32, f32) {
-    (
-        rect.x * size.0,
-        rect.y * size.1,
-        rect.w * size.0,
-        rect.h * size.1,
-    )
 }

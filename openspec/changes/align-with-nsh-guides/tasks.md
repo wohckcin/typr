@@ -17,10 +17,10 @@
 
 ## 2. Editor events carry named objects
 
-- [ ] 2.1 Give each `EditorEvent` variant named fields and rename the state-named ones to acts
+- [x] 2.1 Give each `EditorEvent` variant named fields and rename the state-named ones to acts
       (`DiagramFromImage` becomes `StartDiagram`), then update the shell's listeners. Verify: `cargo test -p typr
       --test editor --test shell` passes and every listener still writes the same store command.
-- [ ] 2.2 Split `screens/editor.rs` into `editor/mod.rs`, `editor/diagram.rs` and `editor/fields.rs` with the
+- [x] 2.2 Split `screens/editor.rs` into `editor/mod.rs`, `editor/diagram.rs` and `editor/fields.rs` with the
       public paths unchanged. Verify: `cargo test -p typr --test editor --test a11y` passes and `wc -l` shows no
       file above about 550 lines.
 

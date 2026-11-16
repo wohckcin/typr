@@ -688,11 +688,11 @@ pub fn shell_over(
                         .template(template)
                         .diagram(diagram)
                         .attachments(attachments.to_string_lossy().to_string())
-                        .on_save(move |markdown: &String| {
+                        .on_save(move |saved: &editor::CardText| {
                             write_save(
                                 Command::SaveCard {
                                     id,
-                                    markdown: markdown.clone(),
+                                    markdown: saved.text.clone(),
                                 },
                                 false,
                                 "SaveCard",
@@ -706,11 +706,11 @@ pub fn shell_over(
                                 "SetDraft",
                             );
                         })
-                        .on_draft(move |text: &String| {
+                        .on_draft(move |draft: &editor::CardText| {
                             write_draft(
                                 Command::SetDraft {
                                     card: id,
-                                    text: Some(text.clone()),
+                                    text: Some(draft.text.clone()),
                                 },
                                 true,
                                 "SetDraft",
@@ -734,7 +734,8 @@ pub fn shell_over(
                         })
                         .on_add_mask({
                             let write = write.clone();
-                            move |mask: &Cover| {
+                            move |added: &editor::MaskAdded| {
+                                let mask = added.mask;
                                 write(
                                     Command::AddMask {
                                         card: id,
@@ -750,7 +751,7 @@ pub fn shell_over(
                         })
                         .on_merge_masks({
                             let write = write.clone();
-                            move |merged: &editor::MergedMasks| {
+                            move |merged: &editor::GroupMerge| {
                                 write(
                                     Command::MergeMasks {
                                         card: id,
@@ -772,11 +773,11 @@ pub fn shell_over(
                         })
                         .on_remove_mask_group({
                             let write = write.clone();
-                            move |group: &u32| {
+                            move |masked: &editor::MaskGroup| {
                                 write(
                                     Command::RemoveMaskGroup {
                                         card: id,
-                                        group: *group,
+                                        group: masked.group,
                                     },
                                     false,
                                     "RemoveMaskGroup",
@@ -787,13 +788,13 @@ pub fn shell_over(
                             let write = write.clone();
                             move || write(Command::ClearDiagram { card: id }, false, "ClearDiagram")
                         })
-                        .on_diagram_from_image({
+                        .on_start_diagram({
                             let write = write.clone();
-                            move |image: &String| {
+                            move |started: &editor::DiagramStart| {
                                 write(
                                     Command::SetDiagram {
                                         card: id,
-                                        image: image.clone(),
+                                        image: started.name.clone(),
                                         caption: String::new(),
                                     },
                                     false,

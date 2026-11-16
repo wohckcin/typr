@@ -5,9 +5,9 @@ use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::screens::editor::{
-    Answer, Cover, Diagram, Field, Leaving, MergedMasks, Template, attach_image, cover_box, editor,
-    field_table, has_content, image_reference, leave_decision, leaving_choice, prompt_count,
-    rect_from_corners, resolve_images, template_preview,
+    Answer, CardText, Cover, Diagram, Field, GroupMerge, Leaving, MaskAdded, MaskGroup, Template,
+    attach_image, cover_box, editor, field_table, has_content, image_reference, leave_decision,
+    leaving_choice, prompt_count, rect_from_corners, resolve_images, template_preview,
 };
 
 #[component]
@@ -19,7 +19,7 @@ fn Probe() -> impl IntoElement {
         .child(
             editor()
                 .saved("Question\n---\nAnswer")
-                .on_save(move |text: &String| saved.set(text.clone())),
+                .on_save(move |saved_card: &CardText| saved.set(saved_card.text.clone())),
         )
         .child(text(move || format!("saved={}", saved.get())))
 }
@@ -105,7 +105,7 @@ fn Restored() -> impl IntoElement {
                 .saved("saved text")
                 .draft(Some(SharedString::from("half a card")))
                 .attachments("/tmp/typr-edit/attachments")
-                .on_draft(move |text: &String| typed.set(text.clone())),
+                .on_draft(move |text: &CardText| typed.set(text.text.clone())),
         )
 }
 
@@ -365,7 +365,7 @@ fn LeavingProbe() -> impl IntoElement {
             editor()
                 .saved("saved text")
                 .draft(Some(SharedString::from("saved text!")))
-                .on_save(move |text: &String| saved.set(text.clone()))
+                .on_save(move |saved_card: &CardText| saved.set(saved_card.text.clone()))
                 .on_leave(move || left.set("yes".to_owned()))
                 .on_discard(move || left.set("yes".to_owned())),
         )
@@ -474,13 +474,16 @@ fn DiagramCard() -> impl IntoElement {
                         },
                     ],
                 })
-                .on_add_mask(move |mask: &Cover| {
+                .on_add_mask(move |added_mask: &MaskAdded| {
+                    let mask = added_mask.mask;
                     added.set(format!("{} w={:.2} x={:.2}", mask.group, mask.w, mask.x))
                 })
-                .on_merge_masks(move |merge: &MergedMasks| {
+                .on_merge_masks(move |merge: &GroupMerge| {
                     merged.set(format!("{} n={}", merge.group, merge.rects.len()))
                 })
-                .on_remove_mask_group(move |group: &u32| removed.set(format!("group={group}")))
+                .on_remove_mask_group(move |group: &MaskGroup| {
+                    removed.set(format!("group={}", group.group))
+                })
                 .on_clear_diagram(move || cleared.set("yes".to_owned())),
         )
 }
