@@ -66,8 +66,9 @@ pub fn list_row(title: impl IntoReactive<SharedString>, selected: impl Fn() -> b
         .py_1()
         .rounded(tokens::radius)
         .bg(move || tokens::row_fill(fill()))
-        .hover(|style| style.bg(move || tokens::hover()))
-        .active(|style| style.bg(move || tokens::selection()).opacity(0.9))
+        // Hover is a wash weaker than the selected fill, and pressed is the fill a selection uses.
+        .hover(|style| style.bg(move || tokens::hover().opacity(0.6)))
+        .active(|style| style.bg(move || tokens::selection()))
         .focus_visible(|style| style.outline(px(2.0)).outline_color(move || tokens::ring()))
         .child(text(title).text_sm().text_color(move || tokens::foreground()))
 }
