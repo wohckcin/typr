@@ -36,13 +36,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # Native Shell's Linux host is GTK 4 (14 or newer) and needs a display to draw: xvfb gives
-      # one, and the dev packages build and link the host.
-      - name: Install GTK and a virtual display
+      # Native Shell's Linux host is GTK 4 (14 or newer) for its views and GStreamer for its media,
+      # and it needs a display to draw: xvfb gives one. The dev packages are what pkg-config and the
+      # linker need to build the host.
+      - name: Install GTK, GStreamer and a virtual display
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev xvfb
-          pkg-config --modversion gtk4
+          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb
+          pkg-config --modversion gtk4 gstreamer-1.0
 
       # rust-toolchain.toml pins the channel, so rustup installs 1.99.1 without being told.
       - name: Install the pinned toolchain
