@@ -15,11 +15,11 @@ movement would cost more than it explains.
 | Sidebar row hover | colour transition, `INSTANT` | instant | plays |
 | Group count changes | none: a number updating is not motion | n/a | no motion |
 | Sidebar keeps its width | none: the sidebar does not collapse, so there is no layout change to follow | n/a | no motion |
-| Current row changes | the row's fill changes in place; no fill slides | n/a | see below |
+| Current row changes | none: the row's own fill changes in place | n/a | no motion |
 
-The sliding current-row fill is the one line this change does not settle. It needs a measured row
-offset per index, which the sidebar does not keep, so it is left out until the sidebar measures its
-rows for another reason.
+No fill slides to the current row. A slide needs each row's measured offset, and the sidebar keeps no
+row geometry, so it would add a measurement layer for one transition that a fill change already
+explains. The line is revisited if the sidebar measures its rows for another reason.
 
 ## Library and card grid
 

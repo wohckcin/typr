@@ -57,10 +57,11 @@ and why. Motion SHALL be drawn from the app's motion tokens and SHALL stop when 
 - **WHEN** a screen's inventory lines are compared with the running app
 - **THEN** each line either plays as written or says no motion with a reason
 
-#### Scenario: A moving selection
+#### Scenario: The current row changes
 
 - **WHEN** the current sidebar row changes
-- **THEN** one selection fill moves to the chosen row, from the motion tokens
+- **THEN** the row's own fill changes in place, and the inventory says why no fill slides: the sidebar
+  keeps no row geometry, so a sliding fill would need a measurement layer for one transition
 
 #### Scenario: Reduced motion stops it
 

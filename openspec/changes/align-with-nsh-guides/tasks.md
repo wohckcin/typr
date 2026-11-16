@@ -66,7 +66,7 @@
 
 ## 6. Motion inventory and popup surface
 
-- [ ] 6.1 Build the sidebar's moving selection from the motion tokens and gate it on `reduce_motion()`, or
+- [x] 6.1 Build the sidebar's moving selection from the motion tokens and gate it on `reduce_motion()`, or
       rewrite that inventory line as instant with a reason if it does not land cleanly. Verify: the line in
       `DESIGN.md` matches what the running app does in `nsh test desktop.test.tsx`.
 - [x] 6.2 Rewrite the tile wave and skeleton cross-fade lines in `DESIGN.md` as no motion with their reasons, and
