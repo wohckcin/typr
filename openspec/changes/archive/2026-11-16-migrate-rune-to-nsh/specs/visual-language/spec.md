@@ -1,3 +1,13 @@
+## REMOVED Requirements
+
+### Requirement: The appearance is checked against a baseline
+
+**Reason**: the port no longer captures screenshots, so a committed baseline image has nothing to be
+compared with.
+
+**Migration**: `tests/appearance.rs` renders each screen headlessly in both appearances and reads the
+resolved styles, which is what the requirement below asks for.
+
 ## MODIFIED Requirements
 
 ### Requirement: Every screen draws with one token set
@@ -21,6 +31,8 @@ SHALL keep the same token set in light and dark themes.
 
 - **WHEN** a screen module's imports are inspected
 - **THEN** it builds controls from the app's `ui` module and does not construct base controls directly
+
+## ADDED Requirements
 
 ### Requirement: The appearance is checked by the styles it resolves to
 

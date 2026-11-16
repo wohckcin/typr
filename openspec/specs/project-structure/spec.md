@@ -16,13 +16,12 @@ graph, and in an environment with no display server.
 #### Scenario: The dependency graph is clean
 
 - **WHEN** the backend crate's normal dependencies are listed
-- **THEN** no Rune crate (the drawing toolkit, its component library, or their wgpu/winit/parley
-  stack) appears in the output
+- **THEN** no NSH crate (`nsh-*`) and no Rune crate appears in the output
 
 #### Scenario: The backend tests run headless
 
 - **WHEN** the backend crate's tests are run on a machine with no `DISPLAY`, no `WAYLAND_DISPLAY`
-  and no Vulkan driver
+  and no GTK or GPU libraries
 - **THEN** they pass, because the backend links no windowing or GPU code
 
 ### Requirement: The backend takes its storage location from the caller
@@ -61,36 +60,20 @@ its caller. The backend MUST NOT read the machine's timezone itself.
 - **THEN** its behaviour depends only on the offsets passed with each call, so a caller that supplies
   a zone still gets that zone's days
 
-### Requirement: One Rune revision for the whole workspace
-
-The workspace MUST pin the drawing toolkit to a single revision, and the patch entries that revision
-requires MUST live at the workspace root, since a member's patches never apply to its dependents.
-
-#### Scenario: A bump is one edit
-
-- **WHEN** the toolkit is moved to a newer revision
-- **THEN** the revision and its patch entries are changed in one file, and every member resolves the
-  same revision
-
-#### Scenario: A member cannot drift
-
-- **WHEN** the resolved dependency graph of either member is inspected
-- **THEN** both name the same toolkit revision, and no member carries a patch entry of its own
-
 ### Requirement: The desktop crate is the only consumer of the toolkit
 
-Toolkit and windowing dependencies MUST appear only in the desktop crate. The binary, its scenes and
-their snapshots remain a desktop concern.
+Toolkit and windowing dependencies MUST appear only in the desktop crate. The binary, its screens and
+their screenshot tests remain a desktop concern.
 
 #### Scenario: Toolkit crates appear once
 
 - **WHEN** the whole workspace's dependency graph is inspected
-- **THEN** the toolkit crates are reached only through the desktop crate
+- **THEN** the `nsh-*` crates are reached only through the desktop crate
 
 #### Scenario: The app still draws after the move
 
-- **WHEN** the desktop crate renders each scene to a snapshot file
-- **THEN** every snapshot is written and is not empty
+- **WHEN** the desktop crate's screenshot tests run on a supported platform
+- **THEN** every screen's screenshot is written and is not empty
 
 ### Requirement: A library written before the split opens unchanged
 
@@ -137,3 +120,16 @@ never created only to hold tests.
 - **WHEN** the application's tests grow past one subject
 - **THEN** they are split into modules named for what they check, and no crate-root test module holds them all
 
+### Requirement: One NSH source for the whole workspace
+
+The workspace MUST resolve every `nsh-*` crate from one source at one version, declared once at the workspace root.
+
+#### Scenario: A bump is one edit
+
+- **WHEN** NSH is moved to a newer version
+- **THEN** one workspace dependency table changes, and every `nsh-*` crate in `Cargo.lock` resolves to that version
+
+#### Scenario: Mixed sources are refused
+
+- **WHEN** the resolved dependency graph is inspected
+- **THEN** every `nsh-*` package comes from the same source and version, and no Rune package is present
