@@ -10,7 +10,7 @@ use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::screens::diagnostics::{SlowCommand, diagnostics};
-use typr::screens::editor::{Actions, Card, editor_card};
+use typr::screens::editor as card_editor;
 use typr::screens::history::{Record, history};
 use typr::screens::settings::{LibraryInfo, Values, settings};
 use typr::screens::study::study;
@@ -60,15 +60,11 @@ fn LibraryScreen() -> impl IntoElement {
 #[component]
 fn Editor() -> impl IntoElement {
     typr::ui::tokens::install();
-    view().flex_1().child(editor_card(
-        Card {
-            saved: "gato".to_owned(),
-            draft: Some("gato!".to_owned()),
-            ..Card::default()
-        },
-        std::path::PathBuf::new(),
-        Actions::new().attach(|_| Ok("unused.png".to_owned())),
-    ))
+    view().flex_1().child(
+        card_editor::editor()
+            .saved("gato")
+            .draft(Some(SharedString::from("gato!"))),
+    )
 }
 
 #[component]

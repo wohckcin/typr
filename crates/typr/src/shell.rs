@@ -15,7 +15,7 @@ use typr_core::session::{Entry, Session};
 use typr_core::store::{Command, Db, Grade, Id, Outcome, Snapshot};
 
 use crate::screens::diagnostics::{SlowCommand, diagnostics};
-use crate::screens::editor::{self, Actions, Card, Diagram, Field, Template};
+use crate::screens::editor::{self, Cover, Diagram, Field, Template};
 use crate::screens::grid::grid;
 use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
@@ -608,18 +608,27 @@ pub fn shell_over(
                         (card.kind == typr_core::store::CardKind::Diagram).then(|| Diagram {
                             image: card.image.clone().unwrap_or_default(),
                             caption: card.caption.clone().unwrap_or_default(),
-                            rows: card.masks.clone(),
+                            rows: card.masks.iter().map(Cover::of).collect(),
                         });
                     let draft = db.draft(id).ok().flatten();
                     let write_save = write.clone();
                     let write_draft = write.clone();
-                    let write_mask = write.clone();
-                    let write_merge = write.clone();
-                    let write_remove = write.clone();
                     let leaving = screen;
-                    let actions = Actions::new()
-                        .save(move |markdown| {
-                            write_save(Command::SaveCard { id, markdown }, false, "SaveCard");
+                    editor::editor()
+                        .saved(card.markdown.clone())
+                        .draft(draft.map(SharedString::from))
+                        .template(template)
+                        .diagram(diagram)
+                        .attachments(attachments.to_string_lossy().to_string())
+                        .on_save(move |markdown: &String| {
+                            write_save(
+                                Command::SaveCard {
+                                    id,
+                                    markdown: markdown.clone(),
+                                },
+                                false,
+                                "SaveCard",
+                            );
                             write_save(
                                 Command::SetDraft {
                                     card: id,
@@ -629,18 +638,18 @@ pub fn shell_over(
                                 "SetDraft",
                             );
                         })
-                        .draft(move |text| {
+                        .on_draft(move |text: &String| {
                             write_draft(
                                 Command::SetDraft {
                                     card: id,
-                                    text: Some(text.to_owned()),
+                                    text: Some(text.clone()),
                                 },
                                 true,
                                 "SetDraft",
                             )
                         })
-                        .leave(move || leaving.set(Screen::Library))
-                        .discard({
+                        .on_leave(move || leaving.set(Screen::Library))
+                        .on_discard({
                             let write = write.clone();
                             move || {
                                 // Discarding drops the stored draft, so the next open is the card.
@@ -655,84 +664,76 @@ pub fn shell_over(
                                 screen.set(Screen::Library);
                             }
                         })
-                        .attach({
-                            let root = attachments.clone();
-                            move |path| editor::attach_image(&path, &root)
-                        })
-                        .masks(
-                            move |group, rect| {
-                                write_mask(
+                        .on_add_mask({
+                            let write = write.clone();
+                            move |mask: &Cover| {
+                                write(
                                     Command::AddMask {
                                         card: id,
-                                        group,
-                                        rect,
+                                        group: mask.group,
+                                        rect: typr_core::store::MaskRect::new(
+                                            mask.x, mask.y, mask.w, mask.h,
+                                        ),
                                     },
                                     false,
                                     "AddMask",
                                 )
-                            },
-                            move |group, rects| {
-                                write_merge(
+                            }
+                        })
+                        .on_merge_masks({
+                            let write = write.clone();
+                            move |merged: &editor::MergedMasks| {
+                                write(
                                     Command::MergeMasks {
                                         card: id,
-                                        group,
-                                        rects,
+                                        group: merged.group,
+                                        rects: merged
+                                            .rects
+                                            .iter()
+                                            .map(|rect| {
+                                                typr_core::store::MaskRect::new(
+                                                    rect.x, rect.y, rect.w, rect.h,
+                                                )
+                                            })
+                                            .collect(),
                                     },
                                     false,
                                     "MergeMasks",
                                 )
-                            },
-                            move |rect| {
-                                write_remove(
-                                    Command::RemoveMask { card: id, rect },
+                            }
+                        })
+                        .on_remove_mask_group({
+                            let write = write.clone();
+                            move |group: &u32| {
+                                write(
+                                    Command::RemoveMaskGroup {
+                                        card: id,
+                                        group: *group,
+                                    },
                                     false,
-                                    "RemoveMask",
+                                    "RemoveMaskGroup",
                                 )
-                            },
-                        )
-                        .kinds(
-                            {
-                                let write = write.clone();
-                                move |group| {
-                                    write(
-                                        Command::RemoveMaskGroup { card: id, group },
-                                        false,
-                                        "RemoveMaskGroup",
-                                    )
-                                }
-                            },
-                            {
-                                let write = write.clone();
-                                move || {
-                                    write(Command::ClearDiagram { card: id }, false, "ClearDiagram")
-                                }
-                            },
-                            {
-                                let write = write.clone();
-                                move |image| {
-                                    write(
-                                        Command::SetDiagram {
-                                            card: id,
-                                            image,
-                                            caption: String::new(),
-                                        },
-                                        false,
-                                        "SetDiagram",
-                                    )
-                                }
-                            },
-                        );
-                    editor::editor_card(
-                        Card {
-                            saved: card.markdown.clone(),
-                            draft,
-                            template,
-                            diagram,
-                        },
-                        attachments.clone(),
-                        actions,
-                    )
-                    .into_element()
+                            }
+                        })
+                        .on_clear_diagram({
+                            let write = write.clone();
+                            move || write(Command::ClearDiagram { card: id }, false, "ClearDiagram")
+                        })
+                        .on_diagram_from_image({
+                            let write = write.clone();
+                            move |image: &String| {
+                                write(
+                                    Command::SetDiagram {
+                                        card: id,
+                                        image: image.clone(),
+                                        caption: String::new(),
+                                    },
+                                    false,
+                                    "SetDiagram",
+                                )
+                            }
+                        })
+                        .into_element()
                 }
                 // The grid: the sidebar's row in force picks the cards, and a tile opens one.
                 Screen::Library => view()

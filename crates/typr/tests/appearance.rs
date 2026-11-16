@@ -160,11 +160,7 @@ fn GridScreen() -> impl IntoElement {
 #[component]
 fn EditorScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    editor(
-        "Question".to_owned(),
-        |_| {},
-        |_| Ok("unused.png".to_owned()),
-    )
+    editor().saved("Question")
 }
 
 #[component]

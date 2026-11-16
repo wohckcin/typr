@@ -5,11 +5,10 @@ use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::screens::editor::{
-    Actions, Answer, Card, Diagram, Field, Leaving, Template, attach_image, cover_box, editor,
-    editor_card, editor_with_draft, field_table, has_content, image_reference, leave_decision,
-    leaving_choice, prompt_count, rect_from_corners, resolve_images, template_preview,
+    Answer, Cover, Diagram, Field, Leaving, MergedMasks, Template, attach_image, cover_box, editor,
+    field_table, has_content, image_reference, leave_decision, leaving_choice, prompt_count,
+    rect_from_corners, resolve_images, template_preview,
 };
-use typr_core::store::{MaskRect, MaskRow};
 
 #[component]
 fn Probe() -> impl IntoElement {
@@ -17,18 +16,18 @@ fn Probe() -> impl IntoElement {
     let saved = signal(String::from("nothing saved"));
     view()
         .flex_1()
-        .child(editor(
-            "Question\n---\nAnswer".to_owned(),
-            move |text| saved.set(text),
-            |_| Ok("unused.png".to_owned()),
-        ))
+        .child(
+            editor()
+                .saved("Question\n---\nAnswer")
+                .on_save(move |text: &String| saved.set(text.clone())),
+        )
         .child(text(move || format!("saved={}", saved.get())))
 }
 
 #[component]
 fn Empty() -> impl IntoElement {
     typr::ui::tokens::install();
-    editor(String::new(), |_| {}, |_| Ok("unused.png".to_owned()))
+    editor().saved("")
 }
 
 #[test]
@@ -101,14 +100,13 @@ fn Restored() -> impl IntoElement {
     view()
         .gap_2()
         .child(text(move || format!("typed={}", typed.get())))
-        .child(editor_with_draft(
-            "saved text".to_owned(),
-            Some("half a card".to_owned()),
-            std::path::PathBuf::from("/tmp/typr-edit/attachments"),
-            |_| {},
-            |_| Ok("unused.png".to_owned()),
-            move |text| typed.set(text.to_owned()),
-        ))
+        .child(
+            editor()
+                .saved("saved text")
+                .draft(Some(SharedString::from("half a card")))
+                .attachments("/tmp/typr-edit/attachments")
+                .on_draft(move |text: &String| typed.set(text.clone())),
+        )
 }
 
 #[test]
@@ -300,10 +298,10 @@ fn a_click_or_a_twitch_adds_nothing() {
 #[component]
 fn Templated() -> impl IntoElement {
     typr::ui::tokens::install();
-    view().child(editor_card(
-        Card {
-            saved: "stored".to_owned(),
-            template: Some(Template {
+    view().child(
+        editor()
+            .saved("stored")
+            .template(Template {
                 text: "<<Word>>\n---\n<<Meaning>>".to_owned(),
                 fields: vec![
                     Field {
@@ -323,12 +321,9 @@ fn Templated() -> impl IntoElement {
                     },
                 ],
                 deck: Some("Spanish".to_owned()),
-            }),
-            ..Card::default()
-        },
-        std::path::PathBuf::from("/tmp/typr-edit/attachments"),
-        Actions::new().attach(|_| Ok("unused.png".to_owned())),
-    ))
+            })
+            .attachments("/tmp/typr-edit/attachments"),
+    )
 }
 
 #[test]
@@ -366,18 +361,14 @@ fn LeavingProbe() -> impl IntoElement {
         .child(text(move || {
             format!("left={} saved={}", left.get(), saved.get())
         }))
-        .child(editor_card(
-            Card {
-                saved: "saved text".to_owned(),
-                draft: Some("saved text!".to_owned()),
-                ..Card::default()
-            },
-            std::path::PathBuf::new(),
-            Actions::new()
-                .save(move |text| saved.set(text))
-                .attach(|_| Ok("unused.png".to_owned()))
-                .leave(move || left.set("yes".to_owned())),
-        ))
+        .child(
+            editor()
+                .saved("saved text")
+                .draft(Some(SharedString::from("saved text!")))
+                .on_save(move |text: &String| saved.set(text.clone()))
+                .on_leave(move || left.set("yes".to_owned()))
+                .on_discard(move || left.set("yes".to_owned())),
+        )
 }
 
 #[test]
@@ -424,13 +415,11 @@ fn CleanLeaving() -> impl IntoElement {
     view()
         .gap_2()
         .child(text(move || format!("left={}", left.get())))
-        .child(editor_card(
-            Card::new("saved text"),
-            std::path::PathBuf::new(),
-            Actions::new()
-                .attach(|_| Ok("unused.png".to_owned()))
-                .leave(move || left.set("yes".to_owned())),
-        ))
+        .child(
+            editor()
+                .saved("saved text")
+                .on_leave(move || left.set("yes".to_owned())),
+        )
 }
 
 #[test]
@@ -462,40 +451,38 @@ fn DiagramCard() -> impl IntoElement {
                 cleared.get()
             )
         }))
-        .child(editor_card(
-            Card {
-                saved: String::new(),
-                diagram: Some(Diagram {
+        .child(
+            editor()
+                .saved("")
+                .diagram(Diagram {
                     image: "cat.png".to_owned(),
                     caption: "the cat".to_owned(),
                     rows: vec![
-                        MaskRow {
+                        Cover {
                             group: 1,
-                            rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
+                            x: 0.1,
+                            y: 0.1,
+                            w: 0.2,
+                            h: 0.2,
                         },
-                        MaskRow {
+                        Cover {
                             group: 2,
-                            rect: MaskRect::new(0.6, 0.6, 0.2, 0.2),
+                            x: 0.6,
+                            y: 0.6,
+                            w: 0.2,
+                            h: 0.2,
                         },
                     ],
-                }),
-                ..Card::default()
-            },
-            std::path::PathBuf::new(),
-            Actions::new()
-                .masks(
-                    move |group, rect| {
-                        added.set(format!("{group} w={:.2} x={:.2}", rect.w, rect.x))
-                    },
-                    move |group, rects| merged.set(format!("{group} n={}", rects.len())),
-                    move |rect| removed.set(format!("w={:.2}", rect.w)),
-                )
-                .kinds(
-                    move |group| removed.set(format!("group={group}")),
-                    move || cleared.set("yes".to_owned()),
-                    |_| {},
-                ),
-        ))
+                })
+                .on_add_mask(move |mask: &Cover| {
+                    added.set(format!("{} w={:.2} x={:.2}", mask.group, mask.w, mask.x))
+                })
+                .on_merge_masks(move |merge: &MergedMasks| {
+                    merged.set(format!("{} n={}", merge.group, merge.rects.len()))
+                })
+                .on_remove_mask_group(move |group: &u32| removed.set(format!("group={group}")))
+                .on_clear_diagram(move || cleared.set("yes".to_owned())),
+        )
 }
 
 #[test]
@@ -581,25 +568,13 @@ fn the_diagram_clears_only_after_the_question() -> Result<(), String> {
 #[component]
 fn EmptyCard() -> impl IntoElement {
     typr::ui::tokens::install();
-    view().flex_1().child(editor_card(
-        Card::new(""),
-        std::path::PathBuf::new(),
-        Actions::new()
-            .attach(|_| Ok("unused.png".to_owned()))
-            .kinds(|_| {}, || {}, |_| {}),
-    ))
+    view().flex_1().child(editor().saved(""))
 }
 
 #[component]
 fn WrittenCard() -> impl IntoElement {
     typr::ui::tokens::install();
-    view().flex_1().child(editor_card(
-        Card::new("gato"),
-        std::path::PathBuf::new(),
-        Actions::new()
-            .attach(|_| Ok("unused.png".to_owned()))
-            .kinds(|_| {}, || {}, |_| {}),
-    ))
+    view().flex_1().child(editor().saved("gato"))
 }
 
 #[test]
@@ -658,18 +633,11 @@ fn DynamicHolder() -> impl IntoElement {
         }))
         .child(dynamic(move || {
             let _ = tick.get();
-            editor_card(
-                Card {
-                    saved: "saved text".to_owned(),
-                    draft: Some("saved text!".to_owned()),
-                    ..Card::default()
-                },
-                std::path::PathBuf::new(),
-                Actions::new()
-                    .attach(|_| Ok("unused.png".to_owned()))
-                    .leave(move || left.set("yes".to_owned())),
-            )
-            .into_element()
+            editor()
+                .saved("saved text")
+                .draft(Some(SharedString::from("saved text!")))
+                .on_leave(move || left.set("yes".to_owned()))
+                .into_element()
         }))
 }
 
