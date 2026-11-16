@@ -101,9 +101,11 @@ impl LibraryInfo {
 }
 
 fn section(name: &'static str, body: impl IntoElement) -> impl IntoElement {
+    // A section's name is a label, not a chip: a badge here drew a full-width bordered box that
+    // read as an empty field.
     view()
         .gap_2()
-        .child(badge(name))
+        .child(text(name).text_xs().text_color(move || tokens::muted_foreground()))
         .child(body)
 }
 
@@ -167,7 +169,7 @@ pub fn settings(
                         None => view().into_element(),
                     }
                 }))
-                .child(button(Variant::Default, "Apply", || false, accept)),
+                .child(view().flex_row().child(button(Variant::Default, "Apply", || false, accept))),
         ))
         .child(section("Appearance", toggle("Show review counts", values.show_counts)))
         .child(section(

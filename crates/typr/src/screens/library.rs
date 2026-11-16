@@ -42,6 +42,7 @@ pub fn library(
     let snapshot = std::rc::Rc::new(snapshot);
     let state = Sidebar::new(items_from(&snapshot, &due), library_open, search_chord());
     let query = signal(String::new());
+    let chosen = signal(0);
     let tiles = computed({
         let snapshot = snapshot.clone();
         move || {
@@ -61,6 +62,6 @@ pub fn library(
                 .p_4()
                 .gap_3()
                 .child(field("Search cards", query))
-                .child(grid(tiles, || {}, on_open)),
+                .child(grid(tiles, chosen, || {}, on_open)),
         )
 }

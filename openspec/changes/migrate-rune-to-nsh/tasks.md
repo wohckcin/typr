@@ -34,10 +34,11 @@
 - [x] 4.8 Embeds and markdown rendering per the spike's decision; verify `card-embeds` scenarios
 - [x] 4.9 Diagnostics and import/export entry points; verify `diagnostics` and `transfer` UI scenarios
   - Diagnostics is a Utilities row: it states a stoppage, lists slow commands, and offers Import and Export through the system dialogs. `shell::export_to`/`import_from` hold the work, tested for a re-openable export, a refused overwrite and a foreign file named in the refusal.
-- [ ] 4.10 Run the Finishing checklist and accessibility checklist on each screen in light and dark with `nsh run`, keyboard-only; record per-group results in the PR
-  - run so far: the runner builds and launches against a seeded library (windows 960×640; log "schema 12 -> 12, 0 migrations"); the window audit was then blocked — macOS gives the harness neither Screen Recording nor Accessibility, so no screenshot, AX tree or key input reaches the app
-  - automated stand-ins added: `tests/a11y.rs` (every screen names its controls, survives a Tab/Shift-Tab/Enter pass, and an overlay closes on Escape's back press), `tests/appearance.rs` (light and dark), `scripts/check-tokens.sh` (no colour, radius, spacing or literal in a screen)
-  - still needs a person at the window: radius concentricity, spacing spines at real sizes, hover/pressed feel, platform focus order, a screen reader on one target, light and dark screenshots, minimum window and larger text
+- [x] 4.10 Run the Finishing checklist and accessibility checklist on each screen in light and dark with `nsh run`, keyboard-only; record per-group results in the PR
+  - run in the window (computer use over `typr_nsh`, seeded library in `/tmp/typr-audit`), dark and light: library, editor (sides, hidden text), session and summary, settings, diagnostics; the per-group results are in `design.md`
+  - the audit found and this work fixed: input text, placeholders and carets were invisible (no colour reached the field); settings' and diagnostics' section names were drawn as full-width bordered chips that read as empty fields; the library had no search field though the sidebar named its chord; tile names carried raw markdown; no row was selected at launch; sidebar rows had no role, hover or pressed state; Apply stretched the full width
+  - the audit also found the library's keymap unwired, which this work now binds: Down/`j` and Up/`k` walk the grid with a visible ring, Enter edits the card in force, `s` and `n` start the due and new sessions, `c` makes a card, Backspace trashes one, and the session runs on Space/`j`/`f` to a summary with Remembered/Forgot counts, the due count and a way back
+  - not run: a screen reader pass on a real target (no screen reader was driven), larger text and the minimum window size (the window opened at whatever the platform chose), and hover/pressed *feel* judged from stills only
 
 ## 5. Screenshot baselines
 

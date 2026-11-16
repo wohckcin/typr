@@ -107,7 +107,20 @@ fn char_keystroke(c: char, mods: Mods) -> String {
 
 /// The keystroke string NSH's `on_key` takes for a command on `surface`, from the table.
 pub fn keystroke_of(surface: Surface, command: Command) -> Option<String> {
-    match chord_of(surface, command)? {
+    keystroke_of_chord(chord_of(surface, command)?)
+}
+
+/// Every keystroke `command` is bound to on `surface`.
+pub fn keystrokes_of(surface: Surface, command: Command) -> Vec<String> {
+    typr_core::keymap::chords_of(surface, command)
+        .into_iter()
+        .filter_map(keystroke_of_chord)
+        .collect()
+}
+
+/// One chord as the keystroke string `on_key` takes.
+pub fn keystroke_of_chord(chord: Chord) -> Option<String> {
+    match chord {
         Chord::Key(Key::Space) => Some("space".to_owned()),
         Chord::Key(Key::Enter) => Some("enter".to_owned()),
         Chord::Key(Key::Char(c)) => Some(char_keystroke(c, Mods::NONE)),

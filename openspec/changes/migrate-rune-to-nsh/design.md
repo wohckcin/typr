@@ -127,6 +127,24 @@ Rollback: before the merge, delete the branch. After it, revert the merge commit
 - `chord_from_keystroke` maps NSH keystroke strings to typr-core `Chord`; `keystroke_of` turns a table chord into the keystroke `on_key` takes, writing Shifted characters as the key they are typed on (`?` is `shift+/`). `keymap_panel` opens and closes on the surface's shortcut chord and its list narrows as the user types; `palette` narrows the surface's commands and Enter (the field's submit) runs the first left. A command the surface does not bind is never offered.
 - `tests/keymap.rs` verifies the mapping, the shifted form, the listing, the open/close toggle, filtering, and the palette's Enter run. The palette indicator is drawn before the row list: a row list of cards following it is drawn into its own subtree.
 
+## Task 4.10 Finishing checklist, per group (window audit, dark and light)
+
+- **Radius**: the cards, fields, chips, popups and buttons all take `tokens::radius`; nothing on a screen names a number (`scripts/check-tokens.sh`). Concentricity where a chip sits on a card reads right; no rectangle is a near-pill by accident; `rounded_full` only on the switch track and thumb.
+- **Typography**: three sizes in use (`text_sm` for interface text, `text_xs` for metadata, `text_sm` monospace in the source); bold appears only on the selected sidebar row and the primary Save; secondary text is `muted-foreground`, measured #737373 on white (4.7:1) and #a3a3a3 on #0a0a0a.
+- **Spacing and gaps**: every gap and padding is a step (`gap_1..4`, `p_3/p_4`, `px_3/py_1`), and nested panels return to their parent's inset; no doubled insets seen.
+- **Alignment**: sidebar rows share one leading spine and keep their due chips in a trailing lane; tiles share their leading edge and their schedule line; settings' paths and their buttons sit on one baseline; the editor's source and preview split the width evenly.
+- **Color and surfaces**: every colour is a token; one primary action per surface (Save in the editor, Apply in the review card); chips are quiet hairlines; the popup (the leave question, the clear question) is the only elevated surface.
+- **Hover and pressed**: rows take a wash weaker than selection (`accent` at 60%) and press to the selection fill; buttons move to 85–90% opacity and ring the keyboard focus; tiles take the button's treatment through `tile_button`.
+- **The `ui` layer**: every screen builds from `crate::ui`; the source check refuses an `nsh_base` control or a literal, and the gallery test shows each component in its states.
+- **Component standards**: one height per size (buttons 32, fields 32, chips from the type scale), popups on one surface, focus rings outside the border.
+- **Other states**: focus rings on every keyboard-reachable control (rows, tiles, tabs, toggles, fields, buttons); the fold control is the one icon-only button and carries a glyph, not a label — not fixed, listed below.
+- **Motion and sound**: no motion on these screens beyond the switch thumb and the press settle; the app plays no sound.
+- **Accessibility and keyboard (blocking)**: the main task completes with the keyboard alone — Down walks the grid with a ring, Enter edits, `s`/`n` start a session, Space reveals, `j`/`f` grade, Escape returns; every control is a role with a name (checked through the AX tree and `tests/a11y.rs`); nothing relies on colour alone (the selected row is filled *and* the tiles ring).
+- **Platforms**: desktop only in this port; the web and mobile columns do not apply.
+- **Content states**: empty (Diagnostics states "No slow commands recorded"; the grid states an empty deck with the new-card action), long content truncates in tiles and scrolls in the source. Larger text and a scripted minimum window were not exercised.
+
+Fixed from this audit: input text/placeholder/caret colour (none reached the field before), section names drawn as chips, the missing library search field, raw markdown in tile names, no default selection, rows without role/hover/pressed/focus, `Apply` at full width, and the library's keymap (selection, Enter, `s`/`n`, `c`, Backspace) with the session, its grades and a summary behind them.
+
 ## Task 4.9 diagnostics and transfer entry points
 
 - The sidebar's Utilities now holds Diagnostics beside Settings. `shell_over` mounts `diagnostics` with three signals it owns: `stopped` (set at launch when the library did not open, and by every refused command), `slow` (a command that took `SLOW_COMMAND_MS` = 100 ms or more, by name and cost) and `result`.

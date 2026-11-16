@@ -24,7 +24,7 @@ fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let data = signal(tiles(200));
     let memo = computed(move || data.get());
-    view().flex_1().child(grid(memo, || {}, |_| {}))
+    view().flex_1().child(grid(memo, signal(0), || {}, |_| {}))
 }
 
 #[component]
@@ -32,7 +32,7 @@ fn Empty() -> impl IntoElement {
     typr::ui::tokens::install();
     let data = signal(Vec::<Tile>::new());
     let memo = computed(move || data.get());
-    view().flex_1().child(grid(memo, || {}, |_| {}))
+    view().flex_1().child(grid(memo, signal(0), || {}, |_| {}))
 }
 
 #[test]

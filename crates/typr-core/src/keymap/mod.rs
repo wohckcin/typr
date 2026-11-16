@@ -436,6 +436,16 @@ pub fn dispatch(surface: Surface, chord: Chord) -> Option<Command> {
 }
 
 /// The chord bound to a command on a surface, for drawing a keycap.
+/// Every chord bound to `command` on `surface`: a command may have more than one (Down and `j`
+/// both walk the library), and every one must act.
+pub fn chords_of(surface: Surface, command: Command) -> Vec<Chord> {
+    table()
+        .iter()
+        .filter(|binding| binding.surface == surface && binding.command == command)
+        .map(|binding| binding.chord)
+        .collect()
+}
+
 pub fn chord_of(surface: Surface, command: Command) -> Option<Chord> {
     table()
         .iter()

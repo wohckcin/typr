@@ -68,6 +68,34 @@ pub fn first_side(markdown: &str) -> String {
     }
 }
 
+/// A tile's name for screen readers: its markdown preview with the syntax that would be read aloud
+/// taken out, so a tile says "ser means to be", not the asterisks around it.
+pub fn plain_preview(markdown: &str) -> String {
+    let mut out = String::with_capacity(markdown.len());
+    let mut rest = markdown;
+    while let Some(at) = rest.find("![") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 2..];
+        let Some(close) = after.find("](") else {
+            out.push_str(rest);
+            return out;
+        };
+        out.push_str(&after[..close]);
+        let Some(end) = after[close + 2..].find(')') else {
+            out.push_str(rest);
+            return out;
+        };
+        rest = &after[close + 2 + end + 1..];
+    }
+    out.push_str(rest);
+    out.replace("**", "")
+        .replace('`', "")
+        .replace('*', "")
+        .replace("\n", " ")
+        .trim()
+        .to_owned()
+}
+
 /// The tile a card draws, from its snapshot row.
 pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
     // A diagram has no text: its tile says what the picture shows.
@@ -88,6 +116,7 @@ pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
 /// The grid over `tiles`. An empty deck offers the tile that starts a card.
 pub fn grid(
     tiles: Memo<Vec<Tile>>,
+    chosen: Signal<usize>,
     on_new: impl Fn() + Clone + 'static,
     on_open: impl Fn(i64) + Clone + 'static,
 ) -> impl IntoElement {
@@ -108,7 +137,7 @@ pub fn grid(
                 .into_element();
         }
         let open = open.clone();
-        virtual_list(move || tiles.with(Vec::len), move |at| tile_cell(tiles, at, open.clone()))
+        virtual_list(move || tiles.with(Vec::len), move |at| tile_cell(tiles, at, chosen, open.clone()))
             .columns(move || tokens::grid_columns(window().width.0))
             .keys(move || tiles.with(|t| t.iter().map(|t| t.id).collect::<Vec<_>>()))
             .estimated_item_size(tokens::tile_estimate())
@@ -122,7 +151,12 @@ fn button_new(on_new: impl Fn() + 'static) -> impl IntoElement {
 }
 
 /// A cell of the list. It keeps no state: every binding reads the tile at its current index.
-fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position, on_open: impl Fn(i64) + Clone + 'static) -> impl IntoElement {
+fn tile_cell(
+    tiles: Memo<Vec<Tile>>,
+    at: Position,
+    chosen: Signal<usize>,
+    on_open: impl Fn(i64) + Clone + 'static,
+) -> impl IntoElement {
     let tile = computed(move || tiles.with(|t| t.get(at.index()).cloned()));
     let preview = move || tile.with(|t| t.as_ref().map(|t| t.preview.clone()).unwrap_or_default());
     let hidden = move || tile.with(|t| t.as_ref().map_or(0, |t| t.hidden_sides));
@@ -154,7 +188,11 @@ fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position, on_open: impl Fn(i64) + Clone
         let on_open = on_open.clone();
         move || on_open(opened())
     };
-    crate::ui::button::tile_button(preview, move || press(), surface::card(
+    let named = move || plain_preview(&preview()).into();
+    // The keyboard's card wears a ring, so Enter's target is never a guess.
+    let index = at.index();
+    let ring = move || if chosen.get() == index { tokens::selection() } else { tokens::background() };
+    crate::ui::button::tile_button(named, move || press(), view().rounded(tokens::radius).border_1().border_color(ring).child(surface::card(
         view()
             .gap_2()
             .child(prose(preview))
@@ -174,5 +212,5 @@ fn tile_cell(tiles: Memo<Vec<Tile>>, at: Position, on_open: impl Fn(i64) + Clone
             }))
             .child(text(schedule).text_xs().text_color(move || tokens::muted_foreground()))
             .child(dynamic(move || tag_row().into_element())),
-    ))
+    )))
 }

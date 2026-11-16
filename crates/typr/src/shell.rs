@@ -10,15 +10,18 @@ use nsh_core::file_dialog::{OpenDialog, SaveDialog};
 use nsh_core::keymap::When;
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
-use typr_core::store::{Command, Db, Id, Snapshot};
+use typr_core::keymap::{Command as Key, Surface};
+use typr_core::session::{Entry, Session};
+use typr_core::store::{Command, Db, Grade, Id, Outcome, Snapshot};
 
 use crate::screens::diagnostics::{SlowCommand, diagnostics};
 use crate::screens::editor::{self, Actions, Card, Diagram, Field, Template};
 use crate::screens::grid::grid;
 use crate::screens::library::{cards_in, tiles_for};
+use crate::screens::study::{entries_for, study};
 use crate::screens::settings::{LibraryInfo, Values, settings};
 use crate::screens::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
-use crate::ui::{surface, tokens};
+use crate::ui::{input::field_reachable, surface, tokens};
 
 /// How long a store command may take before the diagnostics screen lists it, in milliseconds.
 const SLOW_COMMAND_MS: u32 = 100;
@@ -101,6 +104,79 @@ pub fn shell_over(db: Rc<Db>, snapshot: Snapshot, library_open: bool, library: L
     // What the diagnostics screen states: a stoppage at any write since launch, and the commands
     // that took long enough to feel.
     let stopped = signal(!library_open);
+    // The library's search: the sidebar states the chord, and this field takes it.
+    let query = signal(String::new());
+    let search_handle = element_ref();
+    // The library's keyboard: the card Enter acts on, and the session that may be running.
+    let selection = signal(0_usize);
+    let studying = signal(false);
+    let session_slot: Rc<std::cell::RefCell<Option<Session>>> = Rc::new(std::cell::RefCell::new(None));
+    let reopen = {
+        let db = db.clone();
+        let snapshot_signal = snapshot_signal;
+        Rc::new(move || {
+            if let Ok(next) = db.snapshot() {
+                snapshot_signal.set(next);
+            }
+        })
+    };
+    // The cards the grid shows now, in the order it shows them: the keyboard walks this list.
+    let visible = {
+        let db = db.clone();
+        let snapshot_signal = snapshot_signal;
+        let query = query;
+        Rc::new(move || {
+            let _ = &db;
+            let snapshot = snapshot_signal.get_untracked();
+            let cards = cards_in(&snapshot, state.selected_key().as_deref());
+            tiles_for(&cards, &query.get_untracked(), SystemClock.now_ms())
+                .into_iter()
+                .map(|tile| tile.id)
+                .collect::<Vec<Id>>()
+        })
+    };
+    let open_selected = {
+        let visible = visible.clone();
+        let route = route;
+        Rc::new(move || {
+            let ids = visible();
+            if let Some(id) = ids.get(selection.get_untracked()) {
+                route.set(Route::Editor(*id));
+            }
+        })
+    };
+    // A session: the store serves the queue, the screen walks it, and each grade goes back through
+    // the store quietly, so the session is not rebuilt under the user as it is graded.
+    let start_session = {
+        let db = db.clone();
+        let snapshot_signal = snapshot_signal;
+        let session_slot = session_slot.clone();
+        Rc::new(move |queue: typr_core::screen::Queue| {
+            let now = SystemClock.now_ms();
+            let offset = crate::day_offset::local_offset_ms();
+            let seed = now as u64;
+            let command = match queue {
+                typr_core::screen::Queue::Due => Command::DuePrompts { now_ms: now, offset_ms: offset, seed, deck: None },
+                typr_core::screen::Queue::New => Command::NewPrompts { now_ms: now, offset_ms: offset, seed, deck: None },
+            };
+            let pairs: Vec<(Id, String, i64)> = match db.apply(&command, now) {
+                Ok(Outcome::Due(prompts)) => prompts.into_iter().map(|p| (p.card, p.key, (now - p.due_at).max(0))).collect(),
+                Ok(Outcome::New(prompts)) => prompts.into_iter().map(|p| (p.card, p.key, 0)).collect(),
+                Ok(_) => Vec::new(),
+                Err(error) => {
+                    log::error!("the queue was refused: {}", crate::logging::describe(&error));
+                    Vec::new()
+                }
+            };
+            let cards = snapshot_signal.get_untracked().cards;
+            let entries: Vec<Entry> = entries_for(&cards, &pairs);
+            if entries.is_empty() {
+                return;
+            }
+            *session_slot.borrow_mut() = Some(Session::new(queue, entries));
+            studying.set(true);
+        })
+    };
     let slow = signal(Vec::<SlowCommand>::new());
     let result = signal(None::<SharedString>);
 
@@ -172,6 +248,86 @@ pub fn shell_over(db: Rc<Db>, snapshot: Snapshot, library_open: bool, library: L
         move |id: Id| route.set(Route::Editor(id))
     };
 
+    if let Some(key) = crate::screens::keymap::keystroke_of(
+        typr_core::keymap::Surface::Library,
+        typr_core::keymap::Command::FocusSearch,
+    ) {
+        let handle = search_handle;
+        on_key(&key, move |_| handle.focus());
+    }
+
+    // The library's keys, every one taken from the keymap table.
+    // A command may be bound to more than one chord (Down and `j`), and every one acts.
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionNext) {
+        let visible = visible.clone();
+        on_key(&key, move |_| {
+            let last = visible().len().saturating_sub(1);
+            selection.update(|at| *at = (*at + 1).min(last));
+        });
+    }
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionPrevious) {
+        let visible = visible.clone();
+        on_key(&key, move |_| {
+            let last = visible().len().saturating_sub(1);
+            selection.update(|at| *at = at.saturating_sub(1).min(last));
+        });
+    }
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::EditCard) {
+        let open = open_selected.clone();
+        on_key(&key, move |_| open());
+    }
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::StartDueSession) {
+        let start = start_session.clone();
+        on_key(&key, move |_| start(typr_core::screen::Queue::Due));
+    }
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::StartNewSession) {
+        let start = start_session.clone();
+        on_key(&key, move |_| start(typr_core::screen::Queue::New));
+    }
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::NewCard) {
+        let db = db.clone();
+        let snapshot_signal = snapshot_signal;
+        let state = state;
+        let route = route;
+        let reopen = reopen.clone();
+        on_key(&key, move |_| {
+            let deck = state
+                .selected_key()
+                .as_deref()
+                .and_then(|key| key.strip_prefix("deck:"))
+                .and_then(|id| id.parse::<Id>().ok())
+                .or_else(|| snapshot_signal.get_untracked().decks.first().map(|deck| deck.id));
+            let Some(deck) = deck else { return };
+            match db.apply(
+                &Command::CreateCard { deck, markdown: String::new() },
+                SystemClock.now_ms(),
+            ) {
+                Ok(Outcome::Card(id)) => {
+                    reopen();
+                    route.set(Route::Editor(id));
+                }
+                Ok(_) => {}
+                Err(error) => log::error!("new card refused: {}", crate::logging::describe(&error)),
+            }
+        });
+    }
+    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::DeleteCard) {
+        let db = db.clone();
+        let visible = visible.clone();
+        let reopen = reopen.clone();
+        on_key(&key, move |_| {
+            let ids = visible();
+            let Some(id) = ids.get(selection.get_untracked()).copied() else { return };
+            match db.apply(&Command::TrashCard { id }, SystemClock.now_ms()) {
+                Ok(_) => {
+                    selection.update(|at| *at = at.saturating_sub(1));
+                    reopen();
+                }
+                Err(error) => log::error!("trash refused: {}", crate::logging::describe(&error)),
+            }
+        });
+    }
+
     // Escape returns to the whole library from the grid; while a card is open the editor binds it,
     // and this one lets the key through so both can hear it.
     let route_for_key = route;
@@ -187,6 +343,42 @@ pub fn shell_over(db: Rc<Db>, snapshot: Snapshot, library_open: bool, library: L
         .bg(move || tokens::background())
         .child(sidebar(state))
         .child(view().flex_1().child(dynamic(move || {
+            // A running session takes the whole work area until it is left.
+            if studying.get() {
+                let taken = session_slot.borrow_mut().take();
+                let Some(session) = taken else {
+                    return view().into_element();
+                };
+                let grade_db = db.clone();
+                let grade_stopped = stopped;
+                let leaving = studying;
+                let reopen = reopen.clone();
+                return study(
+                    session,
+                    move |card: Id, key: String, grade: Grade| {
+                        match grade_db.apply(
+                            &Command::Grade { card, key, grade, duration_ms: None },
+                            SystemClock.now_ms(),
+                        ) {
+                            Ok(_) => true,
+                            Err(error) => {
+                                grade_stopped.set(true);
+                                log::error!("grade refused: {}", crate::logging::describe(&error));
+                                false
+                            }
+                        }
+                    },
+                    move || {
+                        leaving.set(false);
+                        reopen();
+                    },
+                    {
+                        let state = state;
+                        move || state.select(&"settings".into())
+                    },
+                )
+                .into_element();
+            }
             if state.selected_key().as_deref() == Some("settings") {
                 return settings(Values::new(cap, true), library.clone(), |_| {}, || {}, || {}).into_element();
             }
@@ -289,13 +481,15 @@ pub fn shell_over(db: Rc<Db>, snapshot: Snapshot, library_open: bool, library: L
                     let tiles = computed(move || {
                         let snapshot = for_tiles.get();
                         let cards = cards_in(&snapshot, chosen.selected_key().as_deref());
-                        tiles_for(&cards, "", now)
+                        let text = query.get();
+                        tiles_for(&cards, &text, now)
                     });
                     view()
                         .flex_1()
                         .p_4()
                         .gap_3()
-                        .child(grid(tiles, || {}, open.clone()))
+                        .child(field_reachable("Search cards", query, &search_handle))
+                        .child(grid(tiles, selection, || {}, open.clone()))
                         .into_element()
                 }
             }

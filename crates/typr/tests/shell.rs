@@ -295,3 +295,54 @@ fn an_export_opens_as_a_library_and_a_foreign_file_is_refused_by_name() {
     assert!(refused.contains("holiday.zip"), "the line names the file: {refused}");
     assert_eq!(db.snapshot().expect("snapshot").cards.len(), 1, "nothing was written");
 }
+
+#[test]
+fn the_keyboard_walks_the_library_and_opens_the_chosen_card() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("keys");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("role:button[gato]")?;
+    // Down walks the grid; Enter edits the card in force, which opens the editor on it.
+    app.press_key("down")?;
+    app.press_key("enter")?;
+    app.wait_for("Attach image")?;
+    Ok(())
+}
+
+#[test]
+fn a_due_session_opens_from_the_library_and_grades_back_to_the_store() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("session");
+    // A card with a prompt that is due now: the library's `s` serves it.
+    {
+        let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+        let cards = db.snapshot().unwrap().cards;
+        let card = cards.first().expect("the card").id;
+        db.apply(
+            &typr_core::store::Command::Grade {
+                card,
+                key: "fwd".to_owned(),
+                grade: typr_core::store::Grade::Remembered,
+                duration_ms: None,
+            },
+            86_400_000,
+        )
+        .expect("a review that schedules the card");
+    }
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("role:button[gato]")?;
+    app.press_key("s")?;
+    // The session asks the card's first side; revealing offers the grades, and grading completes it.
+    app.wait_for("role:button[Show answer]")?;
+    app.press("role:button[Show answer]")?;
+    app.press("role:button[Remembered]")?;
+    app.wait_for("text:/Session complete · 1 reviewed/")?;
+    // The grade reached the store: the card has a review recorded through the shell.
+    let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let card = reader.snapshot().unwrap().cards.first().cloned().expect("the card");
+    let reviews = reader.review_count(card.id).expect("the reviews");
+    assert!(reviews >= 1, "the session's grade was written through the shell: {reviews}");
+    Ok(())
+}

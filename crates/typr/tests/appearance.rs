@@ -127,6 +127,7 @@ fn GridScreen() -> impl IntoElement {
                 pinned: false,
             }]
         }),
+        signal(0),
         || {},
         |_| {},
     )
@@ -143,7 +144,7 @@ fn StudyScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     study(
         Session::new(Queue::Due, vec![Entry::sides(1, ["Question", "Answer"], 0)]),
-        |_, _| true,
+        |_, _, _| true,
         || {},
         || {},
     )

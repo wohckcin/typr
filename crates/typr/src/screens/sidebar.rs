@@ -78,9 +78,12 @@ pub struct Sidebar {
 impl Sidebar {
     /// A sidebar over `items`, with the library open or closed and the chord that focuses search.
     pub fn new(items: Vec<Item>, library_open: bool, search_chord: impl Into<SharedString>) -> Self {
+        // The whole library is in force until another row is chosen, so the grid and the sidebar
+        // agree about what is shown.
+        let first = items.first().map(|item| item.key.clone());
         Self {
             items: signal(items),
-            selected: signal(None),
+            selected: signal(first),
             collapsed: signal(Vec::new()),
             library_open: signal(library_open),
             search_chord: signal(search_chord.into()),

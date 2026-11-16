@@ -5,8 +5,8 @@
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Command, Surface};
-use typr_core::session::Session;
-use typr_core::store::{Grade, Id};
+use typr_core::session::{Entry, Session};
+use typr_core::store::{CardSummary, Grade, Id};
 
 use crate::screens::keymap::keystroke_of;
 use crate::ui::{
@@ -27,9 +27,60 @@ pub fn can_reveal(session: &Session) -> bool {
 /// The study screen over `session`, which the caller builds for the queue it wants (due, new,
 /// reverse or cram). `on_grade` writes each grade for its card and
 /// reports whether the store took it; a refused grade leaves the card answerable.
+/// The entry one prompt walks: a hidden-text group masked until revealed, a diagram group covered
+/// until uncovered, or the sides of a card asked forwards or backwards. `None` for a key the card
+/// no longer holds (a prompt retired after an edit).
+pub fn entry_for(card: &CardSummary, key: &str, overdue: i64) -> Option<Entry> {
+    if let Some(group) = key.strip_prefix("mask:") {
+        let group: u32 = group.parse().ok()?;
+        let masks: Vec<typr_core::store::MaskRect> =
+            card.masks.iter().filter(|row| row.group == group).map(|row| row.rect).collect();
+        if masks.is_empty() {
+            return None;
+        }
+        return Some(Entry::mask_group(
+            card.id,
+            key,
+            card.image.clone().unwrap_or_default(),
+            card.caption.clone(),
+            masks,
+            overdue,
+        ));
+    }
+    let shape = typr_core::hidden::shape(&card.markdown);
+    match key {
+        "fwd" => {
+            let sides = typr_core::sides::split(&card.markdown);
+            (sides.len() >= 2).then(|| Entry::sides(card.id, sides, overdue))
+        }
+        "rev" => {
+            let sides = typr_core::sides::split(&card.markdown);
+            (sides.len() >= 2).then(|| Entry::reverse(card.id, sides, overdue))
+        }
+        other if typr_core::hidden::group_of(other).is_some() => {
+            let hidden = typr_core::hidden::masked(&card.markdown, &shape, other);
+            let shown = typr_core::hidden::shown(&card.markdown, &shape);
+            (hidden != shown).then(|| Entry::masked(card.id, other, hidden, shown, overdue))
+        }
+        _ => None,
+    }
+}
+
+/// The entries a session walks, from the prompts the store served and the cards it holds. A prompt
+/// whose card was edited away is left out rather than asked with nothing on it.
+pub fn entries_for(cards: &[CardSummary], prompts: &[(Id, String, i64)]) -> Vec<Entry> {
+    prompts
+        .iter()
+        .filter_map(|(card, key, overdue)| {
+            let card = cards.iter().find(|row| row.id == *card)?;
+            entry_for(card, key, *overdue)
+        })
+        .collect()
+}
+
 pub fn study(
     session: Session,
-    on_grade: impl Fn(Id, Grade) -> bool + Clone + 'static,
+    on_grade: impl Fn(Id, String, Grade) -> bool + Clone + 'static,
     on_leave: impl Fn() + Clone + 'static,
     on_settings: impl Fn() + Clone + 'static,
 ) -> impl IntoElement {
@@ -44,9 +95,10 @@ pub fn study(
         version.update(|v| *v += 1);
     };
     let grade = move |g: Grade| {
-        let sent = session.with(|s| s.grade(g));
+        let sent = session.with(|s| s.grade(g).map(|(id, grade)| (id, grade)));
         if let Some((id, grade)) = sent {
-            let taken = grade_out(id, grade);
+            let key = session.with(|s| s.prompt_of(id).map(str::to_owned)).unwrap_or_default();
+            let taken = grade_out(id, key, grade);
             refused.set(!taken);
             session.with(|s| {
                 if taken {
@@ -102,8 +154,23 @@ pub fn study(
             version.get();
             let finished = session.with(|s| s.finished());
             if finished {
-                let reviewed = session.with(|s| s.grades.len());
-                return badge(format!("Session complete · {reviewed} reviewed")).into_element();
+                // The summary: what was answered, how it went, and the way back.
+                let (reviewed, remembered, forgot) = session.with(|s| {
+                    let remembered = s.grades.iter().filter(|g| **g == Grade::Remembered).count();
+                    (s.grades.len(), remembered, s.grades.len() - remembered)
+                });
+                let due = session.with(|s| s.grades.len() + s.remaining());
+                let leave = on_leave.clone();
+                return view()
+                    .gap_3()
+                    .child(badge(format!("Session complete · {reviewed} reviewed")))
+                    .child(
+                        text(format!("Remembered {remembered} · Forgot {forgot} · {due} due when you started"))
+                            .text_sm()
+                            .text_color(move || tokens::foreground()),
+                    )
+                    .child(view().flex_row().child(button(Variant::Default, "Back to the library", || false, move || leave.clone()())))
+                    .into_element();
             }
             let lines: Vec<String> = session.with(|s| s.lines().iter().map(|(t, _)| t.to_string()).collect());
             let mut column = view().gap_3();

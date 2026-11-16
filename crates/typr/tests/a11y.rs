@@ -56,7 +56,7 @@ fn Editor() -> impl IntoElement {
 fn StudyScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     let entries = vec![Entry::sides(1, ["Question", "Answer"], 0)];
-    study(Session::new(Queue::Due, entries), |_, _| true, || {}, || {})
+    study(Session::new(Queue::Due, entries), |_, _, _| true, || {}, || {})
 }
 
 #[component]
