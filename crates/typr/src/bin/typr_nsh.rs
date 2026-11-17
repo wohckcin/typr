@@ -6,18 +6,8 @@ use nsh_platform_linux as platform;
 use nsh_platform_macos as platform;
 
 fn main() -> std::process::ExitCode {
-    // The log is decided before anything can fail: the level from `TYPR_LOG`, the file in the app's
-    // data folder. A quit flushes it after the platform's loop returns.
-    match typr::paths::data_root() {
-        Ok(root) => match typr::logging::install(
-            &typr::paths::logs_root(&root),
-            typr::logging::level_from_env(),
-        ) {
-            Ok(path) => log::info!("typr starts; log at {}", path.display()),
-            Err(error) => eprintln!("typr: the log could not be installed: {error}"),
-        },
-        Err(error) => eprintln!("typr: no data folder: {error}"),
-    }
+    // The data folder and the log belong to the app: both need the engine's runtime, so `App`
+    // resolves them once it is mounted. A quit flushes the log after the platform's loop returns.
     let code = platform::run_app(
         platform::AppSource::Rust(platform::Root::of::<typr::shell::App>()),
         platform::AppOptions {

@@ -94,6 +94,7 @@ pub struct Sidebar {
     selected: Signal<Option<SharedString>>,
     collapsed: Signal<Vec<SharedString>>,
     library_open: Signal<bool>,
+    notice: Signal<Option<SharedString>>,
     search_chord: Signal<SharedString>,
 }
 
@@ -112,8 +113,14 @@ impl Sidebar {
             selected: signal(first),
             collapsed: signal(Vec::new()),
             library_open: signal(library_open),
+            notice: signal(None),
             search_chord: signal(search_chord.into()),
         }
+    }
+
+    /// States why the library could not be opened, beside "Library closed".
+    pub fn note(&self, why: impl Into<SharedString>) {
+        self.notice.set(Some(why.into()));
     }
 
     /// Replaces the rows with a fresh snapshot. The row in force and the folds the user made stay.
@@ -229,13 +236,13 @@ fn search_row(state: Sidebar) -> impl IntoElement {
 }
 
 fn library_state(state: Sidebar) -> impl IntoElement {
-    text(move || {
-        if state.library_open.get() {
-            "Library open"
-        } else {
-            "Library closed"
-        }
-    })
+    text(
+        move || match (state.library_open.get(), state.notice.get()) {
+            (true, _) => SharedString::from("Library open"),
+            (false, Some(why)) => SharedString::from(format!("Library closed: {why}")),
+            (false, None) => SharedString::from("Library closed"),
+        },
+    )
     .text_sm()
     .text_color(move || {
         if state.library_open.get() {

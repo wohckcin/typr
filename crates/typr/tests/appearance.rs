@@ -127,7 +127,7 @@ fn SidebarScreen() -> impl IntoElement {
 #[component]
 fn LibraryScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    library(Snapshot::default(), true, 0, |_| {})
+    typr::shell::shell(Snapshot::default(), true)
 }
 
 #[component]

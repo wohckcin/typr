@@ -144,6 +144,7 @@ pub fn grid(
 fn button_new(on_new: impl Fn() + 'static) -> impl IntoElement {
     crate::ui::button::button()
         .label("New card")
+        .disabled(|| false)
         .on_press(on_new)
 }
 

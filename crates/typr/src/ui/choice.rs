@@ -107,9 +107,9 @@ pub enum ListRowEvent {
 
 /// A selectable row: its own surface shows the selection, not a marker at the edge.
 ///
-/// The row is a pressable view rather than a base button: a base button made inside the sidebar's
-/// reactive list is disposed with the list's previous render, and its `disabled` prop is then read
-/// from a dead owner (the engine logs "a prop read or written after its owner was disposed").
+/// A control's props are made by the component that owns the control: a prop made in the region
+/// that renders a list is read after that region goes, and the engine logs "a prop read or written
+/// after its owner was disposed". `tests/startup.rs` holds the rule.
 #[component]
 pub fn ListRow(props: ListRowProps, cx: Scope<ListRowEvent>) -> impl IntoElement {
     // A row is a control like any other: it says what it is, answers hover and press, and shows the

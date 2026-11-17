@@ -21,10 +21,7 @@ use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
 use crate::screens::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
 use crate::screens::study::{entries_for, study};
-use crate::ui::{
-    input::{field, field_reachable},
-    tokens,
-};
+use crate::ui::{input::field_reachable, tokens};
 
 /// How long a store command may take before the diagnostics screen lists it, in milliseconds.
 const SLOW_COMMAND_MS: u32 = 100;
@@ -107,85 +104,20 @@ fn screen_for(key: &SharedString) -> Screen {
 }
 
 /// The shell over `snapshot`: `library_open` says whether the store opened, which the sidebar
-/// states. Tests drive this with a fixture; the app drives it with the real library.
+/// states. Tests drive this with a fixture; the app drives the same function with its store.
 pub fn shell(snapshot: Snapshot, library_open: bool) -> impl IntoElement {
-    shell_with(snapshot, library_open, LibraryInfo::default())
+    shell_over(None, snapshot, library_open, LibraryInfo::default(), None)
 }
 
-/// The shell with the library's own file known, so the settings screen can report its paths.
-pub fn shell_with(
-    snapshot: Snapshot,
-    library_open: bool,
-    library: LibraryInfo,
-) -> impl IntoElement {
-    let due = due_counts(&snapshot, SystemClock.now_ms());
-    let state = Sidebar::new(items_from(&snapshot, &due), library_open, search_chord());
-    let screen = signal(Screen::Library);
-    let pick = {
-        move |key: &SharedString| {
-            state.select(key);
-            screen.set(screen_for(key));
-        }
-    };
-    let cap = snapshot.settings.new_per_day;
-    // Without a store the screen still shows the library it read: a blank work area would leave a
-    // reader guessing whether the app works.
-    let snapshot = Rc::new(snapshot);
-    let query = signal(String::new());
-    let chosen = signal(None::<Id>);
-    let tiles = {
-        let snapshot = snapshot.clone();
-        let with = state;
-        computed(move || {
-            let cards = cards_in(&snapshot, with.selected_key().as_deref());
-            tiles_for(&cards, &query.get(), SystemClock.now_ms())
-        })
-    };
-    // Escape leaves the screen the work area is showing, back to the whole library. The library
-    // table binds no Leave command, so the key is the one every screen uses for it.
-    on_key("escape", move |_| {
-        state.select(&"all".into());
-        screen.set(Screen::Library);
-    });
-    view()
-        .flex_1()
-        .flex_row()
-        .bg(tokens::background)
-        .child(sidebar(state, pick))
-        .child(view().flex_1().child(dynamic(move || {
-            if let Screen::Settings = screen.get() {
-                // The screen's signals belong to this branch, so leaving it disposes them with it.
-                return settings(
-                    Values::new(cap, true),
-                    library.clone(),
-                    |_| {},
-                    || {},
-                    || {},
-                )
-                .into_element();
-            }
-            view()
-                .flex_1()
-                .p_4()
-                .gap_2()
-                .child(
-                    field()
-                        .placeholder("Search cards")
-                        .value(move || SharedString::from(query.get()))
-                        .on_change(move |text: &String| query.set(text.to_string())),
-                )
-                .child(grid(tiles, chosen, || {}, |_| {}))
-                .into_element()
-        })))
-}
-
-/// The shell over a live library: the grid opens a card's editor, and the editor's actions are
-/// store commands. `db` is shared, so every action sees the same library the snapshot came from.
+/// The one shell: the library when it opens and when it does not. `db` is the store the screens
+/// write through, absent when the library could not be opened — `notice` then says why, and the
+/// sidebar states it instead of a bare "Library closed".
 pub fn shell_over(
-    db: Rc<Db>,
+    db: Option<Rc<Db>>,
     snapshot: Snapshot,
     library_open: bool,
     library: LibraryInfo,
+    notice: Option<SharedString>,
 ) -> impl IntoElement {
     let snapshot_signal = signal(snapshot);
     let screen = signal(Screen::Library);
@@ -195,6 +127,9 @@ pub fn shell_over(
         library_open,
         search_chord(),
     );
+    if let Some(notice) = notice {
+        state.note(notice);
+    }
     let cap = snapshot_signal.with(|s| s.settings.new_per_day);
     let attachments = library.attachments.clone();
     // What the diagnostics screen states: a stoppage at any write since launch, and the commands
@@ -209,7 +144,9 @@ pub fn shell_over(
     let reopen = {
         let db = db.clone();
         Rc::new(move || {
-            if let Ok(next) = db.snapshot() {
+            if let Some(db) = db.as_ref()
+                && let Ok(next) = db.snapshot()
+            {
                 snapshot_signal.set(next);
             }
         })
@@ -282,6 +219,9 @@ pub fn shell_over(
     let start_session = {
         let db = db.clone();
         Rc::new(move |queue: typr_core::screen::Queue| {
+            let Some(db) = db.as_ref() else {
+                return;
+            };
             let now = SystemClock.now_ms();
             let offset = crate::day_offset::local_offset_ms();
             let seed = now as u64;
@@ -342,6 +282,9 @@ pub fn shell_over(
     let apply = {
         let db = db.clone();
         Rc::new(move |command: Command| {
+            let Some(db) = db.as_ref() else {
+                return;
+            };
             let started = std::time::Instant::now();
             match db.apply(&command, SystemClock.now_ms()) {
                 Ok(_) => {
@@ -371,6 +314,9 @@ pub fn shell_over(
     let quiet_apply = {
         let db = db.clone();
         Rc::new(move |command: Command| {
+            let Some(db) = db.as_ref() else {
+                return;
+            };
             let started = std::time::Instant::now();
             match db.apply(&command, SystemClock.now_ms()) {
                 Ok(_) => {
@@ -400,7 +346,9 @@ pub fn shell_over(
     let export = {
         let db = db.clone();
         move || {
-            let db = db.clone();
+            let Some(db) = db.clone() else {
+                return;
+            };
             spawn(async move {
                 match pick_save_path(SaveDialog::new().file_name("typr-library.sqlite3")).await {
                     Ok(Some(path)) => result.set(Some(export_to(&db, &path).into())),
@@ -414,7 +362,9 @@ pub fn shell_over(
         let db = db.clone();
         let attachments = attachments.clone();
         move || {
-            let db = db.clone();
+            let Some(db) = db.clone() else {
+                return;
+            };
             let attachments = attachments.clone();
             spawn(async move {
                 match pick_paths(OpenDialog::files()).await {
@@ -529,6 +479,9 @@ pub fn shell_over(
             if !here() {
                 return;
             }
+            let Some(db) = db.as_ref() else {
+                return;
+            };
             let deck = state
                 .selected_key()
                 .as_deref()
@@ -567,6 +520,9 @@ pub fn shell_over(
             if !here() {
                 return;
             }
+            let Some(db) = db.as_ref() else {
+                return;
+            };
             let ids = visible();
             let Some(id) = selection.get_untracked() else {
                 return;
@@ -633,20 +589,28 @@ pub fn shell_over(
                     let reopen = reopen.clone();
                     study(
                         session,
-                        move |card: Id, key: String, grade: Grade| match grade_db.apply(
-                            &Command::Grade {
-                                card,
-                                key,
-                                grade,
-                                duration_ms: None,
-                            },
-                            SystemClock.now_ms(),
-                        ) {
-                            Ok(_) => Ok(()),
-                            Err(error) => {
-                                grade_stopped.set(true);
-                                log::error!("grade refused: {}", crate::logging::describe(&error));
-                                Err(crate::screens::study::GradeRefused)
+                        move |card: Id, key: String, grade: Grade| {
+                            let Some(db) = grade_db.as_ref() else {
+                                return Err(crate::screens::study::GradeRefused);
+                            };
+                            match db.apply(
+                                &Command::Grade {
+                                    card,
+                                    key,
+                                    grade,
+                                    duration_ms: None,
+                                },
+                                SystemClock.now_ms(),
+                            ) {
+                                Ok(_) => Ok(()),
+                                Err(error) => {
+                                    grade_stopped.set(true);
+                                    log::error!(
+                                        "grade refused: {}",
+                                        crate::logging::describe(&error)
+                                    );
+                                    Err(crate::screens::study::GradeRefused)
+                                }
                             }
                         },
                         move || {
@@ -705,7 +669,7 @@ pub fn shell_over(
                             caption: card.caption.clone().unwrap_or_default(),
                             rows: card.masks.iter().map(Cover::of).collect(),
                         });
-                    let draft = db.draft(id).ok().flatten();
+                    let draft = db.as_ref().and_then(|db| db.draft(id).ok().flatten());
                     let write_save = apply.clone();
                     let write_draft = quiet_apply.clone();
                     let leaving = screen;
@@ -816,24 +780,42 @@ pub fn shell_over(
 #[component]
 pub fn App() -> impl IntoElement {
     crate::ui::tokens::install();
+    // The data folder is the engine's, so it is read here, inside the mount, and the log lands in
+    // it before anything else can fail.
+    if let Ok(root) = crate::paths::data_root() {
+        match crate::logging::install(
+            &crate::paths::logs_root(&root),
+            crate::logging::level_from_env(),
+        ) {
+            Ok(path) => log::info!("typr starts; log at {}", path.display()),
+            Err(error) => log::error!("the log could not be installed: {error}"),
+        }
+    }
     match crate::paths::open_from_environment() {
         Ok(db) => {
             let library = LibraryInfo::of(&db);
             let db = Rc::new(db);
             match db.snapshot() {
-                Ok(snapshot) => shell_over(db.clone(), snapshot, true, library).into_element(),
+                Ok(snapshot) => shell_over(Some(db), snapshot, true, library, None).into_element(),
                 Err(error) => {
-                    log::error!(
-                        "library snapshot failed: {}",
-                        crate::logging::describe(&error)
-                    );
-                    shell_with(Snapshot::default(), false, library).into_element()
+                    let why = crate::logging::describe(&error);
+                    log::error!("library snapshot failed: {why}");
+                    shell_over(None, Snapshot::default(), false, library, Some(why.into()))
+                        .into_element()
                 }
             }
         }
         Err(error) => {
-            log::error!("library did not open: {}", crate::logging::describe(&error));
-            shell(Snapshot::default(), false).into_element()
+            let why = crate::logging::describe(&error);
+            log::error!("library did not open: {why}");
+            shell_over(
+                None,
+                Snapshot::default(),
+                false,
+                LibraryInfo::default(),
+                Some(why.into()),
+            )
+            .into_element()
         }
     }
 }
