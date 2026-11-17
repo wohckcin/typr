@@ -14,7 +14,9 @@ pub enum Support {
     Unsupported,
 }
 
-/// The constructs, in the order Mochi's shortcut panel and this app's cards use them.
+/// The constructs, in the order Mochi's shortcut panel and this app's cards use them, each as the NSH
+/// renderer and the app's extensions draw it now (`design.md` of the markdown-coverage change records the
+/// probe).
 pub const SUPPORTED: &[(&str, Support)] = &[
     ("strong", Support::Rendered),
     ("emphasis", Support::Rendered),
@@ -29,12 +31,16 @@ pub const SUPPORTED: &[(&str, Support)] = &[
     ("list", Support::Rendered),
     ("quote", Support::Rendered),
     ("highlight", Support::Rendered),
-    ("ruby", Support::Degraded),
+    ("ruby", Support::Rendered),
+    // Smaller and lifted by a few points: the renderer has no baseline shift, so it approximates one.
     ("superscript", Support::Degraded),
-    ("subscript", Support::Degraded),
-    ("definition-list", Support::Rendered),
-    ("inline-math", Support::Degraded),
-    ("display-math", Support::Degraded),
+    // The renderer reads `~…~` itself.
+    ("subscript", Support::Rendered),
+    // markdown-rs has no definition-list construct, so the text stays as written.
+    ("definition-list", Support::Unsupported),
+    // The renderer draws both as formulas.
+    ("inline-math", Support::Rendered),
+    ("display-math", Support::Rendered),
     ("raw-html", Support::Unsupported),
     ("footnote", Support::Unsupported),
     ("latex", Support::Unsupported),

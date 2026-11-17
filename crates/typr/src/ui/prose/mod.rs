@@ -1,6 +1,8 @@
 //! Markdown content: a card's text, rendered as the app draws prose.
 
 use nsh_base::text_view;
+
+mod extensions;
 use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
@@ -18,6 +20,8 @@ pub struct ProseProps {
 pub fn Prose(props: ProseProps) -> impl IntoElement {
     text_view()
         .markdown(move || Some(props.source.get()))
+        .extensions(extensions::extensions())
+        .render_custom(extensions::render)
         .text_sm()
         .text_color(tokens::foreground)
 }
@@ -32,6 +36,8 @@ pub fn prose_with_blocks(
 ) -> impl IntoElement {
     text_view()
         .markdown(move || Some(source.clone()))
+        .extensions(extensions::extensions())
+        .render_custom(extensions::render)
         .gap_3()
         .text_sm()
         .text_color(tokens::foreground)
