@@ -38,9 +38,11 @@ fails on a spacing, type, radius or colour literal, or on a `nsh_base` control u
 ## Build and run
 
 ```sh
-cargo run -p typr        # the app window (crates/typr/src/bin/typr_nsh.rs)
-nsh run                  # the same app through the nsh development host
+nsh run                  # the app in this system's native host
 ```
+
+`TYPR_DATA_DIR` overrides the data folder; the folder and the log are resolved inside the app, after
+the engine has mounted, so neither is read before there is a runtime to read it with.
 
 ## Tests
 

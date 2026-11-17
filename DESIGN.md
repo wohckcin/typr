@@ -88,7 +88,9 @@ explains. The line is revisited if the sidebar measures its rows for another rea
 Appearance is checked by the styles a screen resolves to, not by captured images. `tests/appearance.rs`
 renders every screen in the light and the dark appearance and reads `screen().span_style(..)`: the same
 text keeps its font size and weight, and its colour is the theme's for that appearance, so the two
-differ. `tests/tokens.rs` refuses a spacing, type, radius or colour literal in a screen.
+differ. The library is read through `typr::shell::shell`, the same function the app draws it with, so
+there is one library screen and the pass cannot be aimed at a copy. `tests/tokens.rs` refuses a
+spacing, type, radius or colour literal in a screen.
 
 The hover wash and the press scale are the exception that needs a picture, because the headless driver
 keeps no view style and cannot take one. `desktop.test.tsx` hovers a button on the macOS host and asserts

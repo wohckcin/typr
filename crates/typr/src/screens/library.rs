@@ -1,12 +1,9 @@
-//! The library screen: the sidebar beside the grid of the selected deck, with a search field over
-//! the tiles. Cards are ordered pinned first, then by their place in the deck.
+//! The library's cards: which of them a selection shows, and the tiles the grid draws for them.
+//! The screen itself is composed by `shell`, so there is one drawing of it.
 
-use nsh_core::prelude::*;
-use typr_core::store::{CardSummary, Id, Snapshot};
+use typr_core::store::{CardSummary, Snapshot};
 
-use super::grid::{Tile, grid, tile_of};
-use super::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
-use crate::ui::{input::field, tokens};
+use super::grid::{Tile, tile_of};
 
 /// Which cards a selection shows: every live card for `all`, or the cards of one deck `deck:<id>`.
 pub fn cards_in(snapshot: &Snapshot, selection: Option<&str>) -> Vec<CardSummary> {
@@ -34,44 +31,4 @@ pub fn tiles_for(cards: &[CardSummary], query: &str, now_ms: i64) -> Vec<Tile> {
         .into_iter()
         .map(|card| tile_of(card, now_ms))
         .collect()
-}
-
-/// The library screen over `snapshot`, with the sidebar's selection choosing the cards.
-pub fn library(
-    snapshot: Snapshot,
-    library_open: bool,
-    now_ms: i64,
-    on_open: impl Fn(i64) + Clone + 'static,
-) -> impl IntoElement {
-    let due = due_counts(&snapshot, now_ms);
-    let snapshot = std::rc::Rc::new(snapshot);
-    let state = Sidebar::new(items_from(&snapshot, &due), library_open, search_chord());
-    let query = signal(String::new());
-    let chosen = signal(None::<Id>);
-    let tiles = computed({
-        let snapshot = snapshot.clone();
-        move || {
-            let selection = state.selected_key();
-            let cards = cards_in(&snapshot, selection.as_deref());
-            tiles_for(&cards, &query.get(), now_ms)
-        }
-    });
-    view()
-        .flex_1()
-        .flex_row()
-        .bg(tokens::background)
-        .child(sidebar(state, move |key: &SharedString| state.select(key)))
-        .child(
-            view()
-                .flex_1()
-                .p_4()
-                .gap_3()
-                .child(
-                    field()
-                        .placeholder("Search cards")
-                        .value(move || SharedString::from(query.get()))
-                        .on_change(move |text: &String| query.set(text.to_string())),
-                )
-                .child(grid(tiles, chosen, || {}, on_open)),
-        )
 }
