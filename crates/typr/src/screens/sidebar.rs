@@ -284,6 +284,7 @@ fn row_view(
         row = row.child(
             button()
                 .variant(Variant::Ghost)
+                .disabled(|| false)
                 .label(move || -> SharedString {
                     if state.is_collapsed(&folded) {
                         "▸".into()

@@ -10,8 +10,9 @@ test("the app opens with its navigation", async () => {
   for (const label of ["Search", "All cards", "Utilities", "Settings", "Diagnostics"]) {
     expect(app.texts()).toContain(label);
   }
-  // The library's state is said either way: a headless run has no data folder, a real one has.
-  const stated = app.texts().filter((text) => text === "Library open" || text === "Library closed");
+  // The library's state is said either way: a headless run has no data folder, a real one has, and a
+  // closed library names the folder it could not use.
+  const stated = app.texts().filter((text) => text === "Library open" || text.startsWith("Library closed"));
   expect(stated.length).toBe(1);
 });
 

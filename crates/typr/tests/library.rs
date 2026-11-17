@@ -3,7 +3,7 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr::screens::library::{cards_in, library, tiles_for};
+use typr::screens::library::{cards_in, tiles_for};
 use typr_core::library_view::ViewMode;
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
@@ -43,7 +43,7 @@ fn fixture() -> Snapshot {
 #[component]
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
-    library(fixture(), true, 0, |_| {})
+    typr::shell::shell(fixture(), true)
 }
 
 fn start() -> Headless {

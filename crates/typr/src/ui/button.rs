@@ -105,8 +105,8 @@ pub struct ButtonProps {
     /// says itself while it draws a glyph.
     #[prop(default)]
     pub accessible: Prop<Option<SharedString>>,
-    /// Whether a press does nothing.
-    #[prop(default)]
+    /// Whether a press does nothing. Every caller passes it: a defaulted prop is read after the
+    /// scope that built it has gone, and the engine then panics on a disposed owner.
     pub disabled: Prop<bool>,
     /// How large it is: height, padding, text and radius together.
     #[prop(default)]

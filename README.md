@@ -43,6 +43,8 @@ nsh run                  # the app in this system's native host
 
 `TYPR_DATA_DIR` overrides the data folder; the folder and the log are resolved inside the app, after
 the engine has mounted, so neither is read before there is a runtime to read it with.
+`crates/typr/src/bin/typr_nsh.rs` is a harness binary for poking at the app from this crate; it is not
+the run path, and it still panics on a library with no cards.
 
 ## Tests
 

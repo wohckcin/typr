@@ -19,7 +19,6 @@ use typr::screens::embed::embedded;
 use typr::screens::grid::{Tile, grid};
 use typr::screens::history::{Record, history};
 use typr::screens::keymap::palette;
-use typr::screens::library::library;
 use typr::screens::settings::{LibraryInfo, Values, settings};
 use typr::screens::sidebar::{Group, Item, Sidebar, sidebar};
 use typr::screens::study::study;
