@@ -10,7 +10,7 @@ use nsh_core::file_dialog::{OpenDialog, SaveDialog};
 use nsh_core::keymap::When;
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
-use typr_core::keymap::{Command as Key, Surface};
+use typr_core::keymap::{Command as Key, Surface, bindings_of};
 use typr_core::session::{Entry, Session};
 use typr_core::store::{Command, Db, Grade, Id, Outcome, Snapshot};
 
@@ -21,7 +21,7 @@ use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
 use crate::screens::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
 use crate::screens::study::{entries_for, study};
-use crate::ui::{input::field_reachable, tokens};
+use crate::ui::{input::field_reachable, overlay, tokens};
 
 /// How long a store command may take before the diagnostics screen lists it, in milliseconds.
 const SLOW_COMMAND_MS: u32 = 100;
@@ -393,96 +393,24 @@ pub fn shell_over(
     // inside a session starts nothing.
     let in_library = move || matches!(screen.get(), Screen::Library);
 
-    if let Some(key) = crate::screens::keymap::keystroke_of(
-        typr_core::keymap::Surface::Library,
-        typr_core::keymap::Command::FocusSearch,
-    ) {
-        let handle = search_handle;
-        let here = in_library;
-        on_key(&key, move |_| {
-            if here() {
-                handle.focus();
-            }
-        });
-    }
+    // The command list: one element for the palette and the shortcut panel. Each opens on its
+    // chord and closes on the same chord or Escape.
+    let palette_open = signal(false);
+    let panel_open = signal(false);
+    let close = Rc::new(move || {
+        palette_open.set(false);
+        panel_open.set(false);
+    });
 
-    // The library's keys, every one taken from the keymap table.
-    // A command may be bound to more than one chord (Down and `j`), and every one acts.
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionNext) {
-        let here = in_library;
-        let step = step.clone();
-        on_key(&key, move |_| {
-            if here() {
-                step(1);
-            }
-        });
-    }
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionPrevious) {
-        let here = in_library;
-        let step = step.clone();
-        on_key(&key, move |_| {
-            if here() {
-                step(-1);
-            }
-        });
-    }
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionFirst) {
-        let here = in_library;
-        let select_end = select_end.clone();
-        on_key(&key, move |_| {
-            if here() {
-                select_end(true);
-            }
-        });
-    }
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::SelectionLast) {
-        let here = in_library;
-        let select_end = select_end.clone();
-        on_key(&key, move |_| {
-            if here() {
-                select_end(false);
-            }
-        });
-    }
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::EditCard) {
-        let here = in_library;
-        let open = open_selected.clone();
-        on_key(&key, move |_| {
-            if here() {
-                open();
-            }
-        });
-    }
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::StartDueSession) {
-        let here = in_library;
-        let start = start_session.clone();
-        on_key(&key, move |_| {
-            if here() {
-                start(typr_core::screen::Queue::Due);
-            }
-        });
-    }
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::StartNewSession) {
-        let here = in_library;
-        let start = start_session.clone();
-        on_key(&key, move |_| {
-            if here() {
-                start(typr_core::screen::Queue::New);
-            }
-        });
-    }
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::NewCard) {
-        let here = in_library;
+    let new_card = {
         let db = db.clone();
         let reopen = reopen.clone();
-        on_key(&key, move |_| {
-            if !here() {
-                return;
-            }
+        let state_for_card = state;
+        Rc::new(move || {
             let Some(db) = db.as_ref() else {
                 return;
             };
-            let deck = state
+            let deck = state_for_card
                 .selected_key()
                 .as_deref()
                 .and_then(|key| key.strip_prefix("deck:"))
@@ -509,17 +437,14 @@ pub fn shell_over(
                 Ok(_) => {}
                 Err(error) => log::error!("new card refused: {}", crate::logging::describe(&error)),
             }
-        });
-    }
-    for key in crate::screens::keymap::keystrokes_of(Surface::Library, Key::DeleteCard) {
-        let here = in_library;
+        })
+    };
+
+    let delete_card = {
         let db = db.clone();
         let visible = visible.clone();
         let reopen = reopen.clone();
-        on_key(&key, move |_| {
-            if !here() {
-                return;
-            }
+        Rc::new(move || {
             let Some(db) = db.as_ref() else {
                 return;
             };
@@ -538,6 +463,57 @@ pub fn shell_over(
                     selection.set(after.get(at).or_else(|| after.last()).copied());
                 }
                 Err(error) => log::error!("trash refused: {}", crate::logging::describe(&error)),
+            }
+        })
+    };
+
+    let focus_search = {
+        let handle = search_handle;
+        Rc::new(move || handle.focus())
+    };
+
+    // One dispatcher: a chord and a palette item run the same action, so the two cannot drift.
+    // A command the app does not carry out yet is never reached from the palette, which lists it
+    // dimmed (see `Command::runnable`).
+    let run: Rc<dyn Fn(Key)> = {
+        let start_session = start_session.clone();
+        let open_selected = open_selected.clone();
+        let step = step.clone();
+        let select_end = select_end.clone();
+        let new_card = new_card.clone();
+        let delete_card = delete_card.clone();
+        let focus_search = focus_search.clone();
+        Rc::new(move |command: Key| match command {
+            Key::StartDueSession => start_session(typr_core::screen::Queue::Due),
+            Key::StartNewSession => start_session(typr_core::screen::Queue::New),
+            Key::NewCard => new_card(),
+            Key::DeleteCard => delete_card(),
+            Key::EditCard => open_selected(),
+            Key::FocusSearch => focus_search(),
+            Key::SelectionNext => step(1),
+            Key::SelectionPrevious => step(-1),
+            Key::SelectionFirst => select_end(true),
+            Key::SelectionLast => select_end(false),
+            Key::Settings => {
+                state.select(&"settings".into());
+                screen.set(Screen::Settings);
+            }
+            Key::ShowPalette => palette_open.update(|open| *open = !*open),
+            Key::ShowShortcuts => panel_open.update(|open| *open = !*open),
+            _ => {}
+        })
+    };
+
+    for binding in bindings_of(Surface::Library) {
+        let Some(stroke) = crate::screens::keymap::keystroke_of_chord(binding.chord) else {
+            continue;
+        };
+        let here = in_library;
+        let run = run.clone();
+        let command = binding.command;
+        on_key(&stroke, move |_| {
+            if here() {
+                run(command);
             }
         });
     }
@@ -773,6 +749,41 @@ pub fn shell_over(
                     .into_element(),
             }
         })))
+        // The command list, drawn over whatever screen is open. Both open on their chord, run a
+        // command or list the bindings, and close on the chord again or on Escape.
+        .child(overlay::decision(palette_open, {
+            let run = run.clone();
+            let close = close.clone();
+            move || {
+                let run = run.clone();
+                let dismiss = close.clone();
+                let cancel = close.clone();
+                crate::screens::keymap::panel(
+                    Surface::Library,
+                    crate::ui::command::Mode::Palette,
+                    move |id: &SharedString| {
+                        if let Some(command) = crate::screens::keymap::command_of(id) {
+                            run(command);
+                        }
+                        dismiss();
+                    },
+                    move || cancel(),
+                )
+            }
+        }))
+        .child(overlay::decision(panel_open, {
+            let close = close.clone();
+            move || {
+                let dismiss = close.clone();
+                let cancel = close.clone();
+                crate::screens::keymap::panel(
+                    Surface::Library,
+                    crate::ui::command::Mode::Panel,
+                    move |_: &SharedString| dismiss(),
+                    move || cancel(),
+                )
+            }
+        }))
 }
 
 /// The app's root: the real library when it opens, and an empty, closed one when it does not, so

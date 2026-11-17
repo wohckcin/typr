@@ -72,8 +72,8 @@ fn pressing_a_row_selects_it() -> Result<(), String> {
 #[test]
 fn a_deck_with_work_shows_its_count_and_a_quiet_one_does_not() -> Result<(), String> {
     let mut app = start();
-    app.wait_for("Spanish")?;
-    assert!(app.screen().shows("1"));
+    // A deck's count rides in its label: the base tree gives a row no trailing slot.
+    app.wait_for("Spanish 1")?;
     assert!(!app.screen().texts().contains(&"0"));
     Ok(())
 }
@@ -82,9 +82,10 @@ fn a_deck_with_work_shows_its_count_and_a_quiet_one_does_not() -> Result<(), Str
 fn folding_a_deck_hides_its_children_and_keeps_its_count() -> Result<(), String> {
     let mut app = start();
     app.wait_for("Verbs")?;
-    app.press("role:button[Collapse Spanish]")?;
+    app.press("Spanish 1")?;
+    app.press_key("left")?;
     app.wait_for_gone("Verbs", std::time::Duration::from_secs(2))?;
-    assert!(app.screen().shows("Spanish"));
+    assert!(app.screen().shows("Spanish 1"));
     Ok(())
 }
 
@@ -92,10 +93,11 @@ fn folding_a_deck_hides_its_children_and_keeps_its_count() -> Result<(), String>
 fn a_fold_survives_a_refresh() -> Result<(), String> {
     let mut app = start();
     app.wait_for("Verbs")?;
-    app.press("role:button[Collapse Spanish]")?;
+    app.press("Spanish 1")?;
+    app.press_key("left")?;
     app.wait_for_gone("Verbs", std::time::Duration::from_secs(2))?;
     app.press("Refresh")?;
-    app.wait_for("Spanish")?;
+    app.wait_for("Spanish 1")?;
     assert!(!app.screen().shows("Verbs"));
     Ok(())
 }
@@ -117,10 +119,33 @@ fn a_closed_library_is_stated() -> Result<(), String> {
 }
 
 #[test]
-fn the_fold_chevron_names_what_it_does_and_what_it_folds() -> Result<(), String> {
+fn a_deck_folds_on_its_own_press_and_selects_itself() -> Result<(), String> {
     let mut app = start();
-    app.wait_for("role:button[Collapse Spanish]")?;
-    app.press("role:button[Collapse Spanish]")?;
-    app.wait_for("role:button[Expand Spanish]")?;
+    app.wait_for("Verbs")?;
+    // A folder folds on its own press — the base element's model — and the row it folded is the
+    // row it selected.
+    app.press("Spanish 1")?;
+    app.wait_for_gone("Verbs", std::time::Duration::from_secs(2))?;
+    app.wait_for("selected=spanish")?;
+    // The same press opens it again.
+    app.press("Spanish 1")?;
+    app.wait_for("Verbs")?;
+    // A leaf row selects and folds nothing.
+    app.press("Biology")?;
+    app.wait_for("selected=biology")?;
+    Ok(())
+}
+
+#[test]
+fn the_deck_rows_are_a_tree() -> Result<(), String> {
+    let mut app = start();
+    // The rows are one tree, not a list of buttons: the base element reports each row's level and
+    // whether it is expanded, and the nested deck sits under its parent.
+    app.wait_for("role:treeitem[Spanish 1]")?;
+    app.wait_for("role:treeitem[Biology]")?;
+    let texts: Vec<String> = app.screen().texts().iter().map(|t| t.to_string()).collect();
+    let at = |label: &str| texts.iter().position(|t| t == label).unwrap_or(usize::MAX);
+    assert!(at("Spanish 1") < at("Verbs"), "{texts:?}");
+    assert!(at("Verbs") < at("Biology"), "{texts:?}");
     Ok(())
 }

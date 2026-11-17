@@ -50,13 +50,17 @@ control's keys while it holds focus and draws nothing. It stays, and it gets a l
    action hidden and its search field kept: `keymap-panel` requires the panel to be filtered by typing
    (`openspec/specs/keymap-panel/spec.md:54`), so hiding the field would leave that scenario unmet. One list
    implementation instead of two; the items come from `bindings_of(surface)` — label and chord — so the panel
-   still cannot list a binding that does not exist.
+   still cannot list a binding that does not exist. One row per command, not per chord: a command may hold
+   several chords (the arrows and `j`/`k` both walk the library), the base list chooses a row by its id, and
+   three rows with one id is a list that cannot say which one it highlighted. The chords become the row's
+   keywords, so typing any of them still finds it.
 2. **The history is a table, not a list of cards.** Four fields per record are columns; `table.rs` supplies the
    row model and the keyboard movement. The count stays a `badge` in the header.
-3. **The deck tree becomes `tree.rs`, keeping the due counts.** A tree item carries the deck's name; the due count
-   becomes the item's trailing content rather than a separate badge, because a badge states a status and the
-   count is metadata. If the base tree cannot express a trailing count, the count moves into the label and this
-   decision is amended — task 3.2 records which.
+3. **The deck tree becomes `tree.rs`, keeping the due counts — in the label.** `TreeItem` carries an id and a
+   label and no trailing slot, and its `render_item` draws a row the tree still positions, so a badge beside the
+   name would be a second layout inside one row. The count rides in the label (`Spanish 1`), as task 3.2's
+   fallback said; a deck with nothing due keeps its bare name. The row a screen reader hears carries the same
+   words, which is why the count is a word and not a chip.
 4. **The empty state's label is text, and the chord is dropped.** "New card" already names the button beneath it;
    the chip above it is the wrong element for a label, and the bare `c` is a chord with no keycap and no verb. The
    button keeps its key in the sidebar's hint, where a chord is shown as a chord.

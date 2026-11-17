@@ -110,16 +110,8 @@ pub fn grid(
     view().flex_1().child(dynamic(move || {
         if tiles.with(Vec::is_empty) {
             let on_new = empty_new.clone();
-            let chord = typr_core::keymap::chord_of(
-                typr_core::keymap::Surface::Library,
-                typr_core::keymap::Command::NewCard,
-            )
-            .map(|c| c.to_string())
-            .unwrap_or_default();
             return view()
                 .p_4()
-                .child(badge().label("New card"))
-                .child(text(chord).text_xs().text_color(tokens::muted_foreground))
                 .child(
                     text("This deck has no cards yet")
                         .text_sm()

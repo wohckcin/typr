@@ -7,6 +7,7 @@
 
 pub mod button;
 pub mod choice;
+pub mod command;
 pub mod input;
 pub mod motion;
 pub mod overlay;
@@ -15,5 +16,7 @@ pub mod size;
 pub mod source;
 pub mod status;
 pub mod surface;
+pub mod table;
 pub mod toggle;
 pub mod tokens;
+pub mod tree;

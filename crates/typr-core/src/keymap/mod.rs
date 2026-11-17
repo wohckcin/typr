@@ -104,7 +104,105 @@ impl Command {
             Command::MoveCardDown => "Move the card down its deck",
         }
     }
+
+    /// The command whose [`Command::name`] is `name`, if the table holds it.
+    pub fn from_name(name: &str) -> Option<Command> {
+        ALL.iter().copied().find(|command| command.name() == name)
+    }
+
+    /// Whether the app carries this command out today. A binding whose command is not carried out
+    /// is still listed, dimmed, rather than hidden: the key is bound and does nothing, which is the
+    /// fact worth showing.
+    pub fn runnable(self) -> bool {
+        !matches!(
+            self,
+            Command::PreviewCard
+                | Command::AddCardBelow
+                | Command::AddCardAbove
+                | Command::MoveCardUp
+                | Command::MoveCardDown
+                | Command::CramSession
+                | Command::ToggleHistory
+        )
+    }
+
+    /// The command's name in the table: what a palette identifies it by, and what a test reads.
+    /// Lower-case with dashes, so it survives being an id and never reads as its label.
+    pub fn name(self) -> &'static str {
+        match self {
+            Command::StartDueSession => "start-due-session",
+            Command::StartNewSession => "start-new-session",
+            Command::NewCard => "new-card",
+            Command::Leave => "leave",
+            Command::Save => "save",
+            Command::ToggleHistory => "toggle-history",
+            Command::Reveal => "reveal",
+            Command::GradeRemembered => "grade-remembered",
+            Command::GradeForgot => "grade-forgot",
+            Command::Forward => "forward",
+            Command::Back => "back",
+            Command::Shuffle => "shuffle",
+            Command::ShowShortcuts => "show-shortcuts",
+            Command::ShowPalette => "show-palette",
+            Command::AddRectangle => "add-rectangle",
+            Command::WiderRectangle => "wider-rectangle",
+            Command::NarrowerRectangle => "narrower-rectangle",
+            Command::TallerRectangle => "taller-rectangle",
+            Command::ShorterRectangle => "shorter-rectangle",
+            Command::CramSession => "cram-session",
+            Command::Settings => "settings",
+            Command::SelectionNext => "selection-next",
+            Command::SelectionPrevious => "selection-previous",
+            Command::SelectionFirst => "selection-first",
+            Command::SelectionLast => "selection-last",
+            Command::FocusSearch => "focus-search",
+            Command::EditCard => "edit-card",
+            Command::PreviewCard => "preview-card",
+            Command::DeleteCard => "delete-card",
+            Command::AddCardBelow => "add-card-below",
+            Command::AddCardAbove => "add-card-above",
+            Command::MoveCardUp => "move-card-up",
+            Command::MoveCardDown => "move-card-down",
+        }
+    }
 }
+
+/// Every command the app can be asked for, in the enum's order.
+pub const ALL: &[Command] = &[
+    Command::StartDueSession,
+    Command::StartNewSession,
+    Command::NewCard,
+    Command::Leave,
+    Command::Save,
+    Command::ToggleHistory,
+    Command::Reveal,
+    Command::GradeRemembered,
+    Command::GradeForgot,
+    Command::Forward,
+    Command::Back,
+    Command::Shuffle,
+    Command::ShowShortcuts,
+    Command::ShowPalette,
+    Command::AddRectangle,
+    Command::WiderRectangle,
+    Command::NarrowerRectangle,
+    Command::TallerRectangle,
+    Command::ShorterRectangle,
+    Command::CramSession,
+    Command::Settings,
+    Command::SelectionNext,
+    Command::SelectionPrevious,
+    Command::SelectionFirst,
+    Command::SelectionLast,
+    Command::FocusSearch,
+    Command::EditCard,
+    Command::PreviewCard,
+    Command::DeleteCard,
+    Command::AddCardBelow,
+    Command::AddCardAbove,
+    Command::MoveCardUp,
+    Command::MoveCardDown,
+];
 
 /// A key, in terms a table can be written in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

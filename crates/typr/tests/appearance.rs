@@ -18,7 +18,7 @@ use typr::screens::editor::editor;
 use typr::screens::embed::embedded;
 use typr::screens::grid::{Tile, grid};
 use typr::screens::history::{Record, history};
-use typr::screens::keymap::palette;
+use typr::screens::keymap::{Mode, panel};
 use typr::screens::settings::{LibraryInfo, Values, settings};
 use typr::screens::sidebar::{Group, Item, Sidebar, sidebar};
 use typr::screens::study::study;
@@ -199,7 +199,12 @@ fn SettingsScreen() -> impl IntoElement {
 #[component]
 fn KeymapScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    palette(Surface::Library, |_| {})
+    panel(
+        Surface::Library,
+        Mode::Palette,
+        |_id: &nsh_core::element::SharedString| {},
+        || {},
+    )
 }
 
 #[component]
@@ -262,7 +267,7 @@ check!(
     appearance_history,
     "history",
     HistoryScreen,
-    "text:/review · good/",
+    "text:/^review$/",
     Token::Foreground
 );
 check!(

@@ -10,12 +10,7 @@ use nsh_core::prelude::*;
 use typr_core::keymap::{Command, Surface, chord_of};
 use typr_core::store::{Id, Snapshot};
 
-use crate::ui::{
-    button::{Variant, button},
-    choice::list_row,
-    status::badge,
-    tokens,
-};
+use crate::ui::{choice::list_row, status::badge, tokens};
 
 /// The groups of rows, drawn in this order. A group with no visible row draws nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -144,6 +139,56 @@ impl Sidebar {
             });
     }
 
+    /// The deck rows as a tree: every deck in the library, nested under its parent. A deck's due
+    /// count rides in its label, because the base element gives a row no trailing slot.
+    pub fn deck_tree(&self) -> crate::ui::tree::Items {
+        fn nest(items: &[Item], parent: Option<&SharedString>, into: &mut Vec<nsh_base::TreeItem>) {
+            for item in items {
+                if item.group != Group::Decks || item.parent.as_ref() != parent {
+                    continue;
+                }
+                let mut node = crate::ui::tree::item(
+                    item.key.clone(),
+                    crate::ui::tree::label_with_due(&item.label, item.due),
+                );
+                let mut children = Vec::new();
+                nest(items, Some(&item.key), &mut children);
+                if !children.is_empty() {
+                    node = node.children(children);
+                }
+                into.push(node);
+            }
+        }
+        let mut top = Vec::new();
+        self.items.with(|items| nest(items, None, &mut top));
+        top
+    }
+
+    /// The deck ids the tree shows open: every deck that has children, less the ones folded.
+    pub fn expanded_decks(&self) -> Vec<SharedString> {
+        self.items.with(|items| {
+            items
+                .iter()
+                .filter(|item| item.group == Group::Decks && item.has_children)
+                .map(|item| item.key.clone())
+                .filter(|key| !self.is_collapsed(key))
+                .collect()
+        })
+    }
+
+    /// Folds every deck with children that `expanded` does not name.
+    pub fn set_expanded_decks(&self, expanded: &[SharedString]) {
+        let folded: Vec<SharedString> = self.items.with(|items| {
+            items
+                .iter()
+                .filter(|item| item.group == Group::Decks && item.has_children)
+                .map(|item| item.key.clone())
+                .filter(|key| !expanded.contains(key))
+                .collect()
+        });
+        self.collapsed.set(folded);
+    }
+
     /// The key of the row in force, if any.
     pub fn selected_key(&self) -> Option<SharedString> {
         self.selected.with(|s| s.clone())
@@ -215,8 +260,27 @@ pub fn sidebar(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
                     .text_xs()
                     .text_color(tokens::muted_foreground),
             );
-            for item in rows {
-                section = section.child(row_view(state, item, pick.clone()));
+            if group == Group::Decks {
+                // The decks are a tree: the base element folds them, moves the selection with the
+                // arrow keys and tells a screen reader how deep each row sits.
+                let pick = pick.clone();
+                let chosen = state;
+                section = section.child(
+                    crate::ui::tree::tree()
+                        .items(move || state.deck_tree())
+                        .expanded(move || state.expanded_decks())
+                        .selected(move || state.selected_key())
+                        .accessibility_label("Decks")
+                        .on_selected(move |id: &SharedString| {
+                            chosen.select(id);
+                            pick(id);
+                        })
+                        .on_expanded(move |ids: &Vec<SharedString>| state.set_expanded_decks(ids)),
+                );
+            } else {
+                for item in rows {
+                    section = section.child(row_view(state, item, pick.clone()));
+                }
             }
             groups = groups.child(section);
         }
@@ -261,9 +325,6 @@ fn row_view(
     let key = item.key.clone();
     let in_force = key.clone();
     let press = key.clone();
-    let fold = key.clone();
-    let folded = key.clone();
-    let named_fold = key.clone();
     let mut row = view().flex_row().items_center().gap_1().child(
         view().flex_1().child(
             list_row()
@@ -277,31 +338,6 @@ fn row_view(
     );
     if item.due > 0 {
         row = row.child(badge().label(item.due.to_string()));
-    }
-    if item.has_children {
-        // The chevron is the one control with no words on it, so it names itself.
-        let named = item.label.clone();
-        row = row.child(
-            button()
-                .variant(Variant::Ghost)
-                .disabled(|| false)
-                .label(move || -> SharedString {
-                    if state.is_collapsed(&folded) {
-                        "▸".into()
-                    } else {
-                        "▾".into()
-                    }
-                })
-                .accessible(move || {
-                    let action = if state.is_collapsed(&named_fold) {
-                        "Expand"
-                    } else {
-                        "Collapse"
-                    };
-                    Some(format!("{action} {named}").into())
-                })
-                .on_press(move || state.toggle_collapsed(&fold)),
-        );
     }
     row
 }

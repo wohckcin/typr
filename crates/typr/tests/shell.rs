@@ -49,11 +49,33 @@ fn start() -> Headless {
 #[test]
 fn the_decks_of_the_library_are_listed_with_their_due_counts() -> Result<(), String> {
     let mut app = start();
-    app.wait_for("Spanish")?;
+    // The decks are one tree, and a row's due count rides in its label: the base element gives a
+    // row no trailing slot.
+    app.wait_for("Spanish 1")?;
     assert!(app.screen().shows("Biology"));
-    assert!(app.screen().shows("Verbs"));
     // The due card is in Verbs, so Spanish above it counts it too.
-    app.wait_for("text:/^1$/")?;
+    assert!(app.screen().shows("Verbs 1"));
+    Ok(())
+}
+
+#[test]
+fn a_parent_deck_counts_the_cards_due_under_it() -> Result<(), String> {
+    #[component]
+    fn TwoDue() -> impl IntoElement {
+        typr::ui::tokens::install();
+        let mut snapshot = fixture();
+        snapshot.cards.push(CardSummary {
+            id: 11,
+            deck: 2,
+            due_at: Some(100),
+            ..CardSummary::default()
+        });
+        typr::shell::shell(snapshot, true)
+    }
+    let mut app = Headless::start(EngineConfig::new(Root::of::<TwoDue>())).unwrap();
+    // The count rides in the row's label, and a parent counts what sits under it.
+    app.wait_for("Spanish 2")?;
+    app.wait_for("Verbs 2")?;
     Ok(())
 }
 
@@ -98,7 +120,7 @@ fn the_settings_row_opens_settings_and_escape_returns() -> Result<(), String> {
     app.wait_for("Show review counts")?;
     app.press_key("escape")?;
     app.wait_for_gone("Show review counts", std::time::Duration::from_secs(5))?;
-    app.wait_for("Spanish")?;
+    app.wait_for("Spanish 1")?;
     Ok(())
 }
 
@@ -455,7 +477,7 @@ fn choosing_a_deck_leaves_the_open_card() -> Result<(), String> {
     app.press("role:button[gato]")?;
     app.wait_for("Attach image…")?;
     // A row in the sidebar opens the grid for that row, so the card on screen goes away.
-    app.press("role:button[Spanish]")?;
+    app.press("role:treeitem[Spanish]")?;
     app.wait_for("Search cards")?;
     let editor_rows = app.screen().count("Attach image…")?;
     assert_eq!(editor_rows, 0, "the editor is gone");
@@ -527,7 +549,7 @@ fn a_row_change_keeps_the_selected_card_when_it_still_shows() -> Result<(), Stri
     // opens it rather than acting on a position that no longer exists.
     app.press_key("down")?;
     app.press_key("down")?;
-    app.press("role:button[Biology]")?;
+    app.press("role:treeitem[Biology]")?;
     app.press_key("enter")?;
     app.wait_for("Attach image…")?;
     app.wait_for("text:perro")?;

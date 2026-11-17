@@ -56,7 +56,8 @@ pub fn hint(anchor: impl IntoElement, label: &'static str) -> impl IntoElement {
     view().tooltip(text(label).text_xs()).child(anchor)
 }
 
-/// A focused decision: shown while `open`, cancelled by Escape or a backdrop press.
+/// A focused decision: shown while `open`, cancelled by Escape or a backdrop press. Its content
+/// starts below the window's title bar, which the app draws under.
 pub fn decision<V: IntoElement + 'static>(
     open: Signal<bool>,
     content: impl Fn() -> V + 'static,
@@ -69,6 +70,7 @@ pub fn decision<V: IntoElement + 'static>(
                 .flex_1()
                 .bg(tokens::background)
                 .p_4()
+                .pt_12()
                 .child(content())
         },
     )

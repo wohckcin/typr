@@ -83,6 +83,33 @@ explains. The line is revisited if the sidebar measures its rows for another rea
 | Import or export in flight | none: the result line states the outcome when it arrives | n/a | no motion |
 | Result line appears | the toast's own entrance and exit from `nsh/base` | the platform's | plays |
 
+## Elements
+
+A surface `nsh/base` already ships is built from it, wrapped in `crates/typr/src/ui` so a screen imports
+the app's module and not the base crate (`tests/tokens.rs` refuses `use nsh_base::` in a screen). The
+base element owns the keyboard model, the states it reports and what a screen reader hears.
+
+| Screen | Built from | Where |
+|---|---|---|
+| Command palette | `nsh/base`'s `command` | `ui/command.rs`, drawn for `Mode::Palette` |
+| Shortcut panel | the same `command`, with the run action hidden and the field kept, because `keymap-panel` requires a panel filtered by typing | `ui/command.rs`, `Mode::Panel` |
+| Review history | `table` with four columns | `ui/table.rs` |
+| Sidebar decks | `tree`, folding through the element's own expansion | `ui/tree.rs` |
+| Settings toggles and checks | `switch` and `checkbox` | `ui/toggle.rs` |
+| Deck and view pickers | `select`, `tabs` | `ui/choice.rs` |
+| Card text fields | `input` | `ui/input.rs` |
+| Card source, embeds | `editor`, `text_view` | `ui/source.rs`, `ui/prose` |
+| Dialogs, menus, popovers, toasts | `dialog`, `menu`, `popover`, `toast` | `ui/overlay.rs`, `ui/status.rs` |
+| Buttons and tiles | `button` under the app's props | `ui/button.rs` |
+
+Hand-built, and why:
+
+| Element | Why it is not a base element |
+|---|---|
+| `Keycap` (`ui/status.rs:57`) | The base crate has `keys.rs`, which reads and binds keystrokes but draws no keycap: a chord is a bordered name with the app's radius and type. |
+| `list_row` (`ui/choice.rs`) | The base `listbox` is a selection model; a sidebar row is a label with a chosen state the app owns. |
+| `badge`, `status_line` | A count and a state are text with the app's tokens, not controls. |
+
 ## Appearance, without pictures
 
 Appearance is checked by the styles a screen resolves to, not by captured images. `tests/appearance.rs`

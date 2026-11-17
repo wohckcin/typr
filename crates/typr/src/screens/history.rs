@@ -3,7 +3,7 @@
 
 use nsh_core::prelude::*;
 
-use crate::ui::{status::badge, surface, tokens};
+use crate::ui::{status::badge, table::table, tokens};
 
 /// One review record as the screen shows it.
 #[derive(Clone, Debug, PartialEq)]
@@ -26,39 +26,44 @@ pub fn review_count(records: &[Record]) -> usize {
         .count()
 }
 
-/// The history of one card: the count, then its records newest first, or an empty state.
+/// The history of one card: the count, then its records newest first in a table, or an empty state.
 pub fn history(records: Vec<Record>) -> impl IntoElement {
     let count = review_count(&records);
-    let mut list = view().gap_2();
-    if records.is_empty() {
-        list = list.child(
-            text("No reviews yet")
-                .text_sm()
-                .text_color(tokens::muted_foreground),
-        );
-    }
-    for record in records.iter().rev() {
-        list = list.child(
-            surface::surface().child(
-                view()
-                    .gap_1()
-                    .child(
-                        text(format!("{} · {}", record.phase, record.grade))
-                            .text_sm()
-                            .text_color(tokens::foreground),
-                    )
-                    .child(
-                        text(format!("{} · due {}", record.at, record.due))
-                            .text_xs()
-                            .text_color(tokens::muted_foreground),
-                    ),
-            ),
-        );
-    }
+    let body = if records.is_empty() {
+        view()
+            .child(
+                text("No reviews yet")
+                    .text_sm()
+                    .text_color(tokens::muted_foreground),
+            )
+            .into_element()
+    } else {
+        let rows: Vec<Vec<SharedString>> = records
+            .iter()
+            .rev()
+            .map(|record| {
+                vec![
+                    record.phase.clone(),
+                    record.grade.clone(),
+                    record.at.clone(),
+                    record.due.clone(),
+                ]
+            })
+            .collect();
+        table()
+            .headers(
+                ["Phase", "Grade", "When", "Due"]
+                    .map(SharedString::from)
+                    .to_vec(),
+            )
+            .rows(rows)
+            .accessibility_label("Review history")
+            .into_element()
+    };
     view()
         .flex_1()
         .gap_3()
         .p_4()
         .child(badge().label(format!("{count} reviews")))
-        .child(list)
+        .child(body)
 }

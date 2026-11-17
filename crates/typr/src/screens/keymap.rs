@@ -6,13 +6,9 @@
 //! the user types, and the palette runs the first command a typed query narrows to.
 
 use nsh_core::prelude::*;
-use typr_core::keymap::{Binding, Chord, Command, Key, Mods, Surface, bindings_of, chord_of};
+use typr_core::keymap::{Chord, Command, Key, Mods, Surface, bindings_of, chord_of};
 
-use crate::ui::{
-    input::{field, submit_field},
-    status::keycap,
-    surface, tokens,
-};
+pub use crate::ui::command::Mode;
 
 /// Reads an NSH keystroke string into a chord. `mod` is Command on Apple platforms and Control
 /// elsewhere, as NSH defines it; `None` for a stroke the table cannot hold.
@@ -150,123 +146,47 @@ pub fn keystroke_of_chord(chord: Chord) -> Option<String> {
     }
 }
 
-/// The rows the panel shows for `surface`: the command's label and the chord it is bound to.
-pub fn rows(surface: Surface) -> Vec<(&'static str, String)> {
-    bindings_of(surface)
-        .map(|b: &Binding| (b.command.label(), b.chord.to_string()))
-        .collect()
-}
-
-/// The rows whose label contains `query`, ignoring case; the whole list when it is empty.
-pub fn visible_rows(surface: Surface, query: &str) -> Vec<(&'static str, String)> {
-    let needle = query.trim().to_lowercase();
-    rows(surface)
-        .into_iter()
-        .filter(|(label, _)| needle.is_empty() || label.to_lowercase().contains(&needle))
-        .collect()
-}
-
-fn row_views(rows: Vec<(&'static str, String)>) -> impl IntoElement {
-    let mut list = view().gap_2();
-    if rows.is_empty() {
-        list = list.child(
-            text("No matching command")
-                .text_sm()
-                .text_color(tokens::muted_foreground),
-        );
-    }
-    for (label, chord) in rows {
-        list = list.child(
-            surface::surface().child(
-                view()
-                    .flex_row()
-                    .justify_between()
-                    .items_center()
-                    .child(text(label).text_sm().text_color(tokens::foreground))
-                    .child(keycap().chord(chord)),
-            ),
-        );
-    }
-    list
-}
-
-/// The panel for `surface`. It opens and closes on the shortcut chord the table binds, and its list
-/// narrows to the commands that match what is typed.
-pub fn keymap_panel(surface: Surface) -> impl IntoElement {
-    let open = signal(false);
-    let query = signal(String::new());
-    if let Some(key) = keystroke_of(surface, Command::ShowShortcuts) {
-        on_key(&key, move |_| open.update(|shown| *shown = !*shown));
-    }
-    view().flex_1().p_4().child(dynamic(move || {
-        if !open.get() {
-            return view().into_element();
+/// The items a command list shows for `surface`: one per binding, named by the command, labelled
+/// by its noun, with its chord among the words the query matches and its keystroke for the row to
+/// draw.
+pub fn items(surface: Surface) -> Vec<nsh_base::CommandItem> {
+    // One item per command, not per chord: a command may hold several chords (the arrows and the
+    // letters both walk the library), and the list is chosen by the item's id.
+    let mut listed = Vec::new();
+    for binding in bindings_of(surface) {
+        if let Some(item) = listed
+            .iter_mut()
+            .find(|item: &&mut nsh_base::CommandItem| item.id == binding.command.name())
+        {
+            let mut words: Vec<SharedString> = item.keywords.clone();
+            words.push(binding.chord.to_string().into());
+            *item = item.clone().keywords(words);
+            continue;
         }
-        view()
-            .gap_3()
-            .child(
-                field()
-                    .placeholder("Filter commands")
-                    .value(move || SharedString::from(query.get()))
-                    .on_change(move |text: &String| query.set(text.to_string())),
-            )
-            .child(dynamic(move || {
-                row_views(visible_rows(surface, &query.get())).into_element()
-            }))
-            .into_element()
-    }))
+        let mut item = nsh_base::CommandItem::new(binding.command.name(), binding.command.label())
+            .keywords([binding.chord.to_string()])
+            .disabled(!binding.command.runnable());
+        if let Some(keys) = keystroke_of_chord(binding.chord) {
+            item = item.shortcut(keys);
+        }
+        listed.push(item);
+    }
+    listed
 }
 
-/// The palette for `surface`: typing a query narrows the surface's commands, and Enter runs the
-/// first one left. A command the surface does not bind is never offered, because the list comes
-/// from the one binding table.
-pub fn palette(
+/// The command a palette item names, if the table holds it.
+pub fn command_of(id: &str) -> Option<Command> {
+    Command::from_name(id)
+}
+
+/// The command list for `surface`: the palette runs the chosen command, the shortcut panel lists
+/// the same bindings without running any.
+pub fn panel(
     surface: Surface,
-    on_run: impl Fn(&'static str) + Clone + 'static,
+    mode: Mode,
+    on_run: impl Fn(&SharedString) + Clone + 'static,
+    on_cancel: impl Fn() + Clone + 'static,
 ) -> impl IntoElement {
-    let query = signal(String::new());
-    let typing = query;
-    let run = on_run.clone();
-    view()
-        .flex_1()
-        .gap_3()
-        .p_4()
-        .child(
-            submit_field()
-                .placeholder("Run a command")
-                .value(move || SharedString::from(query.get()))
-                .on_change(move |text: &String| typing.set(text.clone()))
-                .on_submit(move |_: &String| {
-                    if let Some((label, _)) = visible_rows(surface, &typing.get_untracked())
-                        .into_iter()
-                        .next()
-                    {
-                        run(label);
-                    }
-                }),
-        )
-        .child(dynamic(move || {
-            let rows = visible_rows(surface, &query.get());
-            let mut list = view().gap_2();
-            if rows.is_empty() {
-                list = list.child(
-                    text("No matching command")
-                        .text_sm()
-                        .text_color(tokens::muted_foreground),
-                );
-            }
-            for (label, chord) in rows {
-                list = list.child(
-                    surface::surface().child(
-                        view()
-                            .flex_row()
-                            .justify_between()
-                            .items_center()
-                            .child(text(label).text_sm().text_color(tokens::foreground))
-                            .child(keycap().chord(chord)),
-                    ),
-                );
-            }
-            list.into_element()
-        }))
+    let items = items(surface);
+    crate::ui::command::command(items, "Run a command", mode, on_run, on_cancel)
 }

@@ -128,7 +128,7 @@ fn keyboard_pass(app: &mut Headless, landmark: &str) -> Result<(), String> {
 #[test]
 fn the_library_names_every_control_and_survives_the_keyboard() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<LibraryScreen>())).unwrap();
-    app.wait_for("role:button[Spanish]")?;
+    app.wait_for("role:treeitem[Spanish]")?;
     app.wait_for("role:button[Settings]")?;
     app.wait_for("role:button[Diagnostics]")?;
     keyboard_pass(&mut app, "Spanish")
@@ -153,8 +153,9 @@ fn the_study_screen_names_its_controls_and_survives_the_keyboard() -> Result<(),
 #[test]
 fn the_history_screen_survives_the_keyboard() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<HistoryScreen>())).unwrap();
-    app.wait_for("text:/review · good/")?;
-    keyboard_pass(&mut app, "review · good")
+    // A record is four cells now, so it is read across its columns rather than as one run.
+    app.wait_for("text:/^review$/")?;
+    keyboard_pass(&mut app, "review")
 }
 
 #[test]
@@ -202,20 +203,22 @@ fn a_larger_text_size_reaches_every_screen_without_losing_a_control() -> Result<
     // The window cannot be asked for a larger text size on macOS (the platform pins it to 1), so
     // the check runs the app's own layout at 1.5 as a platform would report it.
     let mut app = Headless::start(EngineConfig::new(Root::of::<LibraryScreen>())).unwrap();
-    app.wait_for("role:button[Spanish]")?;
+    app.wait_for("role:treeitem[Spanish]")?;
     let normal = app.screen().span_style("text:Spanish")?.font_size;
     app.set_environment("a larger text size", |environment| {
         environment.font_scale = 1.5
     })?;
-    app.wait_for("role:button[Spanish]")?;
+    app.wait_for("role:treeitem[Spanish]")?;
     let larger = app.screen().span_style("text:Spanish")?.font_size;
     assert!(
         larger > normal,
         "the sidebar's text grew with the setting: {normal:?} then {larger:?}"
     );
     // Every control is still reachable at that size.
-    for control in ["All cards", "Spanish", "Settings", "Diagnostics"] {
+    for control in ["All cards", "Settings", "Diagnostics"] {
         app.wait_for(&format!("role:button[{control}]"))?;
     }
+    // A deck is a row of the tree, not a button.
+    app.wait_for("role:treeitem[Spanish]")?;
     Ok(())
 }

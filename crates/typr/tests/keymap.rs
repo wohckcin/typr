@@ -1,12 +1,11 @@
-//! The keymap panel and the keystroke adapter: each binding of a surface is listed with its label,
-//! and an NSH keystroke maps to the chord the table holds.
+//! The command list: every binding of a surface is one item, the palette runs the row it is on,
+//! and the shortcut panel lists the same bindings without running any.
 
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr::screens::keymap::{
-    chord_from_keystroke, keymap_panel, keystroke_of, palette as palette_widget, rows, visible_rows,
-};
+use typr::screens::keymap::{chord_from_keystroke, command_of, items, keystroke_of, panel};
+use typr::ui::command::Mode;
 use typr_core::keymap::{Chord, Command, Key, Mods, Surface, bindings_of};
 
 #[test]
@@ -28,123 +27,120 @@ fn a_keystroke_maps_to_the_table_chord() {
     assert_eq!(chord_from_keystroke("hyper+zz", true), None);
 }
 
-#[component]
-fn Probe() -> impl IntoElement {
-    typr::ui::tokens::install();
-    keymap_panel(Surface::Library)
-}
-
 #[test]
-fn every_binding_of_the_surface_is_listed_with_its_label() -> Result<(), String> {
-    let first = bindings_of(Surface::Library)
-        .next()
-        .expect("the library binds something");
-    let label = first.command.label();
-    let shortcut = keystroke_of(Surface::Library, Command::ShowShortcuts).expect("the panel");
-    let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
-    app.first_render()?;
-    app.press_key(&shortcut)?;
-    app.wait_for(label)?;
-    assert_eq!(
-        rows(Surface::Library).len(),
-        bindings_of(Surface::Library).count()
-    );
-    Ok(())
-}
-
-#[test]
-fn filtering_narrows_the_list_ignoring_case() {
-    let all = rows(Surface::Library);
-    assert!(!all.is_empty());
-    let label = all[0].0;
-    let needle = label[..4].to_uppercase();
-    let narrowed = visible_rows(Surface::Library, &needle);
-    assert!(!narrowed.is_empty());
-    assert!(narrowed.len() <= all.len());
-    assert!(
-        narrowed
+fn every_command_is_one_item_and_nothing_else() {
+    let listed = items(Surface::Library);
+    let mut names: Vec<&str> = bindings_of(Surface::Library)
+        .map(|binding| binding.command.name())
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    assert_eq!(listed.len(), names.len(), "one row per command");
+    // A command with more than one chord is one row, and every one of its chords finds it.
+    for binding in bindings_of(Surface::Library) {
+        let rows: Vec<_> = listed
             .iter()
-            .all(|(l, _)| l.to_lowercase().contains(&needle.to_lowercase()))
-    );
-    assert_eq!(visible_rows(Surface::Library, "").len(), all.len());
-    assert!(visible_rows(Surface::Library, "zzzznomatch").is_empty());
-}
-
-#[component]
-fn Panel() -> impl IntoElement {
-    typr::ui::tokens::install();
-    keymap_panel(Surface::Library)
-}
-
-#[test]
-fn the_panel_opens_and_closes_on_its_shortcut_key() -> Result<(), String> {
-    let shortcut =
-        keystroke_of(Surface::Library, Command::ShowShortcuts).expect("the table binds the panel");
-    let first = rows(Surface::Library)[0].0;
-    let mut app = Headless::start(EngineConfig::new(Root::of::<Panel>())).unwrap();
-    app.first_render()?;
-    assert!(!app.screen().shows(first), "the panel starts closed");
-    app.press_key(&shortcut)?;
-    app.wait_for(first)?;
-    app.press_key(&shortcut)?;
-    assert!(!app.screen().shows(first), "the same key closes it");
-    Ok(())
-}
-
-#[component]
-fn Filtering() -> impl IntoElement {
-    typr::ui::tokens::install();
-    keymap_panel(Surface::Library)
-}
-
-#[test]
-fn typing_in_the_panel_narrows_its_rows() -> Result<(), String> {
-    let shortcut = keystroke_of(Surface::Library, Command::ShowShortcuts).expect("the panel");
-    let labels = rows(Surface::Library);
-    let needle = labels[0].0.to_owned();
-    let other = labels
-        .iter()
-        .map(|(label, _)| *label)
-        .find(|label| {
-            !label.to_lowercase().contains(&needle.to_lowercase())
-                && !needle.to_lowercase().contains(&label.to_lowercase())
-        })
-        .expect("another command");
-    let mut app = Headless::start(EngineConfig::new(Root::of::<Filtering>())).unwrap();
-    app.first_render()?;
-    app.press_key(&shortcut)?;
-    app.wait_for("Filter commands")?;
-    app.type_text("Filter commands", &needle)?;
-    app.wait_for(&needle)?;
-    assert!(!app.screen().shows(other), "{other} should be filtered out");
-    Ok(())
+            .filter(|item| item.id == binding.command.name())
+            .collect();
+        assert_eq!(rows.len(), 1, "{} is one row", binding.command.name());
+        let row = rows[0];
+        assert_eq!(row.label, binding.command.label());
+        assert_eq!(row.disabled, !binding.command.runnable());
+        assert_eq!(command_of(&row.id), Some(binding.command));
+        let chord: SharedString = binding.chord.to_string().into();
+        assert!(row.keywords.contains(&chord), "{} holds {chord}", row.label);
+    }
+    // A command the palette cannot reach is dimmed rather than dropped: the key is bound and does
+    // nothing, which is the fact the row states.
+    assert!(listed.iter().any(|item| item.disabled));
+    assert!(listed.iter().any(|item| !item.disabled));
 }
 
 #[component]
 fn PaletteProbe() -> impl IntoElement {
     typr::ui::tokens::install();
+    let open = signal(false);
     let ran = signal(String::from("nothing run"));
-    // The indicator comes first: a row list of cards after it is drawn into its own subtree.
+    on_key("mod+k", move |_| open.update(|shown| *shown = !*shown));
+    let shortcut = keystroke_of(Surface::Library, Command::ShowShortcuts).expect("the panel");
+    let panel_open = signal(false);
+    on_key(&shortcut, move |_| {
+        panel_open.update(|shown| *shown = !*shown)
+    });
     view()
+        // The indicator comes first: a row list of cards after it is drawn into its own subtree.
         .child(text(move || format!("ran={}", ran.get())))
-        .child(palette_widget(Surface::Library, move |label| {
-            ran.set(label.to_owned())
+        .child(typr::ui::overlay::decision(open, {
+            move || {
+                panel(
+                    Surface::Library,
+                    Mode::Palette,
+                    move |id: &SharedString| {
+                        ran.set(id.to_string());
+                        open.set(false);
+                    },
+                    move || open.set(false),
+                )
+            }
+        }))
+        .child(typr::ui::overlay::decision(panel_open, move || {
+            panel(
+                Surface::Library,
+                Mode::Panel,
+                |_: &SharedString| {},
+                move || panel_open.set(false),
+            )
         }))
 }
 
-#[test]
-fn the_palette_runs_the_first_command_its_query_narrows_to() -> Result<(), String> {
-    let label = rows(Surface::Library)[0].0;
-    let needle = label[..4].to_owned();
-    let expected = visible_rows(Surface::Library, &needle)
-        .into_iter()
-        .next()
-        .map(|(label, _)| label)
-        .expect("the query matches a command");
+fn start() -> Result<Headless, String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<PaletteProbe>())).unwrap();
-    app.wait_for("Run a command")?;
-    app.type_text("Run a command", &needle)?;
-    app.submit(&format!("text:{needle}"))?;
-    app.wait_for(&format!("ran={expected}"))?;
+    app.first_render()?;
+    Ok(app)
+}
+
+#[test]
+fn the_palette_runs_the_row_that_is_pressed() -> Result<(), String> {
+    // A headless run gives the search field no keyboard focus, so the field's own key handling
+    // (Down, Return) cannot be driven here; the host test `command.test.tsx` drives the keys. What
+    // this proves is the run path: the row the user presses is the command that runs.
+    let third = items(Surface::Library)[2].id.clone();
+    let mut app = start()?;
+    app.press_key("mod+k")?;
+    let label = items(Surface::Library)[2].label.clone();
+    app.wait_for(&label)?;
+    app.press(&label)?;
+    app.wait_for(&format!("ran={third}"))?;
+    assert!(!app.screen().shows(&label), "the palette closes");
+    Ok(())
+}
+
+#[test]
+fn the_panel_lists_the_bindings_and_runs_nothing() -> Result<(), String> {
+    let shortcut = keystroke_of(Surface::Library, Command::ShowShortcuts).expect("the panel");
+    let mut app = start()?;
+    app.press_key(&shortcut)?;
+    app.wait_for("Keyboard shortcuts")?;
+    let first = items(Surface::Library)[0].label.clone();
+    assert!(app.screen().shows(&first), "the panel lists the first row");
+    app.press(&first)?;
+    assert!(
+        app.screen().shows("ran=nothing run"),
+        "the panel runs nothing"
+    );
+    Ok(())
+}
+
+#[test]
+fn typing_narrows_the_list_and_case_does_not_matter() -> Result<(), String> {
+    let mut app = start()?;
+    app.press_key("mod+k")?;
+    app.wait_for("Edit the selected card")?;
+    app.type_text("Run a command", "SETT")?;
+    app.wait_for("Settings")?;
+    assert!(
+        !app.screen().shows("New card"),
+        "the query filters the list"
+    );
     Ok(())
 }
