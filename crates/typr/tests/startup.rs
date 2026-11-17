@@ -72,15 +72,39 @@ fn the_library_moves_with_the_arrow_keys() -> Result<(), String> {
 
 #[test]
 fn a_missing_data_folder_is_a_message_not_a_panic() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
     // A file where the folder should be: the store cannot open it, and the shell says which path.
     let blocked = std::env::temp_dir().join(format!("typr-blocked-{}", std::process::id()));
     std::fs::write(&blocked, b"not a folder").unwrap();
-    // SAFETY: this is the only test in this binary that reads the variable, and it is set before
-    // the app is mounted.
+    // SAFETY: the tests that read the variable take turns.
     unsafe { std::env::set_var("TYPR_DATA_DIR", blocked.join("library")) };
 
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
     app.wait_for("text:/^Library closed/")?;
     let _ = std::fs::remove_file(&blocked);
+    Ok(())
+}
+
+/// The environment is process-wide, so the tests that set it take turns.
+static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[test]
+fn a_library_that_does_not_exist_starts_with_a_deck() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = std::env::temp_dir().join(format!("typr-startup-seed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    // The folder is absent on the first open and empty on the second: both are the same library.
+    let db = typr::paths::open_from_environment().map_err(|error| format!("{error:?}"))?;
+    let snapshot = db.snapshot().map_err(|error| format!("{error:?}"))?;
+    assert_eq!(snapshot.decks.len(), 1, "a new library needs a deck");
+    assert_eq!(snapshot.decks[0].name, "Default");
+    let again = typr::paths::open_from_environment().map_err(|error| format!("{error:?}"))?;
+    let reopened = again.snapshot().map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        reopened.decks.len(),
+        1,
+        "the seed happens once, not on every open"
+    );
     Ok(())
 }

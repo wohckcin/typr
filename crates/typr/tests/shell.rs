@@ -613,3 +613,38 @@ fn delete_trashes_the_highlighted_card_and_no_other() -> Result<(), String> {
     );
     Ok(())
 }
+
+/// A library in a temporary folder with one deck and no cards: the empty grid's button has a deck
+/// to put its card in.
+fn empty_library_on_disk(name: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("typr-shell-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    match db.apply(
+        &typr_core::store::Command::CreateDeck {
+            parent: None,
+            name: "Spanish".to_owned(),
+        },
+        0,
+    ) {
+        Ok(typr_core::store::Outcome::Deck(_)) => {}
+        other => panic!("deck: {other:?}"),
+    }
+    root
+}
+
+#[test]
+fn an_empty_deck_offers_a_new_card_that_opens_its_editor() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = empty_library_on_disk("empty");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("This deck has no cards yet")?;
+    app.press("role:button[New card]")?;
+    app.wait_for("Attach image…")?;
+    // The card is in the library, not only on the screen: the button writes through the store.
+    let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    assert_eq!(reader.snapshot().unwrap().cards.len(), 1);
+    Ok(())
+}

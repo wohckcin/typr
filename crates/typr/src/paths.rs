@@ -8,7 +8,8 @@
 use std::path::{Path, PathBuf};
 
 use nsh_core::prelude::data_dir;
-use typr_core::store::{Db, StoreError};
+use typr_core::clock::{Clock, SystemClock};
+use typr_core::store::{Command, Db, StoreError};
 
 /// The library's file inside the app's data folder.
 pub fn database_path(root: &Path) -> PathBuf {
@@ -39,6 +40,17 @@ pub fn open_from_environment() -> Result<Db, StoreError> {
     std::fs::create_dir_all(&root)?;
     std::fs::create_dir_all(attachments_root(&root))?;
     let db = Db::open(&database_path(&root))?;
+    // A library with no deck has nowhere to put its first card, so the empty grid's one action
+    // would refuse. A new library gets the deck that action needs; a library that has decks is
+    // left alone, archived ones included.
+    if db.snapshot()?.decks.is_empty() {
+        let first = Command::CreateDeck {
+            parent: None,
+            name: "Default".to_owned(),
+        };
+        db.apply(&first, SystemClock.now_ms())?;
+        log::info!("library was empty, so it starts with the deck {first:?} made");
+    }
     // What a report needs to tell a migrated library from a refused or unopened one.
     let facts = db.schema_facts();
     log::info!(

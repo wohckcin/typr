@@ -550,6 +550,10 @@ pub fn shell_over(
         },
     );
 
+    // The empty deck's button runs what the new-card chord runs: the one closure, so a press and
+    // `c` cannot come to different cards.
+    let on_new = new_card.clone();
+
     view()
         .flex_1()
         .flex_row()
@@ -623,7 +627,15 @@ pub fn shell_over(
                             .p_4()
                             .gap_2()
                             .child(field_reachable("Search cards", query, &search_handle))
-                            .child(grid(tiles, selection, || {}, open))
+                            .child(grid(
+                                tiles,
+                                selection,
+                                {
+                                    let on_new = on_new.clone();
+                                    move || on_new()
+                                },
+                                open,
+                            ))
                             .into_element();
                     };
                     let template = card.template.as_ref().map(|text| Template {
@@ -745,7 +757,15 @@ pub fn shell_over(
                     .p_4()
                     .gap_3()
                     .child(field_reachable("Search cards", query, &search_handle))
-                    .child(grid(tiles, selection, || {}, open))
+                    .child(grid(
+                        tiles,
+                        selection,
+                        {
+                            let on_new = on_new.clone();
+                            move || on_new()
+                        },
+                        open,
+                    ))
                     .into_element(),
             }
         })))
