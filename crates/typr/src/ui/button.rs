@@ -199,9 +199,6 @@ pub fn Tile(props: TileProps, cx: Scope<TileEvent>) -> impl IntoElement {
         .child(props.children)
 }
 
-/// Presses take this long to settle back, from the motion tokens.
-pub const PRESS_MS: f32 = motion::FAST;
-
 /// A button for work in flight: while `busy`, it is disabled and its label says so.
 ///
 /// The label reads "Working…" in place of `idle`, so the button keeps its size and the user sees

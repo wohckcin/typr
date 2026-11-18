@@ -450,6 +450,44 @@ fn a_due_session_opens_from_the_library_and_grades_back_to_the_store() -> Result
 }
 
 #[test]
+fn a_slow_grade_is_recorded_on_the_diagnostics_screen() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("slow-grade");
+    let path = root.join("typr.sqlite3");
+    {
+        let db = typr_core::store::Db::open(&path).unwrap();
+        let card = db.snapshot().unwrap().cards.first().expect("the card").id;
+        db.apply(
+            &typr_core::store::Command::Grade {
+                card,
+                key: "fwd".to_owned(),
+                grade: typr_core::store::Grade::Remembered,
+                duration_ms: None,
+            },
+            86_400_000,
+        )
+        .expect("a review that schedules the card");
+    }
+    // Every review now takes well over the slow-command threshold, so the grade is slow.
+    typr_core::store::Db::open(&path)
+        .unwrap()
+        .slow_down_reviews()
+        .unwrap();
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("role:button[gato]")?;
+    app.press_key("s")?;
+    app.wait_for("role:button[Show answer]")?;
+    app.press("role:button[Show answer]")?;
+    app.press("role:button[Remembered]")?;
+    app.wait_for("text:/Session complete · 1 reviewed/")?;
+    app.press("Back to the library")?;
+    app.press("Diagnostics")?;
+    app.wait_for("text:/Grade · \\d+ ms/")?;
+    Ok(())
+}
+
+#[test]
 fn the_librarys_keys_do_nothing_while_a_card_is_open() -> Result<(), String> {
     let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
     let root = library_on_disk("guarded");

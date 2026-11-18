@@ -1602,6 +1602,18 @@ impl Db {
             .query_row("SELECT COUNT(*) FROM review_log", [], |row| row.get(0))?)
     }
 
+    /// For tests of the slow-command record: makes every later review take far longer than the
+    /// app's slow-command threshold, by a trigger that does busywork on each `review_log` insert.
+    pub fn slow_down_reviews(&self) -> Result<(), StoreError> {
+        self.conn.execute_batch(
+            "CREATE TRIGGER IF NOT EXISTS slow_review AFTER INSERT ON review_log BEGIN
+                 SELECT count(*) FROM (WITH RECURSIVE c(x) AS
+                     (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 5000000) SELECT x FROM c);
+             END;",
+        )?;
+        Ok(())
+    }
+
     /// How many real reviews a card has had: learning cycles are not reviews.
     pub fn review_count(&self, card: Id) -> Result<u32, StoreError> {
         let count: i64 = self.conn.query_row(

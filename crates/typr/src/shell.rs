@@ -12,7 +12,7 @@ use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Command as Key, Surface, bindings_of};
 use typr_core::session::{Entry, Session};
-use typr_core::store::{Command, Db, Grade, Id, Outcome, Snapshot};
+use typr_core::store::{Command, Db, Grade, Id, Outcome, Snapshot, StoreError};
 
 use crate::screens::diagnostics::{SlowCommand, diagnostics};
 use crate::screens::editor::{self, Cover, Diagram, Template, TemplateField};
@@ -280,68 +280,55 @@ pub fn shell_over(
         })
     };
 
-    // One writer for the store: a command, then the snapshot a view reads. Draft writes go through
-    // `quiet_apply`, which skips the re-publish because they come once a keystroke and must not
-    // rebuild the editor.
-    let apply = {
+    // One writer for the store: it times a command, records a slow one, flags a stoppage when the
+    // store refuses it, and re-reads the snapshot a view reads when `republish` is set. Draft writes
+    // skip the re-publish because they come once a keystroke and must not rebuild the editor.
+    // `None` means no library is open to write to.
+    let write = {
         let db = db.clone();
+        Rc::new(
+            move |command: Command, republish: bool| -> Option<Result<Outcome, StoreError>> {
+                let db = db.as_ref()?;
+                let started = std::time::Instant::now();
+                let result = db.apply(&command, SystemClock.now_ms());
+                match &result {
+                    Ok(_) => {
+                        let millis =
+                            u32::try_from(started.elapsed().as_millis()).unwrap_or(u32::MAX);
+                        if millis >= SLOW_COMMAND_MS {
+                            slow.update(|list| {
+                                list.push(SlowCommand {
+                                    name: command.name().into(),
+                                    millis,
+                                })
+                            });
+                        }
+                        if republish && let Ok(next) = db.snapshot() {
+                            snapshot_signal.set(next);
+                        }
+                    }
+                    Err(error) => {
+                        stopped.set(true);
+                        log::error!(
+                            "store refused a command: {}",
+                            crate::logging::describe(error)
+                        );
+                    }
+                }
+                Some(result)
+            },
+        )
+    };
+    let apply = {
+        let write = write.clone();
         Rc::new(move |command: Command| {
-            let Some(db) = db.as_ref() else {
-                return;
-            };
-            let started = std::time::Instant::now();
-            match db.apply(&command, SystemClock.now_ms()) {
-                Ok(_) => {
-                    let millis = u32::try_from(started.elapsed().as_millis()).unwrap_or(u32::MAX);
-                    if millis >= SLOW_COMMAND_MS {
-                        slow.update(|list| {
-                            list.push(SlowCommand {
-                                name: command.name().into(),
-                                millis,
-                            })
-                        });
-                    }
-                    if let Ok(next) = db.snapshot() {
-                        snapshot_signal.set(next);
-                    }
-                }
-                Err(error) => {
-                    stopped.set(true);
-                    log::error!(
-                        "store refused a command: {}",
-                        crate::logging::describe(&error)
-                    );
-                }
-            }
+            write(command, true);
         })
     };
     let quiet_apply = {
-        let db = db.clone();
+        let write = write.clone();
         Rc::new(move |command: Command| {
-            let Some(db) = db.as_ref() else {
-                return;
-            };
-            let started = std::time::Instant::now();
-            match db.apply(&command, SystemClock.now_ms()) {
-                Ok(_) => {
-                    let millis = u32::try_from(started.elapsed().as_millis()).unwrap_or(u32::MAX);
-                    if millis >= SLOW_COMMAND_MS {
-                        slow.update(|list| {
-                            list.push(SlowCommand {
-                                name: command.name().into(),
-                                millis,
-                            })
-                        });
-                    }
-                }
-                Err(error) => {
-                    stopped.set(true);
-                    log::error!(
-                        "store refused a command: {}",
-                        crate::logging::describe(&error)
-                    );
-                }
-            }
+            write(command, false);
         })
     };
 
@@ -557,6 +544,17 @@ pub fn shell_over(
     // The empty deck's button runs what the new-card chord runs: the one closure, so a press and
     // `c` cannot come to different cards.
     let on_new = new_card.clone();
+    // The library screen, drawn by its own branch and by the editor's missing-card fallback.
+    let library_view = move || {
+        let on_new = on_new.clone();
+        view()
+            .flex_1()
+            .p_4()
+            .gap_3()
+            .child(field_reachable("Search cards", query, &search_handle))
+            .child(grid(tiles, selection, move || on_new(), open))
+            .into_element()
+    };
 
     // The system title bar is hidden (nsh.json): the shell starts below the window buttons, and a
     // strip over that space moves the window.
@@ -581,33 +579,20 @@ pub fn shell_over(
             match screen.get() {
                 // A running session takes the whole work area until it is left.
                 Screen::Study(session) => {
-                    let grade_db = db.clone();
-                    let grade_stopped = stopped;
+                    let grade_write = write.clone();
                     let reopen = reopen.clone();
                     study(
                         session,
                         move |card: Id, key: String, grade: Grade| {
-                            let Some(db) = grade_db.as_ref() else {
-                                return Err(crate::screens::study::GradeRefused);
+                            let command = Command::Grade {
+                                card,
+                                key,
+                                grade,
+                                duration_ms: None,
                             };
-                            match db.apply(
-                                &Command::Grade {
-                                    card,
-                                    key,
-                                    grade,
-                                    duration_ms: None,
-                                },
-                                SystemClock.now_ms(),
-                            ) {
-                                Ok(_) => Ok(()),
-                                Err(error) => {
-                                    grade_stopped.set(true);
-                                    log::error!(
-                                        "grade refused: {}",
-                                        crate::logging::describe(&error)
-                                    );
-                                    Err(crate::screens::study::GradeRefused)
-                                }
+                            match grade_write(command, false) {
+                                Some(Ok(_)) => Ok(()),
+                                _ => Err(crate::screens::study::GradeRefused),
                             }
                         },
                         move || {
@@ -639,21 +624,7 @@ pub fn shell_over(
                     let Some(card) = found else {
                         // The card went away under the editor. The effect above moves the screen
                         // back; until that runs, show the library rather than nothing.
-                        return view()
-                            .flex_1()
-                            .p_4()
-                            .gap_2()
-                            .child(field_reachable("Search cards", query, &search_handle))
-                            .child(grid(
-                                tiles,
-                                selection,
-                                {
-                                    let on_new = on_new.clone();
-                                    move || on_new()
-                                },
-                                open,
-                            ))
-                            .into_element();
+                        return library_view();
                     };
                     let template = card.template.as_ref().map(|text| Template {
                         text: text.clone(),
@@ -769,21 +740,7 @@ pub fn shell_over(
                         .into_element()
                 }
                 // The grid: the sidebar's row in force picks the cards, and a tile opens one.
-                Screen::Library => view()
-                    .flex_1()
-                    .p_4()
-                    .gap_3()
-                    .child(field_reachable("Search cards", query, &search_handle))
-                    .child(grid(
-                        tiles,
-                        selection,
-                        {
-                            let on_new = on_new.clone();
-                            move || on_new()
-                        },
-                        open,
-                    ))
-                    .into_element(),
+                Screen::Library => library_view(),
             }
         })))
         // The command list, drawn over whatever screen is open. Both open on their chord, run a

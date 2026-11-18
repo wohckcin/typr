@@ -141,13 +141,13 @@ impl Sidebar {
 
     /// The deck rows as a tree: every deck in the library, nested under its parent. A deck's due
     /// count rides in its label, because the base element gives a row no trailing slot.
-    pub fn deck_tree(&self) -> crate::ui::tree::Items {
+    pub fn deck_tree(&self) -> Vec<nsh_base::TreeItem> {
         fn nest(items: &[Item], parent: Option<&SharedString>, into: &mut Vec<nsh_base::TreeItem>) {
             for item in items {
                 if item.group != Group::Decks || item.parent.as_ref() != parent {
                     continue;
                 }
-                let mut node = crate::ui::tree::item(
+                let mut node = nsh_base::TreeItem::new(
                     item.key.clone(),
                     crate::ui::tree::label_with_due(&item.label, item.due),
                 );

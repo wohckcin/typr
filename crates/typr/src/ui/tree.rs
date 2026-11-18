@@ -60,14 +60,6 @@ pub fn Tree(props: TreeProps, cx: Scope<TreeEvent>) -> impl IntoElement {
         .flex_1()
 }
 
-/// The rows of a tree: each item with its children already nested.
-pub type Items = Vec<TreeItem>;
-
-/// One item, with its children already nested.
-pub fn item(id: impl Into<SharedString>, label: impl Into<SharedString>) -> TreeItem {
-    TreeItem::new(id, label)
-}
-
 /// A row's label: the deck's name, and its due count when it has one. The base element gives a row
 /// no trailing slot, so the count rides in the label (design Decision 3).
 pub fn label_with_due(name: &str, due: usize) -> SharedString {

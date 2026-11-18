@@ -24,11 +24,6 @@ pub fn Surface(props: SurfaceProps) -> impl IntoElement {
         .child(props.children)
 }
 
-/// A hairline between rows or sections: one device pixel, drawn once by its owner.
-pub fn separator() -> impl IntoElement {
-    view().h(px(1.0)).w_full().bg(tokens::border)
-}
-
 /// A placeholder's props.
 #[derive(Clone, PartialEq, Props)]
 pub struct PlaceholderProps {

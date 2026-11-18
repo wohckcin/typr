@@ -15,16 +15,7 @@ pub struct BadgeProps {
 /// A short state or count, in the muted colours.
 #[component]
 pub fn Badge(props: BadgeProps) -> impl IntoElement {
-    view()
-        .px_2()
-        .rounded(tokens::radius)
-        .border_1()
-        .border_color(tokens::border)
-        .child(
-            text(props.label)
-                .text_xs()
-                .text_color(tokens::muted_foreground),
-        )
+    chip(props.label)
 }
 
 /// An empty state's props.
@@ -54,31 +45,18 @@ pub struct KeycapProps {
     pub chord: Prop<SharedString>,
 }
 
-/// A key's name, drawn as a small keycap.
+/// A key's name, drawn as a small keycap: the badge's look on a chord.
 #[component]
 pub fn Keycap(props: KeycapProps) -> impl IntoElement {
+    chip(props.chord)
+}
+
+/// The small bordered label a badge and a keycap both draw.
+fn chip(label: Prop<SharedString>) -> impl IntoElement {
     view()
         .px_2()
         .rounded(tokens::radius)
         .border_1()
         .border_color(tokens::border)
-        .child(
-            text(props.chord)
-                .text_xs()
-                .text_color(tokens::muted_foreground),
-        )
-}
-
-/// A pulsing placeholder of a known shape while content loads.
-pub fn skeleton() -> impl IntoElement {
-    view()
-        .h(px(16.0))
-        .w(px(160.0))
-        .rounded(tokens::radius)
-        .bg(tokens::hover)
-}
-
-/// Reserved for an indeterminate wait: a control that is working, not a decoration.
-pub fn spinner_label(label: &'static str) -> impl IntoElement {
-    text(label).text_sm().text_color(tokens::muted_foreground)
+        .child(text(label).text_xs().text_color(tokens::muted_foreground))
 }

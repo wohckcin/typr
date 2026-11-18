@@ -1,6 +1,6 @@
 //! The app's single-line text field: one border, one focus ring, the same padding as its label.
 
-use nsh_base::input;
+use nsh_base::{Input, input};
 use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
@@ -33,23 +33,13 @@ pub enum FieldEvent {
 #[component]
 pub fn Field(props: FieldProps, cx: Scope<FieldEvent>) -> impl IntoElement {
     let sized = props.size.get_untracked();
-    let control = input()
-        .value(move || props.value.get().to_string())
-        .on_change(move |text: &str| cx.emit(FieldEvent::Change(text.to_owned())))
-        .placeholder(move || props.placeholder.get().to_string())
-        .text_color(move || color(tokens::foreground()))
-        .placeholder_color(move || color(tokens::muted_foreground()))
-        .caret_color(move || color(tokens::foreground()))
-        .selection_color(move || color(tokens::selection()))
-        .min_h(sized.min_height())
-        .px(sized.pad_x())
-        .py(sized.pad_y())
-        .text_sm()
-        .rounded(sized.radius())
-        .border_1()
-        .border_color(tokens::border)
-        .focus(|style| style.border_color(tokens::ring))
-        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring));
+    let control = styled(
+        input()
+            .value(move || props.value.get().to_string())
+            .on_change(move |text: &str| cx.emit(FieldEvent::Change(text.to_owned())))
+            .placeholder(move || props.placeholder.get().to_string()),
+        sized,
+    );
     view()
         .gap_1()
         .child(dynamic(move || match props.label.get() {
@@ -68,70 +58,28 @@ pub fn field_reachable(
     value: Signal<String>,
     handle: &ElementRef,
 ) -> impl IntoElement {
-    input()
-        .value(move || value.get())
-        .on_change(move |text: &str| value.set(text.to_owned()))
-        .placeholder(placeholder)
-        .element_ref(handle)
+    styled(
+        input()
+            .value(move || value.get())
+            .on_change(move |text: &str| value.set(text.to_owned()))
+            .placeholder(placeholder)
+            .element_ref(handle),
+        Size::Md,
+    )
+}
+
+/// The look every text field shares: colours, size, one border and the focus ring.
+fn styled(control: Input, size: Size) -> Input {
+    control
         .text_color(move || color(tokens::foreground()))
         .placeholder_color(move || color(tokens::muted_foreground()))
         .caret_color(move || color(tokens::foreground()))
         .selection_color(move || color(tokens::selection()))
-        .min_h(Size::Md.min_height())
-        .px(Size::Md.pad_x())
-        .py(Size::Md.pad_y())
+        .min_h(size.min_height())
+        .px(size.pad_x())
+        .py(size.pad_y())
         .text_sm()
-        .rounded(Size::Md.radius())
-        .border_1()
-        .border_color(tokens::border)
-        .focus(|s| s.border_color(tokens::ring))
-        .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
-}
-
-/// A committing field's props.
-#[derive(Clone, PartialEq, Props)]
-pub struct SubmitFieldProps {
-    /// The words shown while it is empty.
-    pub placeholder: Prop<SharedString>,
-    /// The text in it.
-    #[prop(default)]
-    pub value: Prop<SharedString>,
-    /// The words naming it, drawn above the field.
-    #[prop(default)]
-    pub label: Prop<Option<SharedString>>,
-    /// How large it is: height, padding, text and radius together.
-    #[prop(default)]
-    pub size: Prop<Size>,
-}
-
-/// What a committing field reports.
-#[derive(Event)]
-pub enum SubmitFieldEvent {
-    /// The whole text, after an edit.
-    Change(String),
-    /// The text, when Return was pressed in it.
-    Submit(String),
-}
-
-/// A text field that reports Return as its own event, for a field that commits a command (the
-/// palette) rather than editing a value that saves elsewhere.
-#[component]
-pub fn SubmitField(props: SubmitFieldProps, cx: Scope<SubmitFieldEvent>) -> impl IntoElement {
-    input()
-        .value(move || props.value.get().to_string())
-        .on_change(move |text: &str| cx.emit(SubmitFieldEvent::Change(text.to_owned())))
-        .submit_behavior(SubmitBehavior::Submit)
-        .on_submit(move |text: &str| cx.emit(SubmitFieldEvent::Submit(text.to_owned())))
-        .placeholder(move || props.placeholder.get().to_string())
-        .text_color(move || color(tokens::foreground()))
-        .placeholder_color(move || color(tokens::muted_foreground()))
-        .caret_color(move || color(tokens::foreground()))
-        .selection_color(move || color(tokens::selection()))
-        .min_h(props.size.get_untracked().min_height())
-        .px(props.size.get_untracked().pad_x())
-        .py(props.size.get_untracked().pad_y())
-        .text_sm()
-        .rounded(props.size.get_untracked().radius())
+        .rounded(size.radius())
         .border_1()
         .border_color(tokens::border)
         .focus(|style| style.border_color(tokens::ring))
