@@ -18,7 +18,7 @@ fn fixture() -> Vec<Item> {
     verbs.parent = Some("spanish".into());
     let biology = item("biology", "Biology", Group::Decks);
     vec![
-        item("all", "All cards", Group::Navigation),
+        item("inbox", "Inbox", Group::Navigation),
         spanish,
         verbs,
         biology,
@@ -54,8 +54,8 @@ fn groups_draw_in_order_and_an_empty_group_is_absent() -> Result<(), String> {
     app.wait_for("Decks")?;
     let texts: Vec<String> = app.screen().texts().iter().map(|t| t.to_string()).collect();
     let at = |label: &str| texts.iter().position(|t| t == label).unwrap_or(usize::MAX);
-    assert!(at("Navigation") < at("Decks"), "{texts:?}");
-    assert!(at("Decks") < at("Utilities"), "{texts:?}");
+    assert!(at("Inbox") < at("Decks"), "{texts:?}");
+    assert!(at("Decks") < at("Settings"), "{texts:?}");
     assert!(!app.screen().shows("Tags"), "{texts:?}");
     Ok(())
 }
@@ -167,7 +167,7 @@ fn the_groups_follow_the_search_row() -> Result<(), String> {
     app.wait_for("Library closed")?;
     let texts: Vec<String> = app.screen().texts().iter().map(|t| t.to_string()).collect();
     let at = |label: &str| texts.iter().position(|t| t == label).unwrap_or(usize::MAX);
-    let between = &texts[at("Search") + 1..at("Navigation")];
+    let between = &texts[at("Search") + 1..at("Inbox")];
     assert!(
         !between.iter().any(|t| t.starts_with("Library")),
         "the state sits between the search row and the groups: {texts:?}"
@@ -197,7 +197,154 @@ fn an_open_library_has_a_success_dot_and_a_closed_one_a_different_dot() -> Resul
     let mut closed = start();
     closed.wait_for("Library closed")?;
     let (open_dot, closed_dot) = (dot_colour(&open), dot_colour(&closed));
-    assert!(open_dot.is_some() && closed_dot.is_some(), "a dot with no fill");
-    assert_ne!(open_dot, closed_dot, "the dot is the same colour open and closed");
+    assert!(
+        open_dot.is_some() && closed_dot.is_some(),
+        "a dot with no fill"
+    );
+    assert_ne!(
+        open_dot, closed_dot,
+        "the dot is the same colour open and closed"
+    );
+    Ok(())
+}
+
+// ---- the reference layout, driven from a real snapshot ----
+
+use typr_core::library_view::ViewMode;
+use typr_core::store::{CardSummary, Deck, Snapshot};
+
+const NOW: i64 = 1_000_000;
+
+fn deck(id: i64, name: &str) -> Deck {
+    Deck {
+        id,
+        parent: None,
+        name: name.to_owned(),
+        archived: false,
+        reverse: None,
+        template: None,
+        view: ViewMode::default(),
+    }
+}
+
+fn snapshot_with(cards: Vec<CardSummary>) -> Snapshot {
+    Snapshot {
+        decks: vec![deck(1, "Flashcards"), deck(2, "Notes")],
+        cards,
+        ..Snapshot::default()
+    }
+}
+
+fn labels(items: &[Item]) -> Vec<String> {
+    items.iter().map(|item| item.label.to_string()).collect()
+}
+
+#[test]
+fn a_new_library_reads_as_the_reference_layout() {
+    let snapshot = snapshot_with(Vec::new());
+    let due = typr::screens::sidebar::due_counts(&snapshot, NOW);
+    let items = typr::screens::sidebar::items_from(&snapshot, &due, NOW);
+    assert_eq!(
+        labels(&items),
+        [
+            "Dashboard",
+            "Inbox",
+            "Due today",
+            "New cards",
+            "Flashcards",
+            "Notes",
+            "Import",
+            "Settings",
+            "Trash"
+        ]
+    );
+    assert!(
+        items.iter().all(|item| item.icon.is_some()),
+        "every row has a glyph"
+    );
+    assert!(items[0].disabled, "the dashboard is not available yet");
+}
+
+#[test]
+fn the_inbox_rows_count_their_cards() {
+    let card = |id, due_at, unscheduled| CardSummary {
+        id,
+        deck: 1,
+        prompts: 1,
+        unscheduled,
+        due_at,
+        ..CardSummary::default()
+    };
+    // Two due, three new, none both.
+    let snapshot = snapshot_with(vec![
+        card(1, Some(NOW - 1), 0),
+        card(2, Some(NOW - 1), 0),
+        card(3, None, 1),
+        card(4, None, 1),
+        card(5, None, 1),
+    ]);
+    let due = typr::screens::sidebar::due_counts(&snapshot, NOW);
+    let items = typr::screens::sidebar::items_from(&snapshot, &due, NOW);
+    let count = |label: &str| items.iter().find(|i| i.label == label).unwrap().due;
+    assert_eq!(
+        (count("Inbox"), count("Due today"), count("New cards")),
+        (5, 2, 3)
+    );
+
+    let quiet =
+        typr::screens::sidebar::items_from(&snapshot_with(Vec::new()), &Default::default(), NOW);
+    assert!(
+        quiet
+            .iter()
+            .filter(|i| i.group == Group::Navigation)
+            .all(|i| i.due == 0)
+    );
+}
+
+#[component]
+fn Layout() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let snapshot = snapshot_with(vec![CardSummary {
+        id: 1,
+        deck: 1,
+        prompts: 1,
+        unscheduled: 1,
+        ..CardSummary::default()
+    }]);
+    let due = typr::screens::sidebar::due_counts(&snapshot, NOW);
+    let items = typr::screens::sidebar::items_from(&snapshot, &due, NOW);
+    let state = Sidebar::new(items, true, typr::screens::sidebar::search_chord());
+    view()
+        .flex_row()
+        .child(sidebar(state, move |key: &SharedString| {
+            if key.as_ref() != "search" && !key.starts_with("new-deck:") {
+                state.select(key);
+            }
+        }))
+        .child(text(move || format!("selected={}", state.selected_text())))
+}
+
+fn open_layout() -> Headless {
+    Headless::start(EngineConfig::new(Root::of::<Layout>())).unwrap()
+}
+
+#[test]
+fn the_inbox_is_selected_first_and_folding_it_hides_its_halves_but_not_its_count()
+-> Result<(), String> {
+    let mut app = open_layout();
+    app.wait_for("selected=inbox")?;
+    app.wait_for("Due today")?;
+    app.press("Inbox 1")?;
+    app.wait_for_gone("Due today", std::time::Duration::from_secs(2))?;
+    assert!(app.screen().shows("Inbox 1"));
+    Ok(())
+}
+
+#[test]
+fn pressing_the_dashboard_changes_nothing() -> Result<(), String> {
+    let mut app = open_layout();
+    app.wait_for("Dashboard (coming soon)")?;
+    let _ = app.press("Dashboard (coming soon)");
+    app.wait_for("selected=inbox")?;
     Ok(())
 }

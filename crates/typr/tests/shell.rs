@@ -92,7 +92,7 @@ fn an_empty_library_says_it_is_closed() -> Result<(), String> {
 }
 
 #[test]
-fn a_tag_shows_under_tags_with_its_name_only() -> Result<(), String> {
+fn a_tag_draws_no_sidebar_row() -> Result<(), String> {
     #[component]
     fn Tagged() -> impl IntoElement {
         typr::ui::tokens::install();
@@ -107,8 +107,10 @@ fn a_tag_shows_under_tags_with_its_name_only() -> Result<(), String> {
         typr::shell::shell(snapshot, true)
     }
     let mut app = Headless::start(EngineConfig::new(Root::of::<Tagged>())).unwrap();
-    app.wait_for("Tags")?;
-    app.wait_for("verbs")?;
+    app.wait_for("Inbox")?;
+    for gone in ["Tags", "verbs", "All cards", "Diagnostics"] {
+        assert!(!app.screen().shows(gone), "{gone} is not a sidebar row");
+    }
     Ok(())
 }
 
@@ -203,6 +205,9 @@ fn a_drag_on_a_diagram_card_writes_its_rectangle_to_the_library() -> Result<(), 
     let root = diagram_on_disk("mask");
     unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    // A diagram with no rectangle has no prompt, so the Inbox does not hold it: open its deck.
+    app.wait_for("Biology")?;
+    app.press("Biology")?;
     app.wait_for("the cell")?;
     app.press("role:button[the cell]")?;
     app.wait_for("diagram")?;
@@ -236,6 +241,9 @@ fn clearing_a_diagram_turns_the_card_into_text_in_the_library() -> Result<(), St
     let root = diagram_on_disk("clear");
     unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    // A diagram with no rectangle has no prompt, so the Inbox does not hold it: open its deck.
+    app.wait_for("Biology")?;
+    app.press("Biology")?;
     app.wait_for("the cell")?;
     app.press("role:button[the cell]")?;
     app.press("role:button[Clear the diagram…]")?;
@@ -316,7 +324,14 @@ fn the_diagnostics_row_opens_the_screen_with_both_transfer_entry_points() -> Res
     unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
     app.wait_for("Settings")?;
-    app.press("Diagnostics")?;
+    app.press("Settings")?;
+    // The last settings row sits below the fold of the default window.
+    app.set_viewport(Size {
+        width: px(1000.0),
+        height: px(1600.0),
+    })?;
+    app.wait_for("role:button[Open diagnostics]")?;
+    app.press("role:button[Open diagnostics]")?;
     app.wait_for("Slow commands")?;
     app.wait_for("No slow commands recorded")?;
     app.wait_for("Import")?;
@@ -482,7 +497,14 @@ fn a_slow_grade_is_recorded_on_the_diagnostics_screen() -> Result<(), String> {
     app.press("role:button[Remembered]")?;
     app.wait_for("text:/Session complete · 1 reviewed/")?;
     app.press("Back to the library")?;
-    app.press("Diagnostics")?;
+    app.press("Settings")?;
+    // The last settings row sits below the fold of the default window.
+    app.set_viewport(Size {
+        width: px(1000.0),
+        height: px(1600.0),
+    })?;
+    app.wait_for("role:button[Open diagnostics]")?;
+    app.press("role:button[Open diagnostics]")?;
     app.wait_for("text:/Grade · \\d+ ms/")?;
     Ok(())
 }
@@ -684,5 +706,102 @@ fn an_empty_deck_offers_a_new_card_that_opens_its_editor() -> Result<(), String>
     // The card is in the library, not only on the screen: the button writes through the store.
     let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
     assert_eq!(reader.snapshot().unwrap().cards.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn the_library_opens_on_the_inbox_and_escape_returns_to_it() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    // The only card is a diagram with no rectangle: it has no prompt, so the Inbox does not hold it
+    // and its deck does.
+    let root = diagram_on_disk("inbox-default");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("Biology")?;
+    assert!(
+        !app.screen().shows("the cell"),
+        "the Inbox opened, not the whole library"
+    );
+    app.press("Biology")?;
+    app.wait_for("the cell")?;
+    app.press("Settings")?;
+    app.wait_for("Show review counts")?;
+    app.press_key("escape")?;
+    app.wait_for_gone("Show review counts", std::time::Duration::from_secs(5))?;
+    assert!(
+        !app.screen().shows("the cell"),
+        "Escape went back to the Inbox"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_search_row_shows_the_library_from_another_screen() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("Settings")?;
+    app.press("Settings")?;
+    app.wait_for("Show review counts")?;
+    app.press("Search")?;
+    app.wait_for_gone("Show review counts", std::time::Duration::from_secs(5))?;
+    Ok(())
+}
+
+#[test]
+fn the_trash_row_lists_a_trashed_card_and_restore_brings_it_back() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("trash");
+    {
+        let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+        let card = db.snapshot().unwrap().cards[0].id;
+        db.apply(&typr_core::store::Command::TrashCard { id: card }, 1)
+            .unwrap();
+    }
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("Trash")?;
+    assert!(
+        !app.screen().shows("gato"),
+        "a trashed card is not in the Inbox"
+    );
+    app.press("Trash")?;
+    app.wait_for("gato")?;
+    app.press("role:button[Restore]")?;
+    app.wait_for("The trash is empty")?;
+    app.press_key("escape")?;
+    app.wait_for("role:button[gato]")?;
+    Ok(())
+}
+
+#[test]
+fn a_named_deck_is_created_and_selected() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("new-deck");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("New Deck")?;
+    app.press("New Deck")?;
+    app.type_text("text:Deck name", " Maths ")?;
+    app.press_key("enter")?;
+    app.wait_for("role:treeitem[Maths]")?;
+    let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let decks = reader.snapshot().unwrap().decks;
+    assert!(
+        decks
+            .iter()
+            .any(|d| d.name == "Maths" && d.parent.is_none()),
+        "{decks:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn escape_cancels_naming_a_deck() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("New Deck")?;
+    app.press("New Deck")?;
+    app.type_text("text:Deck name", "Spa")?;
+    app.press_key("escape")?;
+    app.wait_for("New Deck")?;
+    assert!(!app.screen().shows("Spa"));
     Ok(())
 }

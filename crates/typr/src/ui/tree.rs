@@ -6,7 +6,10 @@ use nsh_base::{SelectValue, TreeEntry, TreeItem};
 use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
-use super::tokens;
+use super::{
+    icon::{Icon, icon},
+    tokens,
+};
 
 /// A tree's props.
 #[derive(Clone, PartialEq, Props)]
@@ -22,6 +25,12 @@ pub struct TreeProps {
     /// What a screen reader announces the tree as.
     #[prop(default)]
     pub accessibility_label: Prop<SharedString>,
+    /// The ids of the rows that lead with a glyph, parallel to `glyphs`.
+    #[prop(default)]
+    pub icon_ids: Prop<Vec<SharedString>>,
+    /// The glyph of each id in `icon_ids`.
+    #[prop(default)]
+    pub glyphs: Prop<Vec<Icon>>,
 }
 
 /// What a tree reports.
@@ -47,11 +56,23 @@ pub fn Tree(props: TreeProps, cx: Scope<TreeEvent>) -> impl IntoElement {
         .accessibility_label(move || Some(props.accessibility_label.get()))
         .render_item(move |entry: &TreeEntry| {
             let indent = px(12.0 * entry.depth as f32);
-            view().flex_row().items_center().gap_1().pl(indent).child(
-                text(entry.label.clone())
-                    .text_sm()
-                    .text_color(tokens::foreground),
-            )
+            let glyph = props
+                .icon_ids
+                .get_untracked()
+                .iter()
+                .position(|id| *id == entry.id)
+                .and_then(|at| props.glyphs.get_untracked().get(at).copied());
+            // A disabled row reads dimmed in words as well as colour: the label carries "(soon)".
+            let tone = if entry.disabled {
+                tokens::muted_foreground
+            } else {
+                tokens::foreground
+            };
+            let mut row = view().flex_row().items_center().gap_2().pl(indent);
+            if let Some(glyph) = glyph {
+                row = row.child(view().text_color(tone).child(icon(glyph)));
+            }
+            row.child(text(entry.label.clone()).text_sm().text_color(tone))
         })
         .on_selected_change(move |id: &SharedString| cx.emit(TreeEvent::Selected(id.clone())))
         .on_expanded_change(move |ids: &Vec<SharedString>| {

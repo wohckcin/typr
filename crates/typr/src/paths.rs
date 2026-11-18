@@ -44,12 +44,14 @@ pub fn open_from_environment() -> Result<Db, StoreError> {
     // would refuse. A new library gets the deck that action needs; a library that has decks is
     // left alone, archived ones included.
     if db.snapshot()?.decks.is_empty() {
-        let first = Command::CreateDeck {
-            parent: None,
-            name: "Default".to_owned(),
-        };
-        db.apply(&first, SystemClock.now_ms())?;
-        log::info!("library was empty, so it starts with the deck {first:?} made");
+        for name in ["Flashcards", "Notes"] {
+            let first = Command::CreateDeck {
+                parent: None,
+                name: name.to_owned(),
+            };
+            db.apply(&first, SystemClock.now_ms())?;
+            log::info!("library was empty, so it starts with the deck {first:?} made");
+        }
     }
     // What a report needs to tell a migrated library from a refused or unopened one.
     let facts = db.schema_facts();

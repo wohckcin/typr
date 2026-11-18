@@ -85,3 +85,18 @@ fn styled(control: Input, size: Size) -> Input {
         .focus(|style| style.border_color(tokens::ring))
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
 }
+
+/// A field that takes the caret when it appears and reports the text on Enter: for naming a thing
+/// where it will sit. Nothing is reported while typing.
+pub fn name_field(
+    placeholder: &'static str,
+    on_submit: impl Fn(String) + 'static,
+) -> impl IntoElement {
+    styled(
+        input()
+            .placeholder(placeholder)
+            .auto_focus(true)
+            .on_submit(move |text: &str| on_submit(text.to_owned())),
+        Size::Sm,
+    )
+}

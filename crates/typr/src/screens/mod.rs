@@ -10,6 +10,7 @@ pub mod library;
 pub mod settings;
 pub mod sidebar;
 pub mod study;
+pub mod trash;
 
 /// Every screen module this crate ports, by file name. The appearance check compares its own list
 /// with this one, so a screen added here without a light/dark check fails by name.
@@ -24,4 +25,5 @@ pub const NAMES: &[&str] = &[
     "settings",
     "sidebar",
     "study",
+    "trash",
 ];

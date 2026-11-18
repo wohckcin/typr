@@ -6,7 +6,10 @@ use nsh_base::{SelectItem, select, tab, tabs};
 use nsh_core::element::Prop;
 use nsh_core::prelude::*;
 
-use super::{motion, tokens};
+use super::{
+    icon::{Icon, icon},
+    motion, tokens,
+};
 
 /// A tab row's props.
 #[derive(Clone, PartialEq, Props)]
@@ -96,6 +99,18 @@ pub struct ListRowProps {
     /// Whether it is the row in force.
     #[prop(default)]
     pub selected: Prop<bool>,
+    /// The glyph before the words; it decorates the title and is not announced.
+    #[prop(default)]
+    pub icon: Prop<Option<Icon>>,
+    /// Words at the trailing edge, such as a chord.
+    #[prop(default)]
+    pub trailing: Prop<Option<SharedString>>,
+    /// No presses; the row reads dimmed.
+    #[prop(default)]
+    pub disabled: Prop<bool>,
+    /// Drawn as a bordered field rather than a bare row.
+    #[prop(default)]
+    pub outlined: Prop<bool>,
 }
 
 /// What a row reports.
@@ -114,10 +129,25 @@ pub enum ListRowEvent {
 pub fn ListRow(props: ListRowProps, cx: Scope<ListRowEvent>) -> impl IntoElement {
     // A row is a control like any other: it says what it is, answers hover and press, and shows the
     // keyboard's ring while the focus is on it.
-    base_button()
-        .on_press(move || cx.emit(ListRowEvent::Press))
+    let outlined = props.outlined.get_untracked();
+    let tone = move || {
+        if props.disabled.get() {
+            tokens::muted_foreground()
+        } else {
+            tokens::foreground()
+        }
+    };
+    let mut row = base_button();
+    if outlined {
+        row = row.border_1().border_color(tokens::border);
+    }
+    row.on_press(move || cx.emit(ListRowEvent::Press))
+        .disabled(move || props.disabled.get())
         .selected(move || props.selected.get())
         .w_full()
+        .flex_row()
+        .items_center()
+        .gap_2()
         .px_2()
         .py_1()
         .rounded(tokens::radius)
@@ -129,5 +159,17 @@ pub fn ListRow(props: ListRowProps, cx: Scope<ListRowEvent>) -> impl IntoElement
         .hover(|style| style.bg(move || tokens::hover().opacity(0.6)))
         .active(|style| style.bg(move || tokens::hover().opacity(0.9)))
         .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
-        .child(text(props.title).text_sm().text_color(tokens::foreground))
+        .child(dynamic(move || match props.icon.get() {
+            Some(glyph) => view().text_color(tone).child(icon(glyph)).into_element(),
+            None => view().into_element(),
+        }))
+        .child(text(props.title).text_sm().text_color(tone))
+        .child(view().flex_1())
+        .child(dynamic(move || match props.trailing.get() {
+            Some(words) => text(words)
+                .text_xs()
+                .text_color(tokens::muted_foreground)
+                .into_element(),
+            None => view().into_element(),
+        }))
 }

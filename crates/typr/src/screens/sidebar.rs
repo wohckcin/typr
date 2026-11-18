@@ -1,8 +1,8 @@
-//! The sidebar column: navigation, decks, views, tags and utilities, drawn as one list of rows.
+//! The sidebar column: navigation, decks and utilities, drawn as one list of rows.
 //!
 //! The data comes in as [`Item`]s and is replaced whole on a refresh; what the user did to the
-//! column (the row in force, which decks are folded away) lives in [`Sidebar`], so a refresh keeps
-//! it.
+//! column (the row in force, which rows are folded away, a deck being named) lives in [`Sidebar`], so a
+//! refresh keeps it.
 
 use std::collections::{HashMap, HashSet};
 
@@ -10,42 +10,35 @@ use nsh_core::prelude::*;
 use typr_core::keymap::{Command, Surface, chord_of};
 use typr_core::store::{Id, Snapshot};
 
-use crate::ui::{choice::list_row, size, status::badge, tokens};
+use crate::ui::{choice::list_row, icon::Icon, input::name_field, size, status::badge, tokens};
+use typr_core::inbox::{Inbox, inbox_cards};
+
+/// The key a press on the search row reports.
+pub const SEARCH_KEY: &str = "search";
+/// The prefix of the key reported when a new deck's name is entered: `new-deck:<name>`.
+pub const NEW_DECK_PREFIX: &str = "new-deck:";
 
 /// The groups of rows, drawn in this order. A group with no visible row draws nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Group {
-    /// The way out of a deck: the whole library.
+    /// The way in: the dashboard and the inbox of cards that are waiting.
     #[default]
     Navigation,
     /// The decks, each with the prompts due in its subtree.
     Decks,
-    /// The saved views.
-    Views,
-    /// The tags the library holds.
-    Tags,
     /// Import, settings and the trash.
     Utilities,
 }
 
 impl Group {
     /// Every group, in drawing order.
-    pub const ALL: [Group; 5] = [
-        Group::Navigation,
-        Group::Decks,
-        Group::Views,
-        Group::Tags,
-        Group::Utilities,
-    ];
+    pub const ALL: [Group; 3] = [Group::Navigation, Group::Decks, Group::Utilities];
 
-    /// The heading the group draws above its rows.
+    /// The heading the group draws above its rows; empty for a group that has none.
     pub fn label(self) -> &'static str {
         match self {
-            Group::Navigation => "Navigation",
+            Group::Navigation | Group::Utilities => "",
             Group::Decks => "Decks",
-            Group::Views => "Views",
-            Group::Tags => "Tags",
-            Group::Utilities => "Utilities",
         }
     }
 }
@@ -62,10 +55,14 @@ pub struct Item {
     pub group: Group,
     /// The row this one is nested under, if any.
     pub parent: Option<SharedString>,
-    /// The prompts due in this row's subtree at the last refresh; zero draws no count.
+    /// The count this row states at the last refresh; zero draws no count.
     pub due: usize,
     /// Whether any row is nested under this one, so it offers a fold control.
     pub has_children: bool,
+    /// The glyph before the label.
+    pub icon: Option<Icon>,
+    /// Whether the row is shown but cannot be used yet.
+    pub disabled: bool,
 }
 
 impl Item {
@@ -78,7 +75,14 @@ impl Item {
             parent: None,
             due: 0,
             has_children: false,
+            icon: None,
+            disabled: false,
         }
+    }
+
+    fn with_icon(mut self, icon: Icon) -> Item {
+        self.icon = Some(icon);
+        self
     }
 }
 
@@ -91,6 +95,7 @@ pub struct Sidebar {
     library_open: Signal<bool>,
     notice: Signal<Option<SharedString>>,
     search_chord: Signal<SharedString>,
+    naming: Signal<bool>,
 }
 
 impl Sidebar {
@@ -100,9 +105,13 @@ impl Sidebar {
         library_open: bool,
         search_chord: impl Into<SharedString>,
     ) -> Self {
-        // The whole library is in force until another row is chosen, so the grid and the sidebar
-        // agree about what is shown.
-        let first = items.first().map(|item| item.key.clone());
+        // The Inbox is in force until another row is chosen, so the grid and the sidebar agree about
+        // what is shown; a column with no Inbox starts on its first row.
+        let first = items
+            .iter()
+            .find(|item| item.key == "inbox")
+            .or_else(|| items.first())
+            .map(|item| item.key.clone());
         Self {
             items: signal(items),
             selected: signal(first),
@@ -110,6 +119,7 @@ impl Sidebar {
             library_open: signal(library_open),
             notice: signal(None),
             search_chord: signal(search_chord.into()),
+            naming: signal(false),
         }
     }
 
@@ -128,6 +138,25 @@ impl Sidebar {
         self.selected.set(Some(key.clone()));
     }
 
+    /// Turns the `New Deck` row into a name field.
+    pub fn start_naming(&self) {
+        if self.library_open.get_untracked() {
+            self.naming.set(true);
+        }
+    }
+
+    /// Puts the `New Deck` row back.
+    pub fn stop_naming(&self) {
+        if self.naming.get_untracked() {
+            self.naming.set(false);
+        }
+    }
+
+    /// Whether a deck is being named.
+    pub fn is_naming(&self) -> bool {
+        self.naming.get()
+    }
+
     /// Folds `key`'s subtree away, or opens it again.
     pub fn toggle_collapsed(&self, key: &SharedString) {
         self.collapsed
@@ -139,20 +168,28 @@ impl Sidebar {
             });
     }
 
-    /// The deck rows as a tree: every deck in the library, nested under its parent. A deck's due
-    /// count rides in its label, because the base element gives a row no trailing slot.
-    pub fn deck_tree(&self) -> Vec<nsh_base::TreeItem> {
-        fn nest(items: &[Item], parent: Option<&SharedString>, into: &mut Vec<nsh_base::TreeItem>) {
+    /// The rows of `group` as a tree, each nested under its parent. A count rides in its label,
+    /// because the base element gives a row no trailing slot, and a disabled row says so in words.
+    pub fn tree_items(&self, group: Group) -> Vec<nsh_base::TreeItem> {
+        fn nest(
+            items: &[Item],
+            group: Group,
+            parent: Option<&SharedString>,
+            into: &mut Vec<nsh_base::TreeItem>,
+        ) {
             for item in items {
-                if item.group != Group::Decks || item.parent.as_ref() != parent {
+                if item.group != group || item.parent.as_ref() != parent {
                     continue;
                 }
-                let mut node = nsh_base::TreeItem::new(
-                    item.key.clone(),
-                    crate::ui::tree::label_with_due(&item.label, item.due),
-                );
+                let words = if item.disabled {
+                    SharedString::from(format!("{} (coming soon)", item.label))
+                } else {
+                    crate::ui::tree::label_with_due(&item.label, item.due)
+                };
+                let mut node =
+                    nsh_base::TreeItem::new(item.key.clone(), words).disabled(item.disabled);
                 let mut children = Vec::new();
-                nest(items, Some(&item.key), &mut children);
+                nest(items, group, Some(&item.key), &mut children);
                 if !children.is_empty() {
                     node = node.children(children);
                 }
@@ -160,33 +197,52 @@ impl Sidebar {
             }
         }
         let mut top = Vec::new();
-        self.items.with(|items| nest(items, None, &mut top));
+        self.items.with(|items| nest(items, group, None, &mut top));
         top
     }
 
-    /// The deck ids the tree shows open: every deck that has children, less the ones folded.
-    pub fn expanded_decks(&self) -> Vec<SharedString> {
+    /// The ids of `group`'s rows that lead with a glyph, and the glyphs, in step.
+    pub fn glyphs(&self, group: Group) -> (Vec<SharedString>, Vec<Icon>) {
         self.items.with(|items| {
             items
                 .iter()
-                .filter(|item| item.group == Group::Decks && item.has_children)
+                .filter(|item| item.group == group)
+                .filter_map(|item| item.icon.map(|glyph| (item.key.clone(), glyph)))
+                .unzip()
+        })
+    }
+
+    fn folders(&self, group: Group) -> Vec<SharedString> {
+        self.items.with(|items| {
+            items
+                .iter()
+                .filter(|item| item.group == group && item.has_children)
                 .map(|item| item.key.clone())
-                .filter(|key| !self.is_collapsed(key))
                 .collect()
         })
     }
 
-    /// Folds every deck with children that `expanded` does not name.
-    pub fn set_expanded_decks(&self, expanded: &[SharedString]) {
-        let folded: Vec<SharedString> = self.items.with(|items| {
-            items
-                .iter()
-                .filter(|item| item.group == Group::Decks && item.has_children)
-                .map(|item| item.key.clone())
-                .filter(|key| !expanded.contains(key))
-                .collect()
+    /// The ids `group`'s tree shows open: every row that has children, less the ones folded.
+    pub fn expanded(&self, group: Group) -> Vec<SharedString> {
+        self.folders(group)
+            .into_iter()
+            .filter(|key| !self.is_collapsed(key))
+            .collect()
+    }
+
+    /// Folds every row of `group` with children that `expanded` does not name. Another group's folds
+    /// stay as they are.
+    pub fn set_expanded(&self, group: Group, expanded: &[SharedString]) {
+        let folders = self.folders(group);
+        self.collapsed.update(|folded| {
+            folded.retain(|key| !folders.contains(key));
+            folded.extend(
+                folders
+                    .iter()
+                    .filter(|key| !expanded.contains(key))
+                    .cloned(),
+            );
         });
-        self.collapsed.set(folded);
     }
 
     /// The key of the row in force, if any.
@@ -231,8 +287,9 @@ impl Sidebar {
     }
 }
 
-/// The column: the search chord, the library's state, then each group with rows. `pick` hears every
-/// press, so the caller owns what a row opens.
+/// The column: the search row, each group with rows, then the library's state. `pick` hears every
+/// press, so the caller owns what a row opens; the search row reports [`SEARCH_KEY`] and a named
+/// deck reports `new-deck:<name>`.
 pub fn sidebar(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -> impl IntoElement {
     let column = view()
         .w(tokens::sidebar_width())
@@ -240,12 +297,38 @@ pub fn sidebar(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
         .gap_3()
         .border_r_1()
         .border_color(tokens::border)
-        .child(search_row(state));
+        .child(search_row(state, pick.clone()));
     // One dynamic for every group: one owner for the rows, so a row's controls are not rebuilt
     // under a nested owner that the next render disposes. It takes the height the footer leaves.
     column
         .child(view().flex_1().child(groups_view(state, pick)))
         .child(state_row(state))
+}
+
+/// A tree of `group`'s rows: the base element folds them, moves the selection with the arrow keys
+/// and tells a screen reader how deep each row sits.
+fn group_tree(
+    state: Sidebar,
+    group: Group,
+    pick: impl Fn(&SharedString) + Clone + 'static,
+) -> impl IntoElement {
+    let chosen = state;
+    crate::ui::tree::tree()
+        .items(move || state.tree_items(group))
+        .expanded(move || state.expanded(group))
+        .selected(move || state.selected_key())
+        .icon_ids(move || state.glyphs(group).0)
+        .glyphs(move || state.glyphs(group).1)
+        .accessibility_label(if group == Group::Decks {
+            "Decks"
+        } else {
+            "Navigation"
+        })
+        .on_selected(move |id: &SharedString| {
+            chosen.select(id);
+            pick(id);
+        })
+        .on_expanded(move |ids: &Vec<SharedString>| state.set_expanded(group, ids))
 }
 
 /// Every group with its rows.
@@ -261,31 +344,27 @@ fn groups_view(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
             if rows.is_empty() {
                 continue;
             }
-            let mut section = view().gap_1().child(
-                text(group.label())
-                    .text_xs()
-                    .text_color(tokens::muted_foreground),
-            );
-            if group == Group::Decks {
-                // The decks are a tree: the base element folds them, moves the selection with the
-                // arrow keys and tells a screen reader how deep each row sits.
-                let pick = pick.clone();
-                let chosen = state;
+            let mut section = view().gap_1();
+            if !group.label().is_empty() {
                 section = section.child(
-                    crate::ui::tree::tree()
-                        .items(move || state.deck_tree())
-                        .expanded(move || state.expanded_decks())
-                        .selected(move || state.selected_key())
-                        .accessibility_label("Decks")
-                        .on_selected(move |id: &SharedString| {
-                            chosen.select(id);
-                            pick(id);
-                        })
-                        .on_expanded(move |ids: &Vec<SharedString>| state.set_expanded_decks(ids)),
+                    text(group.label())
+                        .text_xs()
+                        .text_color(tokens::muted_foreground),
                 );
-            } else {
-                for item in rows {
-                    section = section.child(row_view(state, item, pick.clone()));
+            }
+            match group {
+                Group::Navigation => {
+                    section = section.child(group_tree(state, group, pick.clone()))
+                }
+                Group::Decks => {
+                    section = section
+                        .child(group_tree(state, group, pick.clone()))
+                        .child(new_deck_row(state, pick.clone()));
+                }
+                Group::Utilities => {
+                    for item in rows {
+                        section = section.child(row_view(state, item, pick.clone()));
+                    }
                 }
             }
             groups = groups.child(section);
@@ -294,15 +373,48 @@ fn groups_view(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
     })
 }
 
-fn search_row(state: Sidebar) -> impl IntoElement {
-    view()
-        .flex_row()
-        .items_center()
-        .justify_between()
-        .child(text("Search").text_sm().text_color(tokens::foreground))
-        .child(dynamic(move || {
-            badge().label(state.search_chord.get()).into_element()
-        }))
+/// The search field: a mark, the word, and the chord that focuses it. Pressing it reports
+/// [`SEARCH_KEY`] without taking the selection.
+fn search_row(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -> impl IntoElement {
+    list_row()
+        .title("Search")
+        .icon(Icon::Search)
+        .outlined(true)
+        .selected(|| false)
+        .disabled(|| false)
+        .trailing(move || {
+            let chord = state.search_chord.get();
+            (!chord.is_empty()).then_some(chord)
+        })
+        .on_press(move || pick(&SharedString::from(SEARCH_KEY)))
+}
+
+/// `New Deck`, or the field that names it. Enter with a name reports `new-deck:<name>`; a blank
+/// name puts the row back.
+///
+/// Not a `dynamic` of its own: it is read inside the groups' one, so toggling the field rebuilds the
+/// rows under that owner instead of a nested one the next render disposes.
+fn new_deck_row(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -> AnyElement {
+    if state.is_naming() {
+        name_field("Deck name", move |name: String| {
+            state.stop_naming();
+            let name = name.trim();
+            if !name.is_empty() {
+                pick(&SharedString::from(format!("{NEW_DECK_PREFIX}{name}")));
+            }
+        })
+        .into_element()
+    } else {
+        list_row()
+            .title("New Deck")
+            .icon(Icon::Plus)
+            .selected(|| false)
+            .outlined(false)
+            .trailing(|| None::<SharedString>)
+            .disabled(move || !state.library_open.get())
+            .on_press(move || state.start_naming())
+            .into_element()
+    }
 }
 
 /// The foot of the column: whether the library is open, as a dot and the words. The dot is a second
@@ -350,6 +462,8 @@ fn library_state(state: Sidebar) -> impl IntoElement {
     })
 }
 
+/// A utility row: a glyph and a label, one press target. Settings and Trash are screens and take the
+/// selection; the caller decides what any other row does with the press.
 fn row_view(
     state: Sidebar,
     item: Item,
@@ -362,11 +476,12 @@ fn row_view(
         view().flex_1().child(
             list_row()
                 .title(item.label.clone())
+                .icon(item.icon)
+                .outlined(false)
+                .trailing(|| None::<SharedString>)
+                .disabled(item.disabled)
                 .selected(move || state.selected.with(|s| s.as_ref() == Some(&in_force)))
-                .on_press(move || {
-                    state.select(&press);
-                    pick(&press);
-                }),
+                .on_press(move || pick(&press)),
         ),
     );
     if item.due > 0 {
@@ -375,10 +490,11 @@ fn row_view(
     row
 }
 
-/// The rows the column shows for a library: the whole library, every live deck with its due count
-/// (`due` comes from [`typr_core`]'s subtree counts, so a parent counts its children), the saved
-/// views, and Settings.
-pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
+/// The rows the column shows for a library at `now_ms`: the dashboard (not yet available), the Inbox
+/// with the cards that are due or new and its two halves, every live deck with its due count (`due`
+/// comes from [`typr_core`]'s subtree counts, so a parent counts its children), and Import, Settings
+/// and Trash.
+pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>, now_ms: i64) -> Vec<Item> {
     let live: Vec<_> = snapshot
         .decks
         .iter()
@@ -390,75 +506,44 @@ pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>) -> Vec<Item> {
         .filter_map(|deck| deck.parent)
         .filter(|p| live_ids.contains(p))
         .collect();
-    let mut items = vec![Item {
-        key: "all".into(),
-        label: "All cards".into(),
-        group: Group::Navigation,
-        parent: None,
-        due: 0,
-        has_children: false,
-    }];
+    let count = |which| inbox_cards(snapshot, now_ms, which).len();
+    let nested = |key: &str, label: &str, glyph, which| {
+        let mut item =
+            Item::new(key.to_owned(), label.to_owned(), Group::Navigation).with_icon(glyph);
+        item.parent = Some("inbox".into());
+        item.due = count(which);
+        item
+    };
+    let mut dashboard =
+        Item::new("dashboard", "Dashboard", Group::Navigation).with_icon(Icon::Trend);
+    dashboard.disabled = true;
+    let mut inbox = Item::new("inbox", "Inbox", Group::Navigation).with_icon(Icon::Inbox);
+    inbox.due = count(Inbox::All);
+    inbox.has_children = true;
+    let mut items = vec![
+        dashboard,
+        inbox,
+        nested("inbox:due", "Due today", Icon::CircleCheck, Inbox::Due),
+        nested("inbox:new", "New cards", Icon::CircleDashed, Inbox::New),
+    ];
     for deck in &live {
-        items.push(Item {
-            key: format!("deck:{}", deck.id).into(),
-            label: deck.name.clone().into(),
-            group: Group::Decks,
-            parent: deck
-                .parent
-                .filter(|p| live_ids.contains(p))
-                .map(|p| format!("deck:{p}").into()),
-            due: due.get(&deck.id).copied().unwrap_or(0) as usize,
-            has_children: parents.contains(&deck.id),
-        });
-    }
-    // Tags: every tag path, nested under its parent path. A tag's count is not a due count, so it
-    // draws none.
-    fn tags(branches: &[typr_core::store::TagBranch], parent: Option<&str>, out: &mut Vec<Item>) {
-        for branch in branches {
-            out.push(Item {
-                key: format!("tag:{}", branch.path).into(),
-                label: branch
-                    .path
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(&branch.path)
-                    .to_owned()
-                    .into(),
-                group: Group::Tags,
-                parent: parent.map(|p| format!("tag:{p}").into()),
-                due: 0,
-                has_children: !branch.children.is_empty(),
+        let mut item = Item::new(format!("deck:{}", deck.id), deck.name.clone(), Group::Decks)
+            .with_icon(if deck.name == "Notes" {
+                Icon::Archive
+            } else {
+                Icon::Book
             });
-            tags(&branch.children, Some(&branch.path), out);
-        }
+        item.parent = deck
+            .parent
+            .filter(|p| live_ids.contains(p))
+            .map(|p| format!("deck:{p}").into());
+        item.due = due.get(&deck.id).copied().unwrap_or(0) as usize;
+        item.has_children = parents.contains(&deck.id);
+        items.push(item);
     }
-    tags(&snapshot.tag_tree(), None, &mut items);
-    for view in &snapshot.views {
-        items.push(Item {
-            key: format!("view:{}", view.id).into(),
-            label: view.name.clone().into(),
-            group: Group::Views,
-            parent: None,
-            due: 0,
-            has_children: false,
-        });
-    }
-    items.push(Item {
-        key: "settings".into(),
-        label: "Settings".into(),
-        group: Group::Utilities,
-        parent: None,
-        due: 0,
-        has_children: false,
-    });
-    items.push(Item {
-        key: "diagnostics".into(),
-        label: "Diagnostics".into(),
-        group: Group::Utilities,
-        parent: None,
-        due: 0,
-        has_children: false,
-    });
+    items.push(Item::new("import", "Import", Group::Utilities).with_icon(Icon::Download));
+    items.push(Item::new("settings", "Settings", Group::Utilities).with_icon(Icon::Gear));
+    items.push(Item::new("trash", "Trash", Group::Utilities).with_icon(Icon::Trash));
     items
 }
 

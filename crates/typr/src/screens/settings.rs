@@ -149,7 +149,11 @@ fn header(values: Values) -> impl IntoElement {
             view()
                 .flex_row()
                 .gap_2()
-                .child(text("Settings").text_sm().text_color(tokens::muted_foreground))
+                .child(
+                    text("Settings")
+                        .text_sm()
+                        .text_color(tokens::muted_foreground),
+                )
                 .child(text("/").text_sm().text_color(tokens::muted_foreground))
                 .child(text("General").text_sm().text_color(tokens::foreground)),
         )
@@ -213,11 +217,7 @@ fn path_control(label: &'static str, path: PathBuf) -> impl IntoElement {
         .items_center()
         .justify_end()
         .gap_2()
-        .child(
-            text(shown)
-                .text_sm()
-                .text_color(tokens::muted_foreground),
-        )
+        .child(text(shown).text_sm().text_color(tokens::muted_foreground))
         .child(
             button()
                 .variant(Variant::Ghost)
@@ -244,7 +244,9 @@ pub fn settings(
     on_change: impl Fn(u32) + Clone + 'static,
     on_import: impl Fn() + 'static,
     on_export: impl Fn() + 'static,
+    on_diagnostics: impl Fn() + 'static,
 ) -> impl IntoElement {
+    let diagnostics = Rc::new(on_diagnostics);
     let cap_changed = on_change.clone();
     let accept = move || {
         values.accept_cap();
@@ -323,6 +325,18 @@ pub fn settings(
                 .label("Export")
                 .disabled(|| false)
                 .on_press(move || export())
+                .into_element()
+        }),
+    ));
+    list.push((
+        "Diagnostics",
+        Rc::new(move || {
+            let diagnostics = diagnostics.clone();
+            button()
+                .variant(Variant::Ghost)
+                .label("Open diagnostics")
+                .disabled(|| false)
+                .on_press(move || diagnostics())
                 .into_element()
         }),
     ));

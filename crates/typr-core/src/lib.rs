@@ -4,6 +4,7 @@ pub mod clock;
 pub mod day;
 pub mod fsrs;
 pub mod hidden;
+pub mod inbox;
 pub mod keymap;
 pub mod library_view;
 pub mod markdown_ext;

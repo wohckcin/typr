@@ -13,6 +13,9 @@ fn card(id: i64, preview: &str, position: i64) -> CardSummary {
         preview: preview.into(),
         markdown: preview.into(),
         sides: 1,
+        // A new prompt, so the Inbox the app opens on holds the card.
+        prompts: 1,
+        unscheduled: 1,
         position,
         ..CardSummary::default()
     }
@@ -89,7 +92,7 @@ fn a_missing_data_folder_is_a_message_not_a_panic() -> Result<(), String> {
 static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
-fn a_library_that_does_not_exist_starts_with_a_deck() -> Result<(), String> {
+fn a_library_that_does_not_exist_starts_with_flashcards_and_notes() -> Result<(), String> {
     let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
     let root = std::env::temp_dir().join(format!("typr-startup-seed-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
@@ -97,14 +100,41 @@ fn a_library_that_does_not_exist_starts_with_a_deck() -> Result<(), String> {
     // The folder is absent on the first open and empty on the second: both are the same library.
     let db = typr::paths::open_from_environment().map_err(|error| format!("{error:?}"))?;
     let snapshot = db.snapshot().map_err(|error| format!("{error:?}"))?;
-    assert_eq!(snapshot.decks.len(), 1, "a new library needs a deck");
-    assert_eq!(snapshot.decks[0].name, "Default");
+    let names: Vec<_> = snapshot.decks.iter().map(|d| d.name.as_str()).collect();
+    assert_eq!(names, ["Flashcards", "Notes"]);
+    assert!(snapshot.decks.iter().all(|d| d.parent.is_none()));
     let again = typr::paths::open_from_environment().map_err(|error| format!("{error:?}"))?;
     let reopened = again.snapshot().map_err(|error| format!("{error:?}"))?;
     assert_eq!(
         reopened.decks.len(),
-        1,
+        2,
         "the seed happens once, not on every open"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_library_that_has_decks_gains_no_starter_decks() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = std::env::temp_dir().join(format!("typr-startup-keep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let db = typr::paths::open_from_environment().map_err(|e| format!("{e:?}"))?;
+    // Archived decks still count as decks, so archiving both must not bring the seed back.
+    for deck in db.snapshot().map_err(|e| format!("{e:?}"))?.decks {
+        let archive = typr_core::store::Command::ArchiveDeck {
+            id: deck.id,
+            archived: true,
+        };
+        db.apply(&archive, 0).map_err(|e| format!("{e:?}"))?;
+    }
+    drop(db);
+    let again = typr::paths::open_from_environment().map_err(|e| format!("{e:?}"))?;
+    let decks = again.snapshot().map_err(|e| format!("{e:?}"))?.decks;
+    assert_eq!(
+        decks.len(),
+        2,
+        "nothing is added to a library that has decks"
     );
     Ok(())
 }

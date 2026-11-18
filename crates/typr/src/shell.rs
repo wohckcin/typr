@@ -21,7 +21,9 @@ use crate::screens::editor::{self, Cover, Diagram, Template, TemplateField};
 use crate::screens::grid::grid;
 use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
-use crate::screens::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
+use crate::screens::sidebar::{
+    NEW_DECK_PREFIX, SEARCH_KEY, Sidebar, due_counts, items_from, search_chord, sidebar,
+};
 use crate::screens::study::{entries_for, study};
 use crate::ui::{
     input::field_reachable,
@@ -81,6 +83,8 @@ enum Screen {
     Settings,
     /// What the store and the slow commands have done since launch.
     Diagnostics,
+    /// The cards that were deleted and can still be restored.
+    Trash,
     /// A session, shared rather than taken, so a rebuild keeps the session it is showing.
     Study(Rc<std::cell::RefCell<Session>>),
 }
@@ -92,7 +96,8 @@ impl PartialEq for Screen {
         match (self, other) {
             (Screen::Library, Screen::Library)
             | (Screen::Settings, Screen::Settings)
-            | (Screen::Diagnostics, Screen::Diagnostics) => true,
+            | (Screen::Diagnostics, Screen::Diagnostics)
+            | (Screen::Trash, Screen::Trash) => true,
             (Screen::Editor(one), Screen::Editor(two)) => one == two,
             (Screen::Study(one), Screen::Study(two)) => Rc::ptr_eq(one, two),
             _ => false,
@@ -100,11 +105,11 @@ impl PartialEq for Screen {
     }
 }
 
-/// The screen a sidebar row opens: the utilities are screens, every other row filters the grid.
+/// The screen a sidebar row opens: Settings and Trash are screens, every other row filters the grid.
 fn screen_for(key: &SharedString) -> Screen {
     match key.as_ref() {
         "settings" => Screen::Settings,
-        "diagnostics" => Screen::Diagnostics,
+        "trash" => Screen::Trash,
         _ => Screen::Library,
     }
 }
@@ -127,12 +132,20 @@ pub fn shell_over(
 ) -> impl IntoElement {
     let snapshot_signal = signal(snapshot);
     let screen = signal(Screen::Library);
-    let due = due_counts(&snapshot_signal.get_untracked(), SystemClock.now_ms());
+    let now = SystemClock.now_ms();
+    let due = due_counts(&snapshot_signal.get_untracked(), now);
     let state = Sidebar::new(
-        items_from(&snapshot_signal.get_untracked(), &due),
+        items_from(&snapshot_signal.get_untracked(), &due, now),
         library_open,
         search_chord(),
     );
+    // The rows state counts, so a write that changes the snapshot (a deck made, a card restored)
+    // changes them too.
+    effect(move || {
+        let snapshot = snapshot_signal.get();
+        let now = SystemClock.now_ms();
+        state.refresh(items_from(&snapshot, &due_counts(&snapshot, now), now));
+    });
     if let Some(notice) = notice {
         state.note(notice);
     }
@@ -161,7 +174,11 @@ pub fn shell_over(
     let visible = {
         Rc::new(move || {
             let snapshot = snapshot_signal.get_untracked();
-            let cards = cards_in(&snapshot, state.selected_key().as_deref());
+            let cards = cards_in(
+                &snapshot,
+                state.selected_key().as_deref(),
+                SystemClock.now_ms(),
+            );
             tiles_for(&cards, &query.get_untracked(), SystemClock.now_ms())
                 .into_iter()
                 .map(|tile| tile.id)
@@ -277,7 +294,11 @@ pub fn shell_over(
     let tiles = {
         computed(move || {
             let snapshot = snapshot_signal.get();
-            let cards = cards_in(&snapshot, state.selected_key().as_deref());
+            let cards = cards_in(
+                &snapshot,
+                state.selected_key().as_deref(),
+                SystemClock.now_ms(),
+            );
             tiles_for(&cards, &query.get(), SystemClock.now_ms())
         })
     };
@@ -402,12 +423,6 @@ pub fn shell_over(
     };
 
     let open = { move |id: Id| screen.set(Screen::Editor(id)) };
-    let pick = {
-        move |key: &SharedString| {
-            state.select(key);
-            screen.set(screen_for(key));
-        }
-    };
 
     // The library's keys act only on the library, so `c` inside the editor makes nothing and `s`
     // inside a session starts nothing.
@@ -560,15 +575,56 @@ pub fn shell_over(
             ..KeyOptions::default()
         },
         move |_| match screen.get() {
+            // Escape cancels a deck being named before it does anything else.
+            Screen::Library if state.is_naming() => state.stop_naming(),
             // Escape narrows the grid here, and the editor and the session bind their own Leave.
-            Screen::Library => state.select(&"all".into()),
-            Screen::Settings | Screen::Diagnostics => {
-                state.select(&"all".into());
+            Screen::Library => state.select(&"inbox".into()),
+            Screen::Settings | Screen::Diagnostics | Screen::Trash => {
+                state.select(&"inbox".into());
                 screen.set(Screen::Library);
             }
             Screen::Editor(_) | Screen::Study(_) => {}
         },
     );
+
+    // What a press on the sidebar does. Import and a named deck are actions, not rows to select; the
+    // search row shows the library and puts the caret in its field; every other row is a selection
+    // that names a screen.
+    let pick = {
+        let write = write.clone();
+        let import = import.clone();
+        let focus_search = focus_search.clone();
+        move |key: &SharedString| {
+            if key.as_ref() == "import" {
+                import();
+            } else if key.as_ref() == SEARCH_KEY {
+                let shown = matches!(screen.get_untracked(), Screen::Library);
+                screen.set(Screen::Library);
+                if shown {
+                    focus_search();
+                } else {
+                    // The field is drawn again by the screen change; focus it once it exists.
+                    let focus_search = focus_search.clone();
+                    spawn(async move { focus_search() });
+                }
+            } else if let Some(name) = key.strip_prefix(NEW_DECK_PREFIX) {
+                let made = write(
+                    Command::CreateDeck {
+                        parent: None,
+                        name: name.to_owned(),
+                    },
+                    true,
+                );
+                if let Some(Ok(Outcome::Deck(id))) = made {
+                    state.select(&format!("deck:{id}").into());
+                    screen.set(Screen::Library);
+                }
+            } else {
+                state.select(key);
+                screen.set(screen_for(key));
+            }
+        }
+    };
 
     // The empty deck's button runs what the new-card chord runs: the one closure, so a press and
     // `c` cannot come to different cards.
@@ -633,16 +689,27 @@ pub fn shell_over(
                     .into_element()
                 }
                 Screen::Settings => {
-                    let back = {
-                        let state = state;
-                        move || {
-                            state.select(&"all".into());
-                            screen.set(Screen::Library);
-                        }
-                    };
                     let mut values = Values::new(cap, true);
                     values.theme = theme;
-                    settings(values, library.clone(), |_| {}, back, || {}).into_element()
+                    settings(
+                        values,
+                        library.clone(),
+                        |_| {},
+                        import.clone(),
+                        export.clone(),
+                        move || screen.set(Screen::Diagnostics),
+                    )
+                    .into_element()
+                }
+                Screen::Trash => {
+                    let restore = apply.clone();
+                    let empty = apply.clone();
+                    crate::screens::trash::trash(
+                        snapshot_signal,
+                        move |id: Id| restore(Command::RestoreCard { id }),
+                        move || empty(Command::EmptyTrash),
+                    )
+                    .into_element()
                 }
                 Screen::Diagnostics => {
                     diagnostics(stopped, slow.get(), results, import.clone(), export.clone())

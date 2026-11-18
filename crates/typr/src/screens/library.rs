@@ -1,12 +1,17 @@
 //! The library's cards: which of them a selection shows, and the tiles the grid draws for them.
 //! The screen itself is composed by `shell`, so there is one drawing of it.
 
+use typr_core::inbox::{Inbox, inbox_cards};
 use typr_core::store::{CardSummary, Snapshot};
 
 use super::grid::{Tile, tile_of};
 
-/// Which cards a selection shows: every live card for `all`, or the cards of one deck `deck:<id>`.
-pub fn cards_in(snapshot: &Snapshot, selection: Option<&str>) -> Vec<CardSummary> {
+/// Which cards a selection shows: the Inbox rows' cards, the cards of one deck `deck:<id>`, or every
+/// live card for any other key.
+pub fn cards_in(snapshot: &Snapshot, selection: Option<&str>, now_ms: i64) -> Vec<CardSummary> {
+    if let Some(which) = selection.and_then(Inbox::of_key) {
+        return inbox_cards(snapshot, now_ms, which);
+    }
     let deck: Option<i64> = selection
         .and_then(|key| key.strip_prefix("deck:"))
         .and_then(|id| id.parse().ok());

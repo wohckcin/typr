@@ -8,6 +8,7 @@
 pub mod button;
 pub mod choice;
 pub mod command;
+pub mod icon;
 pub mod input;
 pub mod motion;
 pub mod overlay;

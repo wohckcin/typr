@@ -25,7 +25,7 @@ fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let values = Values::new(20, true);
     view()
-        .child(settings(values, library(), |_| {}, || {}, || {}))
+        .child(settings(values, library(), |_| {}, || {}, || {}, || {}))
         .child(text(move || format!("cap={}", values.cap.get())))
 }
 
@@ -147,10 +147,22 @@ fn the_theme_control_writes_the_stored_theme() -> Result<(), String> {
 #[test]
 fn a_row_matches_by_a_case_insensitive_part_of_its_label() {
     use typr::screens::settings::row_matches;
-    assert!(row_matches("Show review counts", ""), "an empty query shows every row");
-    assert!(row_matches("Show review counts", "   "), "so does a blank one");
-    assert!(row_matches("Show review counts", "REVIEW"), "case is ignored");
-    assert!(row_matches("Show review counts", "w rev"), "any part of the label");
+    assert!(
+        row_matches("Show review counts", ""),
+        "an empty query shows every row"
+    );
+    assert!(
+        row_matches("Show review counts", "   "),
+        "so does a blank one"
+    );
+    assert!(
+        row_matches("Show review counts", "REVIEW"),
+        "case is ignored"
+    );
+    assert!(
+        row_matches("Show review counts", "w rev"),
+        "any part of the label"
+    );
     assert!(!row_matches("Theme", "counts"));
 }
 

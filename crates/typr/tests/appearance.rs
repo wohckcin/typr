@@ -116,7 +116,7 @@ fn SidebarScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     sidebar(
         Sidebar::new(
-            vec![Item::new("all", "All cards", Group::Navigation)],
+            vec![Item::new("inbox", "Inbox", Group::Navigation)],
             true,
             "search",
         ),
@@ -194,6 +194,7 @@ fn SettingsScreen() -> impl IntoElement {
         |_| {},
         || {},
         || {},
+        || {},
     )
 }
 
@@ -233,7 +234,7 @@ check!(
     appearance_sidebar,
     "sidebar",
     SidebarScreen,
-    "text:All cards",
+    "text:Inbox",
     Token::Foreground
 );
 check!(
@@ -300,6 +301,29 @@ check!(
     Token::Foreground
 );
 
+#[component]
+fn TrashScreen() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let snapshot = typr_core::store::Snapshot {
+        cards: vec![typr_core::store::CardSummary {
+            id: 1,
+            preview: "Front".into(),
+            trashed_at: Some(1),
+            ..typr_core::store::CardSummary::default()
+        }],
+        ..typr_core::store::Snapshot::default()
+    };
+    typr::screens::trash::trash(signal(snapshot), |_| {}, || {})
+}
+
+check!(
+    appearance_trash,
+    "trash",
+    TrashScreen,
+    "text:Front",
+    Token::Foreground
+);
+
 /// The screens checked here are exactly the ones the crate declares: adding a screen without a
 /// light/dark check fails here, by name.
 #[test]
@@ -315,6 +339,7 @@ fn every_screen_has_a_light_and_dark_check() {
         "settings",
         "sidebar",
         "study",
+        "trash",
     ];
     assert_eq!(
         checked,
@@ -347,7 +372,7 @@ fn the_first_frame_is_the_stored_theme() -> Result<(), String> {
     app.first_render()?;
     let drawn = app
         .screen()
-        .span_style("text:All cards")
+        .span_style("text:Inbox")
         .map_err(|e| format!("the first frame has no text to read: {e}"))?
         .color
         .0;
