@@ -164,6 +164,9 @@ fn the_settings_screen_names_its_controls_and_survives_the_keyboard() -> Result<
     let mut app = Headless::start(EngineConfig::new(Root::of::<SettingsScreen>())).unwrap();
     for control in [
         "Apply",
+        "System",
+        "Light",
+        "Dark",
         "Show Database in the file manager",
         "Show Attachments in the file manager",
         "Show Log in the file manager",

@@ -22,26 +22,28 @@ pub const MAX_LEARNING_STEP_MINUTES: u32 = 1_440;
 pub const MIN_MAX_INTERVAL_DAYS: u32 = 1;
 pub const MAX_MAX_INTERVAL_DAYS: u32 = 3_650;
 
-/// The interface scales a reader can choose between.
-pub const MIN_SCALE: f32 = 0.80;
-pub const MAX_SCALE: f32 = 1.50;
-
 /// The body text size the editor and review use, in points.
 pub const MIN_PREVIEW_FONT_SIZE: u32 = 10;
 pub const MAX_PREVIEW_FONT_SIZE: u32 = 28;
 
-/// Whether the app draws dark or light. Stored in the library so a copied library looks the same.
+/// Whether the app draws dark, light, or whichever the desktop is set to. Stored in the library so
+/// a copied library looks the same.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Theme {
-    /// The default: the one every library that has never touched the setting uses.
+    /// The default: follow the desktop, as the app did before the setting was applied.
     #[default]
+    System,
     Dark,
     Light,
 }
 
 impl Theme {
+    /// Every theme, in the order the settings screen offers them.
+    pub const ALL: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
+
     pub fn as_str(self) -> &'static str {
         match self {
+            Theme::System => "system",
             Theme::Dark => "dark",
             Theme::Light => "light",
         }
@@ -49,19 +51,16 @@ impl Theme {
 
     pub fn parse(text: &str) -> Option<Self> {
         match text {
+            "system" => Some(Theme::System),
             "dark" => Some(Theme::Dark),
             "light" => Some(Theme::Light),
             _ => None,
         }
     }
 
-    /// Whether the kit drawn with this theme is the dark one.
-    pub fn is_dark(self) -> bool {
-        self == Theme::Dark
-    }
-
     pub fn label(self) -> &'static str {
         match self {
+            Theme::System => "System",
             Theme::Dark => "Dark",
             Theme::Light => "Light",
         }
@@ -100,12 +99,11 @@ pub enum SettingKey {
     Weights,
     ReverseDefault,
     Theme,
-    Scale,
     PreviewFontSize,
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 10] = [
+    pub const ALL: [SettingKey; 9] = [
         SettingKey::NewPerDay,
         SettingKey::LearningStepMinutes,
         SettingKey::MaxIntervalDays,
@@ -114,7 +112,6 @@ impl SettingKey {
         SettingKey::Weights,
         SettingKey::ReverseDefault,
         SettingKey::Theme,
-        SettingKey::Scale,
         SettingKey::PreviewFontSize,
     ];
 
@@ -128,7 +125,6 @@ impl SettingKey {
             SettingKey::Weights => "fsrs_weights",
             SettingKey::ReverseDefault => "reverse_default",
             SettingKey::Theme => "theme",
-            SettingKey::Scale => "scale",
             SettingKey::PreviewFontSize => "preview_font_size",
         }
     }
@@ -143,7 +139,6 @@ impl SettingKey {
             "fsrs_weights" => Some(SettingKey::Weights),
             "reverse_default" => Some(SettingKey::ReverseDefault),
             "theme" => Some(SettingKey::Theme),
-            "scale" => Some(SettingKey::Scale),
             "preview_font_size" => Some(SettingKey::PreviewFontSize),
             _ => None,
         }
@@ -158,9 +153,7 @@ impl SettingKey {
             | SettingKey::Retention
             | SettingKey::Weights
             | SettingKey::ReverseDefault => Group::Review,
-            SettingKey::Theme | SettingKey::Scale | SettingKey::PreviewFontSize => {
-                Group::Appearance
-            }
+            SettingKey::Theme | SettingKey::PreviewFontSize => Group::Appearance,
         }
     }
 
@@ -174,7 +167,6 @@ impl SettingKey {
             SettingKey::Weights => "FSRS weights",
             SettingKey::ReverseDefault => "Review answers too",
             SettingKey::Theme => "Theme",
-            SettingKey::Scale => "Interface scale",
             SettingKey::PreviewFontSize => "Preview text size",
         }
     }
@@ -202,8 +194,9 @@ impl SettingKey {
             SettingKey::ReverseDefault => {
                 "Whether the library asks a card from its answer side too, unless a deck or card overrides it."
             }
-            SettingKey::Theme => "Dark or light. Both are drawn from the same palette.",
-            SettingKey::Scale => "Scales the whole interface; Reset puts it back at 1.00.",
+            SettingKey::Theme => {
+                "Light, dark, or whichever the desktop is set to. Both are drawn from the same palette."
+            }
             SettingKey::PreviewFontSize => "The size of body text in the editor and the review.",
         }
     }
@@ -223,7 +216,6 @@ impl SettingKey {
             SettingKey::Weights => SettingValue::Weights(fsrs::DEFAULT_WEIGHTS.to_vec()),
             SettingKey::ReverseDefault => SettingValue::Flag(false),
             SettingKey::Theme => SettingValue::Theme(Theme::default()),
-            SettingKey::Scale => SettingValue::Scale(Settings::DEFAULT_SCALE),
             SettingKey::PreviewFontSize => {
                 SettingValue::Number(Settings::DEFAULT_PREVIEW_FONT_SIZE)
             }
@@ -241,7 +233,6 @@ impl SettingKey {
             SettingKey::Weights => SettingValue::Weights(settings.weights.clone()),
             SettingKey::ReverseDefault => SettingValue::Flag(settings.reverse_default),
             SettingKey::Theme => SettingValue::Theme(settings.theme),
-            SettingKey::Scale => SettingValue::Scale(settings.scale),
             SettingKey::PreviewFontSize => SettingValue::Number(settings.preview_font_size),
         }
     }
@@ -273,7 +264,6 @@ impl SettingKey {
                 _ => return Err(refused()),
             },
             SettingKey::Theme => SettingValue::Theme(Theme::parse(text).ok_or_else(refused)?),
-            SettingKey::Scale => SettingValue::Scale(text.parse::<f32>().map_err(|_| refused())?),
         };
         self.validate(&value)?;
         Ok(value)
@@ -300,7 +290,6 @@ impl SettingKey {
             (SettingKey::Weights, SettingValue::Weights(weights)) => fsrs::are_weights(weights),
             (SettingKey::ReverseDefault, SettingValue::Flag(_)) => true,
             (SettingKey::Theme, SettingValue::Theme(_)) => true,
-            (SettingKey::Scale, SettingValue::Scale(scale)) => in_scale(*scale),
             (SettingKey::PreviewFontSize, SettingValue::Number(n)) => {
                 in_range(*n, MIN_PREVIEW_FONT_SIZE, MAX_PREVIEW_FONT_SIZE)
             }
@@ -333,7 +322,6 @@ impl SettingKey {
             (SettingKey::Weights, SettingValue::Weights(weights)) => settings.weights = weights,
             (SettingKey::ReverseDefault, SettingValue::Flag(on)) => settings.reverse_default = on,
             (SettingKey::Theme, SettingValue::Theme(theme)) => settings.theme = theme,
-            (SettingKey::Scale, SettingValue::Scale(scale)) => settings.scale = scale,
             (SettingKey::PreviewFontSize, SettingValue::Number(n)) => {
                 settings.preview_font_size = n
             }
@@ -354,8 +342,6 @@ pub enum SettingValue {
     /// The nineteen FSRS weights, checked before they are written.
     Weights(Vec<f64>),
     Theme(Theme),
-    /// The interface scale, kept as a float so 0.85 survives a round trip.
-    Scale(f32),
 }
 
 impl SettingValue {
@@ -367,7 +353,6 @@ impl SettingValue {
             SettingValue::Scheduler(kind) => kind.as_str().to_string(),
             SettingValue::Weights(weights) => fsrs::weight_text(weights),
             SettingValue::Theme(theme) => theme.as_str().to_string(),
-            SettingValue::Scale(scale) => scale.to_string(),
         }
     }
 
@@ -378,7 +363,6 @@ impl SettingValue {
             SettingValue::Flag(true) => "On".to_string(),
             SettingValue::Flag(false) => "Off".to_string(),
             SettingValue::Theme(theme) => theme.label().to_string(),
-            SettingValue::Scale(scale) => format!("{scale:.2}"),
             SettingValue::Number(n) => n.to_string(),
             SettingValue::Scheduler(kind) => kind.as_str().to_string(),
             SettingValue::Weights(weights) => format!("{} numbers", weights.len()),
@@ -405,8 +389,4 @@ impl Settings {
 
 fn in_range(value: u32, min: u32, max: u32) -> bool {
     (min..=max).contains(&value)
-}
-
-fn in_scale(value: f32) -> bool {
-    value.is_finite() && (MIN_SCALE..=MAX_SCALE).contains(&value)
 }

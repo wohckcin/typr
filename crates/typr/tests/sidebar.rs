@@ -149,3 +149,55 @@ fn the_deck_rows_are_a_tree() -> Result<(), String> {
     assert!(at("Verbs") < at("Biology"), "{texts:?}");
     Ok(())
 }
+
+#[test]
+fn the_state_row_is_below_every_group() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("Library closed")?;
+    let texts: Vec<String> = app.screen().texts().iter().map(|t| t.to_string()).collect();
+    let at = |label: &str| texts.iter().position(|t| t == label).unwrap_or(usize::MAX);
+    assert!(at("Settings") < at("Library closed"), "{texts:?}");
+    assert!(at("Biology") < at("Library closed"), "{texts:?}");
+    Ok(())
+}
+
+#[test]
+fn the_groups_follow_the_search_row() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("Library closed")?;
+    let texts: Vec<String> = app.screen().texts().iter().map(|t| t.to_string()).collect();
+    let at = |label: &str| texts.iter().position(|t| t == label).unwrap_or(usize::MAX);
+    let between = &texts[at("Search") + 1..at("Navigation")];
+    assert!(
+        !between.iter().any(|t| t.starts_with("Library")),
+        "the state sits between the search row and the groups: {texts:?}"
+    );
+    Ok(())
+}
+
+#[component]
+fn OpenProbe() -> impl IntoElement {
+    typr::ui::tokens::install();
+    let state = Sidebar::new(fixture(), true, typr::screens::sidebar::search_chord());
+    sidebar(state, move |key: &SharedString| state.select(key))
+}
+
+fn dot_colour(app: &Headless) -> Option<u32> {
+    app.screen()
+        .view_style("id:library-dot")
+        .expect("one dot")
+        .expect("the dot is drawn")
+        .background_color
+}
+
+#[test]
+fn an_open_library_has_a_success_dot_and_a_closed_one_a_different_dot() -> Result<(), String> {
+    let mut open = Headless::start(EngineConfig::new(Root::of::<OpenProbe>())).unwrap();
+    open.wait_for("Library open")?;
+    let mut closed = start();
+    closed.wait_for("Library closed")?;
+    let (open_dot, closed_dot) = (dot_colour(&open), dot_colour(&closed));
+    assert!(open_dot.is_some() && closed_dot.is_some(), "a dot with no fill");
+    assert_ne!(open_dot, closed_dot, "the dot is the same colour open and closed");
+    Ok(())
+}

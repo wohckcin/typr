@@ -10,7 +10,8 @@ the app renders.
 ### Requirement: A screen exists once
 
 The app SHALL draw each screen from one function, and SHALL NOT draw a second copy of a screen for a state of the
-library — an open and a closed library differ in what a command does, not in which screen is drawn.
+library — an open and a closed library differ in what a command does, not in which screen is drawn. A branch that
+falls back to a screen SHALL draw it with that screen's function.
 
 #### Scenario: The library with a store and without one
 
@@ -23,6 +24,11 @@ library — an open and a closed library differ in what a command does, not in w
 - **WHEN** the library is closed and a store command is run from its key
 - **THEN** the screen says the library is closed
 - **AND** the key that runs it is still bound
+
+#### Scenario: A card gone under the editor
+
+- **WHEN** the card open in the editor leaves the snapshot
+- **THEN** the library shown until the route moves back is drawn by the library screen's function
 
 ### Requirement: A screen the tests render is the screen the app renders
 
@@ -46,3 +52,13 @@ A test that asserts how a screen looks or behaves SHALL render the function the 
 - **WHEN** the library holds cards and the arrow keys are pressed
 - **THEN** the selection moves through the grid's cards
 - **AND** Home and End reach the first and the last
+
+### Requirement: The store has one writer
+
+Every command the shell sends to the store SHALL go through one writer, which times it, records it when slow,
+and flags a stoppage when the store refuses it.
+
+#### Scenario: A slow grade is recorded
+
+- **WHEN** a grade takes longer than the slow-command threshold
+- **THEN** the diagnostics screen lists it, as it lists a slow save

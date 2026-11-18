@@ -76,6 +76,13 @@ pub fn destructive() -> AdaptiveColor {
     theme().destructive
 }
 
+/// Something that is fine: an open library's dot. Never the only cue; a word names the state too.
+///
+/// A misspelled token falls back to the foreground, which shows as a dot that is not green.
+pub fn success() -> AdaptiveColor {
+    theme().color("success").unwrap_or(theme().foreground)
+}
+
 /// The canvas a review is read on: the page dimmed a step, so the card sits above it.
 ///
 /// A misspelled token falls back to the page, which shows as a card with no canvas rather than

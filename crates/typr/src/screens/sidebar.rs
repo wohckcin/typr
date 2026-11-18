@@ -10,7 +10,7 @@ use nsh_core::prelude::*;
 use typr_core::keymap::{Command, Surface, chord_of};
 use typr_core::store::{Id, Snapshot};
 
-use crate::ui::{choice::list_row, status::badge, tokens};
+use crate::ui::{choice::list_row, size, status::badge, tokens};
 
 /// The groups of rows, drawn in this order. A group with no visible row draws nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -240,11 +240,17 @@ pub fn sidebar(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
         .gap_3()
         .border_r_1()
         .border_color(tokens::border)
-        .child(search_row(state))
-        .child(library_state(state));
+        .child(search_row(state));
     // One dynamic for every group: one owner for the rows, so a row's controls are not rebuilt
-    // under a nested owner that the next render disposes.
-    column.child(dynamic(move || {
+    // under a nested owner that the next render disposes. It takes the height the footer leaves.
+    column
+        .child(view().flex_1().child(groups_view(state, pick)))
+        .child(state_row(state))
+}
+
+/// Every group with its rows.
+fn groups_view(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -> impl IntoElement {
+    dynamic(move || {
         let mut groups = view().gap_3();
         for group in Group::ALL {
             let rows: Vec<Item> = state
@@ -285,7 +291,7 @@ pub fn sidebar(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
             groups = groups.child(section);
         }
         groups.into_element()
-    }))
+    })
 }
 
 fn search_row(state: Sidebar) -> impl IntoElement {
@@ -297,6 +303,33 @@ fn search_row(state: Sidebar) -> impl IntoElement {
         .child(dynamic(move || {
             badge().label(state.search_chord.get()).into_element()
         }))
+}
+
+/// The foot of the column: whether the library is open, as a dot and the words. The dot is a second
+/// cue beside the tone; it has no name of its own, so a screen reader hears the state once.
+fn state_row(state: Sidebar) -> impl IntoElement {
+    view()
+        .flex_row()
+        .items_center()
+        .gap_2()
+        .pt_3()
+        .border_t_1()
+        .border_color(tokens::border)
+        .child(
+            view()
+                .test_id("library-dot")
+                .w(size::dot())
+                .h(size::dot())
+                .rounded_full()
+                .bg(move || {
+                    if state.library_open.get() {
+                        tokens::success()
+                    } else {
+                        tokens::destructive()
+                    }
+                }),
+        )
+        .child(library_state(state))
 }
 
 fn library_state(state: Sidebar) -> impl IntoElement {

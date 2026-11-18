@@ -3,8 +3,7 @@
 use super::*;
 use crate::store::settings::{
     MAX_LEARNING_STEP_MINUTES, MAX_MAX_INTERVAL_DAYS, MAX_NEW_PER_DAY, MAX_PREVIEW_FONT_SIZE,
-    MAX_SCALE, MIN_LEARNING_STEP_MINUTES, MIN_MAX_INTERVAL_DAYS, MIN_NEW_PER_DAY,
-    MIN_PREVIEW_FONT_SIZE, MIN_SCALE,
+    MIN_LEARNING_STEP_MINUTES, MIN_MAX_INTERVAL_DAYS, MIN_NEW_PER_DAY, MIN_PREVIEW_FONT_SIZE,
 };
 
 #[test]
@@ -74,23 +73,6 @@ fn a_number_at_either_edge_is_accepted_and_one_past_it_is_refused() {
 }
 
 #[test]
-fn a_scale_at_either_edge_is_accepted_and_one_past_it_is_refused() {
-    for edge in [MIN_SCALE, MAX_SCALE] {
-        SettingKey::Scale
-            .validate(&SettingValue::Scale(edge))
-            .unwrap_or_else(|error| panic!("scale at {edge}: {error}"));
-    }
-    for outside in [MIN_SCALE - 0.01, MAX_SCALE + 0.01, f32::NAN, f32::INFINITY] {
-        assert!(
-            SettingKey::Scale
-                .validate(&SettingValue::Scale(outside))
-                .is_err(),
-            "scale accepts {outside}"
-        );
-    }
-}
-
-#[test]
 fn a_typed_value_is_refused_by_the_key_that_does_not_hold_it() {
     let pairs = [
         (SettingKey::NewPerDay, SettingValue::Flag(true)),
@@ -104,7 +86,6 @@ fn a_typed_value_is_refused_by_the_key_that_does_not_hold_it() {
             SettingValue::Scheduler(SchedulerKind::Fsrs),
         ),
         (SettingKey::Weights, SettingValue::Number(19)),
-        (SettingKey::Scale, SettingValue::Number(1)),
     ];
     for (key, value) in pairs {
         assert!(
@@ -136,10 +117,11 @@ fn every_setting_round_trips() {
             SettingKey::Theme,
             SettingValue::Theme(crate::store::Theme::Light),
         ),
-        (SettingKey::Scale, SettingValue::Scale(1.25)),
         (SettingKey::PreviewFontSize, SettingValue::Number(18)),
     ];
-    for (key, value) in values {
+    // Every theme, not one: `System` is a stored value like the other two.
+    let themes = crate::store::Theme::ALL.map(|theme| (SettingKey::Theme, SettingValue::Theme(theme)));
+    for (key, value) in values.into_iter().chain(themes) {
         db.apply(
             &Command::SetSetting {
                 key,
@@ -230,6 +212,44 @@ fn an_unknown_stored_key_is_left_alone() {
         )
         .expect("the later build's row");
     assert_eq!(kept, "future", "and it is still there for that build");
+}
+
+#[test]
+fn a_library_with_a_stale_scale_row_opens() {
+    // The interface scale was a setting before it was removed; a library written then still holds it.
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    db.connection_for_test()
+        .execute(
+            "INSERT INTO settings (key, value) VALUES ('scale', '1.25')",
+            [],
+        )
+        .expect("a row an older build wrote");
+
+    assert_eq!(
+        db.settings().expect("opens with no refusal"),
+        Settings::default()
+    );
+    let kept: String = db
+        .connection_for_test()
+        .query_row("SELECT value FROM settings WHERE key = 'scale'", [], |row| {
+            row.get(0)
+        })
+        .expect("the old row");
+    assert_eq!(kept, "1.25", "the row is left where it was");
+}
+
+#[test]
+fn a_stored_system_theme_reads_as_system() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    db.connection_for_test()
+        .execute(
+            "INSERT INTO settings (key, value) VALUES ('theme', 'system')",
+            [],
+        )
+        .expect("a theme row");
+    assert_eq!(db.settings().expect("settings").theme, Theme::System);
 }
 
 #[test]

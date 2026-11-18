@@ -40,3 +40,26 @@ fn the_radius_is_the_themes() -> Result<(), String> {
     app.wait_for("text:/ radius=10/")?;
     Ok(())
 }
+
+/// Renders what the success role resolves to, read where the engine has set the tokens.
+#[component]
+fn SuccessProbe() -> impl IntoElement {
+    typr::ui::tokens::install();
+    view().child(text(move || {
+        let theme = nsh_base::theme();
+        let success = typr::ui::tokens::success();
+        format!(
+            "success_set={} success_differs={} success_is_foreground={}",
+            theme.color("success").is_some(),
+            success.light != success.dark,
+            success == theme.foreground,
+        )
+    }))
+}
+
+#[test]
+fn the_success_colour_is_set_and_differs_in_each_appearance() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<SuccessProbe>())).unwrap();
+    app.wait_for("text:/success_set=true success_differs=true success_is_foreground=false/")?;
+    Ok(())
+}

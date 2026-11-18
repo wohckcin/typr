@@ -115,13 +115,11 @@ Both are set in the `settings` table. Every key, its range and its default:
 | `retention` | 70 to 97 | `90` | the recall FSRS aims at; higher means sooner |
 | `fsrs_weights` | nineteen positive numbers | the FSRS-5 defaults | what the optimiser produced |
 | `reverse_default` | `0`, `1` | `0` | whether a new card is reviewed both ways |
-| `theme` | `dark`, `light` | `dark` | the window's appearance |
-| `scale` | 0.80 to 1.50 | `1.0` | interface scale |
+| `theme` | `system`, `light`, `dark` | `system` | the window's appearance; the app follows this, not `nsh.json`'s `appearance`, and `system` follows the desktop |
 | `preview_font_size` | 10 to 28 | `14` | body text size in the editor's preview |
 
 A value is validated before it is written: a number outside its range, a theme or scheduler the
-reader does not know, a scale that is not a positive number, or a weight list that is not nineteen
-positive numbers is refused, the screen says which setting and which value, and the old setting stays.
+reader does not know, or a weight list that is not nineteen positive numbers is refused, the screen says which setting and which value, and the old setting stays.
 A value edited into the file by hand is read through the same validators, so a library with a bad row
 reports the key and text instead of silently replacing it.
 

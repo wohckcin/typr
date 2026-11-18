@@ -12,6 +12,8 @@ pub mod input;
 pub mod motion;
 pub mod overlay;
 pub mod prose;
+pub mod rows;
+pub mod segmented;
 pub mod size;
 pub mod source;
 pub mod status;

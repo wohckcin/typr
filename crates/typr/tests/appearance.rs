@@ -275,8 +275,8 @@ check!(
     appearance_settings,
     "settings",
     SettingsScreen,
-    "text:Review",
-    Token::Muted
+    "text:Theme",
+    Token::Foreground
 );
 check!(
     appearance_keymap,
@@ -321,4 +321,41 @@ fn every_screen_has_a_light_and_dark_check() {
         typr::screens::NAMES,
         "a screen was added without a light/dark check"
     );
+}
+
+#[test]
+fn the_first_frame_is_the_stored_theme() -> Result<(), String> {
+    use typr_core::store::{Command, Db, SettingKey, SettingValue, Theme};
+    let root = std::env::temp_dir().join(format!("typr-first-frame-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    Db::open(&root.join("typr.sqlite3"))
+        .unwrap()
+        .apply(
+            &Command::SetSetting {
+                key: SettingKey::Theme,
+                value: SettingValue::Theme(Theme::Light),
+            },
+            0,
+        )
+        .unwrap();
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    // The desktop is dark; the library says light, and the library wins.
+    let mut config = EngineConfig::new(Root::of::<typr::shell::App>());
+    config.environment.color_scheme = ColorScheme::Dark;
+    let mut app = Headless::start(config).unwrap();
+    app.first_render()?;
+    let drawn = app
+        .screen()
+        .span_style("text:All cards")
+        .map_err(|e| format!("the first frame has no text to read: {e}"))?
+        .color
+        .0;
+    assert_eq!(
+        drawn,
+        expected(ColorScheme::Light, Token::Foreground),
+        "the first frame is not light"
+    );
+    assert_ne!(drawn, expected(ColorScheme::Dark, Token::Foreground));
+    Ok(())
 }

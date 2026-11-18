@@ -250,8 +250,6 @@ pub struct Settings {
     pub weights: Vec<f64>,
     /// Whether the app draws its dark or its light palette.
     pub theme: Theme,
-    /// How much the whole interface is scaled.
-    pub scale: f32,
     /// The body text size in the editor and the review, in points.
     pub preview_font_size: u32,
 }
@@ -298,8 +296,6 @@ impl Settings {
     pub const DEFAULT_MAX_INTERVAL_DAYS: u32 = 365;
     /// The retention FSRS aims at before anyone sets one, as a percentage.
     pub const DEFAULT_RETENTION: u32 = 90;
-    /// The interface scale before anyone sets one.
-    pub const DEFAULT_SCALE: f32 = 1.0;
     /// The body text size before anyone sets one, in points.
     pub const DEFAULT_PREVIEW_FONT_SIZE: u32 = 14;
 }
@@ -315,7 +311,6 @@ impl Default for Settings {
             retention: Self::DEFAULT_RETENTION,
             weights: crate::fsrs::DEFAULT_WEIGHTS.to_vec(),
             theme: Theme::default(),
-            scale: Self::DEFAULT_SCALE,
             preview_font_size: Self::DEFAULT_PREVIEW_FONT_SIZE,
         }
     }

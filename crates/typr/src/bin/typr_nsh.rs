@@ -13,7 +13,7 @@ fn main() -> std::process::ExitCode {
         platform::AppOptions {
             title: "typr".to_owned(),
             app_id: "dev.typr.app".to_owned(),
-            size: (960, 640),
+            size: (960, 1280),
             ..Default::default()
         },
     );

@@ -119,6 +119,34 @@ differ. The library is read through `typr::shell::shell`, the same function the 
 there is one library screen and the pass cannot be aimed at a copy. `tests/tokens.rs` refuses a
 spacing, type, radius or colour literal in a screen.
 
+The app can be reviewed in both appearances from inside it: Settings → Appearance → Theme offers System,
+Light and Dark, stores the choice in the library's `theme` setting, and the window follows that setting
+rather than `nsh.json`'s `appearance`. `the_first_frame_is_the_stored_theme` proves the first frame already
+draws in the stored theme.
+
+### Review on the macOS host, 1920 × 1080 pt, light and dark
+
+Run for `settings-appearance` with `nsh test nsh.json --target macos` and `app.setViewport(1920, 1080)`, on the
+library, the editor, the study session and settings, with `theme=light` and `theme=dark` stored (so the stored
+theme, not the desktop's, drew each). The host's default window is phone-sized; the app's own window is
+960 × 640 (`bin/typr_nsh.rs`).
+
+| Group | Verdict |
+|---|---|
+| Colour and surfaces | passed: tokens only, both appearances balanced, the stored theme wins over the desktop's, a change in Settings repaints the whole window in the same frame |
+| Radius, typography, spacing | passed on the four screens; no mid-word breaks at 1080p |
+| Theme control | fixed: side by side it left the window and broke labels mid-word at 390 pt, so it is stacked |
+| Reduced motion | fixed: the toggle thumb slid regardless; it now jumps. Button and tile press already branched |
+| Alignment, layout | **failed, not fixed (UI rework pending)**: the editor's preview is an unlabelled strip beside a 860 pt source column with ~800 pt empty, and Save and Attach stretch to that column; settings has no content max width, so the cap field and each theme row's selected wash span ~1740 pt; study sits in the top-left of an empty window |
+| Minimum window size | **failed, not fixed**: at 390 pt the editor's columns, the study buttons ("Remembered") and settings' paths and toggle label clip |
+| Hover, pressed, focus rings | not checked in pictures (a still shows none); `desktop.test.tsx` covers hover and press |
+| Sidebar footer (`sidebar-restyle`) | passed at 1920 × 1080 and 390 × 600, light and dark: the state row is the foot of the column under one hairline, the dot is visible on both backgrounds, nothing is pushed out of the short column; the dot is a second cue beside the text and the tone |
+| Settings rows (`settings-rows-layout`) | passed at 1728 × 1080, light and dark, against the reference: breadcrumb and "Find a setting" over one card, one label-and-control row each, labels on one spine and controls on the trailing one, single hairlines drawn by the card, the new-card field flexing across its row, segmented Theme and Off / On. At the app's own 960 × 640 the rows wrap the control under the label and nothing clips except a path wider than the card |
+| Settings, long paths | **known limit, not fixed**: a path longer than the card is clipped at its edge, because it is one unbreakable word and the text API has no break-anywhere property; a real path (`~/Library/Application Support/…/typr.sqlite3`, about 55 characters) fits at 960. Truncating was rejected: it hid the whole path in a narrow window |
+| Settings at 390 pt | **not designed**: the fixed 220 pt sidebar leaves about 170 pt for the card, which no three-segment control fits; the same minimum-window finding as above |
+| 1920 pt capture | the host window is capped at this Mac's 1728 pt width, so a 1920 pt viewport crops the right edge; 1728 × 1080 was used |
+| Accessibility | names and roles of the three theme choices are asserted in `tests/a11y.rs`; a screen reader, announcement order and focus order on the host were not run |
+
 The hover wash and the press scale are the exception that needs a picture, because the headless driver
 keeps no view style and cannot take one. `desktop.test.tsx` hovers a button on the macOS host and asserts
 the screenshot changed, and skips that step where the app opens as a phone. The half-point colours and

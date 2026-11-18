@@ -2,10 +2,12 @@
   "name": "typr",
   "cssVars": {
     "light": {
-      "review-backdrop": "oklch(0.86 0 0)"
+      "review-backdrop": "oklch(0.86 0 0)",
+      "success": "oklch(0.55 0.15 150)"
     },
     "dark": {
-      "review-backdrop": "oklch(0.09 0 0)"
+      "review-backdrop": "oklch(0.09 0 0)",
+      "success": "oklch(0.72 0.17 150)"
     }
   }
 }

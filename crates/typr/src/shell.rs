@@ -12,7 +12,9 @@ use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Command as Key, Surface, bindings_of};
 use typr_core::session::{Entry, Session};
-use typr_core::store::{Command, Db, Grade, Id, Outcome, Snapshot, StoreError};
+use typr_core::store::{
+    Command, Db, Grade, Id, Outcome, SettingKey, SettingValue, Snapshot, StoreError, Theme,
+};
 
 use crate::screens::diagnostics::{SlowCommand, diagnostics};
 use crate::screens::editor::{self, Cover, Diagram, Template, TemplateField};
@@ -332,6 +334,33 @@ pub fn shell_over(
         })
     };
 
+    // The appearance the window follows is the library's `theme`, not `nsh.json`'s. One effect
+    // stores a change and then applies it, so the setting is in the library before the frame that
+    // draws it; at mount it only applies, which puts the stored theme on the first frame.
+    let theme = signal(snapshot_signal.with(|s| s.settings.theme));
+    {
+        let write = write.clone();
+        let stored = std::cell::Cell::new(theme.get_untracked());
+        effect(move || {
+            let chosen = theme.get();
+            if chosen != stored.get() {
+                stored.set(chosen);
+                write(
+                    Command::SetSetting {
+                        key: SettingKey::Theme,
+                        value: SettingValue::Theme(chosen),
+                    },
+                    true,
+                );
+            }
+            set_color_scheme(match chosen {
+                Theme::System => Appearance::System,
+                Theme::Light => Appearance::Light,
+                Theme::Dark => Appearance::Dark,
+            });
+        });
+    }
+
     // The transfer entry points: a save dialog picks where the library goes, an open dialog picks
     // the archive; the screen states what came of either.
     let export = {
@@ -611,8 +640,9 @@ pub fn shell_over(
                             screen.set(Screen::Library);
                         }
                     };
-                    settings(Values::new(cap, true), library.clone(), |_| {}, back, || {})
-                        .into_element()
+                    let mut values = Values::new(cap, true);
+                    values.theme = theme;
+                    settings(values, library.clone(), |_| {}, back, || {}).into_element()
                 }
                 Screen::Diagnostics => {
                     diagnostics(stopped, slow.get(), results, import.clone(), export.clone())

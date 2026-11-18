@@ -10,6 +10,11 @@ use nsh_core::prelude::*;
 
 use super::tokens;
 
+/// The diameter of a state dot, beside the text that names the state.
+pub fn dot() -> Points {
+    px(8.0)
+}
+
 /// A control's size.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PropEnum)]
 pub enum Size {

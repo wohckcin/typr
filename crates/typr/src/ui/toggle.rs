@@ -83,12 +83,14 @@ pub fn Toggle(props: ToggleProps, cx: Scope<ToggleEvent>) -> impl IntoElement {
                 .checked(|s| s.bg(tokens::selection))
         })
         .thumb_style(|s| {
-            s.size(px(16.0))
-                .rounded_full()
-                .bg(tokens::card)
-                .transition_transform()
-                .duration(motion::BASE)
-                .checked(|s| s.translate_x(px(16.0)))
+            let s = s.size(px(16.0)).rounded_full().bg(tokens::card);
+            // Reduced motion: the thumb jumps to its side; the state change stays.
+            let s = if reduce_motion() {
+                s
+            } else {
+                s.transition_transform().duration(motion::BASE)
+            };
+            s.checked(|s| s.translate_x(px(16.0)))
         })
         .child(text(props.label).text_sm().text_color(tokens::foreground))
 }
