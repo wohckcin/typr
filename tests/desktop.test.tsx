@@ -6,7 +6,7 @@ import { platform } from "nsh";
 import { expect, open, test } from "nsh/test";
 
 test("the app opens with its navigation", async () => {
-  const app = await open(".");
+  const app = await open("..");
   for (const label of ["Search", "All cards", "Utilities", "Settings", "Diagnostics"]) {
     expect(app.texts()).toContain(label);
   }
@@ -17,7 +17,7 @@ test("the app opens with its navigation", async () => {
 });
 
 test("the search field is on the library screen and the chord reaches it", async () => {
-  const app = await open(".");
+  const app = await open("..");
   // `text:` matches an input's placeholder, which is the field's only name.
   await app.waitFor("text:Search cards");
   await app.keyboard.press("/");
@@ -28,9 +28,9 @@ test("the search field is on the library screen and the chord reaches it", async
 });
 
 test("Settings opens and Escape returns to the library", async () => {
-  const app = await open(".");
+  const app = await open("..");
   await app.press("Settings");
-  await app.waitFor("text:Review");
+  await app.waitFor("text:Theme");
   expect(app.texts()).toContain("Apply");
   await app.keyboard.press("escape");
   await app.waitFor("text:All cards");
@@ -38,7 +38,7 @@ test("Settings opens and Escape returns to the library", async () => {
 });
 
 test("a button answers the pointer where there is one", async () => {
-  const app = await open(".");
+  const app = await open("..");
   await app.waitFor("role:button[New card]");
   // A headless run opens the app as a phone, which has no pointer; the host gives it one.
   if (!platform.desktop) return;

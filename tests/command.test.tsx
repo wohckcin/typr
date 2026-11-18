@@ -10,7 +10,7 @@ const ROW = "Edit the selected card";
 test("the palette opens on its chord and Escape closes it", async () => {
   // A headless run gives the search field no keyboard focus, so the keys cannot reach the list.
   if (!platform.desktop) return;
-  const app = await open(".");
+  const app = await open("..");
   await app.waitFor("text:All cards");
   await app.keyboard.press("meta+k");
   await app.waitFor(ROW);
@@ -22,7 +22,7 @@ test("the palette opens on its chord and Escape closes it", async () => {
 
 test("typing narrows the palette and Return runs the row it is on", async () => {
   if (!platform.desktop) return;
-  const app = await open(".");
+  const app = await open("..");
   await app.waitFor("text:All cards");
   await app.keyboard.press("meta+k");
   await app.waitFor(ROW);
@@ -36,7 +36,7 @@ test("typing narrows the palette and Return runs the row it is on", async () => 
 
 test("the shortcut panel lists the bindings and runs nothing", async () => {
   if (!platform.desktop) return;
-  const app = await open(".");
+  const app = await open("..");
   await app.waitFor("text:All cards");
   await app.keyboard.press("shift+/");
   await app.waitFor("Keyboard shortcuts");
@@ -52,7 +52,7 @@ test("a command runs from the highlighted row", async () => {
   // The library this opens holds two cards, so a new card's editor is a write into a throwaway
   // library: `nsh test` is run with TYPR_DATA_DIR pointing at it.
   if (!platform.desktop) return;
-  const app = await open(".");
+  const app = await open("..");
   await app.waitFor("text:All cards");
   await app.keyboard.press("meta+k");
   await app.waitFor(ROW);

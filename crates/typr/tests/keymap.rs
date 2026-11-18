@@ -93,7 +93,7 @@ fn start() -> Result<Headless, String> {
 #[test]
 fn the_palette_runs_the_row_that_is_pressed() -> Result<(), String> {
     // A headless run gives the search field no keyboard focus, so the field's own key handling
-    // (Down, Return) cannot be driven here; the host test `command.test.tsx` drives the keys. What
+    // (Down, Return) cannot be driven here; the host test `tests/command.test.tsx` drives the keys. What
     // this proves is the run path: the row the user presses is the command that runs.
     let third = items(Surface::Library)[2].id.clone();
     let mut app = start()?;
