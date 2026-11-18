@@ -10,7 +10,10 @@ fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     rows()
         .test_id("card")
-        .child(setting_row("Name", view().test_id("control").child(text("value"))))
+        .child(setting_row(
+            "Name",
+            view().test_id("control").child(text("value")),
+        ))
         .child(setting_row("Other", view().child(text("more"))))
 }
 

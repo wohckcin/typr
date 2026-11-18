@@ -120,7 +120,8 @@ fn every_setting_round_trips() {
         (SettingKey::PreviewFontSize, SettingValue::Number(18)),
     ];
     // Every theme, not one: `System` is a stored value like the other two.
-    let themes = crate::store::Theme::ALL.map(|theme| (SettingKey::Theme, SettingValue::Theme(theme)));
+    let themes =
+        crate::store::Theme::ALL.map(|theme| (SettingKey::Theme, SettingValue::Theme(theme)));
     for (key, value) in values.into_iter().chain(themes) {
         db.apply(
             &Command::SetSetting {
@@ -232,9 +233,11 @@ fn a_library_with_a_stale_scale_row_opens() {
     );
     let kept: String = db
         .connection_for_test()
-        .query_row("SELECT value FROM settings WHERE key = 'scale'", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'scale'",
+            [],
+            |row| row.get(0),
+        )
         .expect("the old row");
     assert_eq!(kept, "1.25", "the row is left where it was");
 }
