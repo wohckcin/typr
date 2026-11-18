@@ -43,7 +43,12 @@ nsh-core-0.5.1/src` is empty); what exists is per-element `scale(…)` used for 
 
 ## Decisions
 
-1. **Theme is applied through the engine's appearance, and the spike settles the route.** The app maps its
+1. **Route (settled by the spike, nsh 0.6.0): `nsh_core::element::set_color_scheme(Appearance)`.** Neither
+   candidate below was needed. A component calls `set_color_scheme` (in `nsh_core::prelude`) from an effect; it
+   queues `Action::Appearance`, which reaches `Core::set_appearance`, the same call `nsh.json` and TS
+   `setColorScheme` make. The effect runs during mount, and `tests/appearance.rs`
+   `the_first_frame_is_the_stored_theme` proves the first frame is the stored theme (it fails on the code
+   without the effect). The two candidates and the original text follow. The app maps its
    stored `Theme::{Light, Dark}` onto `Appearance::{Light, Dark}` and applies it at mount and on change. The
    two candidate routes are the root's `appearance` prop (`ops.rs:2978`, the value `nsh.json` feeds today) and
    `Core::set_appearance` (`classes.rs:185`); task 1.1 names which one the app crate can call, and the design
@@ -60,8 +65,10 @@ nsh-core-0.5.1/src` is empty); what exists is per-element `scale(…)` used for 
    `:301`, `:318`), `SettingKey::Scale` with its name, help text, default, get, parse and set arms
    (`store/settings.rs:25-27`, `:103`–`:336`), `SettingValue::Scale` with its two text conversions (`:358`, `:370`,
    `:381`) and `in_scale` (`:410`) all go, with the round-trip tests that carry them. A library written before this
-   change keeps its inert `scale` row: the loader ignores a key it no longer knows, and dropping unknown rows on the
-   next write is the simpler of the two options task 3.3 decides between. Rejected: applying it. `ui/size.rs` and
+   change keeps its inert `scale` row: the loader ignores a key it no longer knows. **Decided (task 3.3): leave
+   the row alone.** The loader already skips unknown keys (`db.rs`, `if let Some(key) = SettingKey::parse`), so
+   leaving it costs no code, where dropping it would add a write path; `a_library_with_a_stale_scale_row_opens`
+   proves it opens, reports no refusal and keeps the row. Rejected: applying it. `ui/size.rs` and
    `ui/tokens.rs` are the only place dimensions may come from (`tests/tokens.rs`, `scripts/check-tokens.sh`), so a
    factor would turn every size constant into a signal read at every call site — the whole app's dimension surface
    for a setting nothing in `nsh-core` 0.5.1 exposes. It returns if the engine grows a scale of its own.
