@@ -4,27 +4,18 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr::screens::keymap::{chord_from_keystroke, command_of, items, keystroke_of, panel};
+use typr::screens::keymap::{command_of, items, keystroke_of, keystroke_of_chord, panel};
 use typr::ui::command::Mode;
-use typr_core::keymap::{Chord, Command, Key, Mods, Surface, bindings_of};
+use typr_core::keymap::{Command, Surface, bindings_of};
 
 #[test]
-fn a_keystroke_maps_to_the_table_chord() {
-    assert_eq!(
-        chord_from_keystroke("mod+k", true),
-        Some(Chord::Modified {
-            key: Key::Char('k'),
-            mods: Mods {
-                cmd: true,
-                ..Mods::NONE
-            }
-        })
-    );
-    assert_eq!(
-        chord_from_keystroke("escape", true),
-        Some(Chord::Key(Key::Escape))
-    );
-    assert_eq!(chord_from_keystroke("hyper+zz", true), None);
+fn every_binding_is_a_keystroke_nsh_parses() {
+    for binding in typr_core::keymap::bindings() {
+        let stroke = keystroke_of_chord(binding.chord)
+            .unwrap_or_else(|| panic!("{} has no keystroke", binding.chord));
+        nsh_core::keymap::Keystroke::parse_with(&stroke, true)
+            .unwrap_or_else(|e| panic!("{} -> {stroke:?}: {e}", binding.chord));
+    }
 }
 
 #[test]

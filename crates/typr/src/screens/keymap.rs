@@ -1,114 +1,82 @@
 //! The keymap panel: every binding of one surface, with its command's label and its chord.
 //!
-//! NSH delivers a key as a keystroke string (`"mod+k"`, `"escape"`). [`chord_from_keystroke`] turns
-//! that into the same [`Chord`] the bindings table holds, so a key pressed in NSH is matched against
-//! the one table. The panel opens and closes on the shortcut chord the table declares, filters as
+//! NSH takes a key as a keystroke string (`"cmd+k"`, `"escape"`). [`keystroke`] turns a [`Chord`] of
+//! the bindings table into NSH's own [`Keystroke`], so `on_key` is registered from the one table.
+//! The panel opens and closes on the shortcut chord the table declares, filters as
 //! the user types, and the palette runs the first command a typed query narrows to.
 
+use nsh_core::keymap::{Key as NshKey, Keystroke, Modifiers};
 use nsh_core::prelude::*;
 use typr_core::keymap::{Chord, Command, Key, Mods, Surface, bindings_of, chord_of};
 
 pub use crate::ui::command::Mode;
 
-/// Reads an NSH keystroke string into a chord. `mod` is Command on Apple platforms and Control
-/// elsewhere, as NSH defines it; `None` for a stroke the table cannot hold.
-pub fn chord_from_keystroke(stroke: &str, apple: bool) -> Option<Chord> {
-    let mut mods = Mods::NONE;
-    let mut key = None;
-    for part in stroke.split('+') {
-        match part.trim().to_ascii_lowercase().as_str() {
-            "mod" => {
-                if apple {
-                    mods.cmd = true
-                } else {
-                    mods.ctrl = true
-                }
-            }
-            "cmd" | "command" => mods.cmd = true,
-            "ctrl" | "control" => mods.ctrl = true,
-            "alt" | "option" => mods.alt = true,
-            "shift" => mods.shift = true,
-            "escape" | "esc" => key = Some(Key::Escape),
-            "enter" | "return" => key = Some(Key::Enter),
-            "space" => key = Some(Key::Space),
-            "backspace" => key = Some(Key::Backspace),
-            "left" => key = Some(Key::Left),
-            "right" => key = Some(Key::Right),
-            "home" => key = Some(Key::Home),
-            "end" => key = Some(Key::End),
-            "up" => key = Some(Key::Up),
-            "down" => key = Some(Key::Down),
-            single if single.chars().count() == 1 => key = single.chars().next().map(Key::Char),
-            _ => return None,
-        }
-    }
-    let key = key?;
-    if mods.is_none() {
-        Some(Chord::Key(key))
-    } else {
-        Some(Chord::Modified { key, mods })
-    }
-}
-
 /// The key a shifted character is typed on: NSH names `?` as `shift+/`, so a table chord that
 /// holds `?` must be written that way or `on_key` refuses it.
-fn shift_base(c: char) -> Option<&'static str> {
-    Some(match c {
-        '!' => "1",
-        '@' => "2",
-        '#' => "3",
-        '$' => "4",
-        '%' => "5",
-        '^' => "6",
-        '&' => "7",
-        '*' => "8",
-        '(' => "9",
-        ')' => "0",
-        '_' => "-",
-        '+' => "=",
-        '{' => "[",
-        '}' => "]",
-        '|' => "\\",
-        ':' => ";",
-        '"' => "'",
-        '<' => ",",
-        '>' => ".",
-        '?' => "/",
-        '~' => "`",
-        'A'..='Z' => {
-            return Some(Box::leak(
-                c.to_ascii_lowercase().to_string().into_boxed_str(),
-            ));
-        }
-        _ => return None,
-    })
+const SHIFTED: &[(char, char)] = &[
+    ('!', '1'),
+    ('@', '2'),
+    ('#', '3'),
+    ('$', '4'),
+    ('%', '5'),
+    ('^', '6'),
+    ('&', '7'),
+    ('*', '8'),
+    ('(', '9'),
+    (')', '0'),
+    ('_', '-'),
+    ('+', '='),
+    ('{', '['),
+    ('}', ']'),
+    ('|', '\\'),
+    (':', ';'),
+    ('"', '\''),
+    ('<', ','),
+    ('>', '.'),
+    ('?', '/'),
+    ('~', '`'),
+];
+
+/// The base key of a character that needs Shift (`?` is `/`, `A` is `a`).
+fn shift_base(c: char) -> Option<char> {
+    if c.is_ascii_uppercase() {
+        return Some(c.to_ascii_lowercase());
+    }
+    SHIFTED.iter().find(|(s, _)| *s == c).map(|&(_, base)| base)
 }
 
-/// A character as the keystroke NSH takes for it, with `shift+` when the character needs Shift.
-fn char_keystroke(c: char, mods: Mods) -> String {
-    let mut stroke = Vec::new();
-    if mods.cmd {
-        stroke.push("cmd".to_owned());
-    }
-    if mods.ctrl {
-        stroke.push("ctrl".to_owned());
-    }
-    if mods.alt {
-        stroke.push("alt".to_owned());
-    }
-    match shift_base(c) {
-        Some(base) => {
-            stroke.push("shift".to_owned());
-            stroke.push(base.to_owned());
-        }
-        None => {
-            if mods.shift {
-                stroke.push("shift".to_owned());
+/// One table chord as NSH's keystroke, with Shift added for a character that needs it.
+pub fn keystroke(chord: Chord) -> Option<Keystroke> {
+    let (key, mods) = match chord {
+        Chord::Key(key) => (key, Mods::NONE),
+        Chord::Modified { key, mods } => (key, mods),
+    };
+    let mut modifiers = Modifiers {
+        ctrl: mods.ctrl,
+        alt: mods.alt,
+        shift: mods.shift,
+        cmd: mods.cmd,
+    };
+    let key = match key {
+        Key::Char(c) => match shift_base(c) {
+            Some(base) => {
+                modifiers.shift = true;
+                NshKey::Char(base)
             }
-            stroke.push(c.to_string());
-        }
-    }
-    stroke.join("+")
+            None => NshKey::Char(c),
+        },
+        Key::Space => NshKey::Char(' '),
+        Key::Enter => NshKey::Enter,
+        Key::Escape => NshKey::Escape,
+        Key::Left => NshKey::Left,
+        Key::Right => NshKey::Right,
+        Key::Up => NshKey::Up,
+        Key::Down => NshKey::Down,
+        Key::Home => NshKey::Home,
+        Key::End => NshKey::End,
+        Key::Backspace => NshKey::Backspace,
+    };
+    Some(Keystroke { modifiers, key })
 }
 
 /// The keystroke string NSH's `on_key` takes for a command on `surface`, from the table.
@@ -126,24 +94,7 @@ pub fn keystrokes_of(surface: Surface, command: Command) -> Vec<String> {
 
 /// One chord as the keystroke string `on_key` takes.
 pub fn keystroke_of_chord(chord: Chord) -> Option<String> {
-    match chord {
-        Chord::Key(Key::Space) => Some("space".to_owned()),
-        Chord::Key(Key::Enter) => Some("enter".to_owned()),
-        Chord::Key(Key::Char(c)) => Some(char_keystroke(c, Mods::NONE)),
-        Chord::Key(Key::Escape) => Some("escape".to_owned()),
-        Chord::Key(Key::Left) => Some("left".to_owned()),
-        Chord::Key(Key::Right) => Some("right".to_owned()),
-        Chord::Key(Key::Up) => Some("up".to_owned()),
-        Chord::Key(Key::Down) => Some("down".to_owned()),
-        Chord::Key(Key::Backspace) => Some("backspace".to_owned()),
-        Chord::Key(Key::Home) => Some("home".to_owned()),
-        Chord::Key(Key::End) => Some("end".to_owned()),
-        Chord::Modified {
-            key: Key::Char(c),
-            mods,
-        } => Some(char_keystroke(c, mods)),
-        _ => None,
-    }
+    keystroke(chord).map(|k| k.to_string())
 }
 
 /// The items a command list shows for `surface`: one per binding, named by the command, labelled
