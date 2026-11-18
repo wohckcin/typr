@@ -9,7 +9,7 @@ use typr::ui::{
     button::{Variant, busy_button, button},
     choice::{choose, list_row, tab_row},
     input::field,
-    overlay::{anchored, command_menu, decision, toast},
+    overlay::{Toasts, anchored, command_menu, decision, toasts},
     toggle::{check, toggle},
 };
 
@@ -21,7 +21,7 @@ fn Gallery() -> impl IntoElement {
     let tab = signal(0_usize);
     let row = signal(0_usize);
     let open = signal(false);
-    let message = signal(None::<SharedString>);
+    let results = Toasts::new();
     let renamed = signal(false);
     let chosen = signal(None::<SharedString>);
     let draft = signal(String::new());
@@ -104,9 +104,9 @@ fn Gallery() -> impl IntoElement {
                 .variant(Variant::Destructive)
                 .label("Notify")
                 .disabled(|| false)
-                .on_press(move || message.set(Some("Saved".into()))),
+                .on_press(move || results.push("Saved".into())),
         )
-        .child(toast(message))
+        .child(toasts(&results))
         .child(command_menu(
             button()
                 .variant(Variant::Ghost)

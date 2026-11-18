@@ -22,6 +22,7 @@ use typr::screens::keymap::{Mode, panel};
 use typr::screens::settings::{LibraryInfo, Values, settings};
 use typr::screens::sidebar::{Group, Item, Sidebar, sidebar};
 use typr::screens::study::study;
+use typr::ui::overlay::Toasts;
 
 /// The resolved style of the first text matching `selector`: font size in bits, weight, colour.
 fn resolved<C: Component>(scheme: ColorScheme, selector: &str) -> (u32, u16, u32)
@@ -216,7 +217,7 @@ fn DiagnosticsScreen() -> impl IntoElement {
             name: "load deck".into(),
             millis: 740,
         }],
-        signal(None),
+        Toasts::new(),
         || {},
         || {},
     )

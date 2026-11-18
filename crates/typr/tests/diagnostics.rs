@@ -1,32 +1,35 @@
 //! The diagnostics screen: a stoppage shows one message, slow commands are listed or stated absent,
 //! and an import or export runs its callback and shows its result line.
 
+use std::time::Duration;
+
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::screens::diagnostics::{SlowCommand, diagnostics, stoppage_message};
+use typr::ui::overlay::Toasts;
 
 #[component]
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let stopped = signal(true);
-    let result = signal(None::<SharedString>);
+    let results = Toasts::new();
     view().child(diagnostics(
         stopped,
         vec![SlowCommand {
             name: "load deck".into(),
             millis: 740,
         }],
-        result,
-        move || result.set(Some("Imported 3 cards".into())),
-        move || result.set(Some("Exported".into())),
+        results,
+        move || results.push("Imported 3 cards".into()),
+        move || results.push("Exported".into()),
     ))
 }
 
 #[component]
 fn Quiet() -> impl IntoElement {
     typr::ui::tokens::install();
-    diagnostics(signal(false), Vec::new(), signal(None), || {}, || {})
+    diagnostics(signal(false), Vec::new(), Toasts::new(), || {}, || {})
 }
 
 #[test]
@@ -57,6 +60,34 @@ fn an_import_runs_its_callback_and_shows_the_result() -> Result<(), String> {
     app.wait_for("role:button[Import]")?;
     app.press("role:button[Import]")?;
     app.wait_for("Imported 3 cards")?;
+    Ok(())
+}
+
+#[test]
+fn a_result_appears_then_leaves() -> Result<(), String> {
+    let mut config = EngineConfig::new(Root::of::<Probe>());
+    config.clock = nsh_core::time::Clock::manual(std::time::SystemTime::now());
+    let mut app = Headless::start(config).unwrap();
+    app.wait_for("role:button[Import]")?;
+    app.press("role:button[Import]")?;
+    app.wait_for("Imported 3 cards")?;
+    app.fast_forward(Duration::from_secs(10))?;
+    app.wait_for_gone("Imported 3 cards", Duration::from_secs(5))?;
+    Ok(())
+}
+
+#[test]
+fn escape_dismisses_a_result_before_its_timeout() -> Result<(), String> {
+    let mut config = EngineConfig::new(Root::of::<Probe>());
+    config.clock = nsh_core::time::Clock::manual(std::time::SystemTime::now());
+    let mut app = Headless::start(config).unwrap();
+    app.wait_for("role:button[Import]")?;
+    app.press("role:button[Import]")?;
+    app.wait_for("Imported 3 cards")?;
+    // Escape's back press reaches the stack's cancel. The wait advances the manual clock, so it
+    // stays well inside the timeout.
+    app.back()?;
+    app.wait_for_gone("Imported 3 cards", Duration::from_secs(1))?;
     Ok(())
 }
 

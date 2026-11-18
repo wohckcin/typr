@@ -21,7 +21,11 @@ use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
 use crate::screens::sidebar::{Sidebar, due_counts, items_from, search_chord, sidebar};
 use crate::screens::study::{entries_for, study};
-use crate::ui::{input::field_reachable, overlay, tokens};
+use crate::ui::{
+    input::field_reachable,
+    overlay::{self, Toasts},
+    tokens,
+};
 
 /// How long a store command may take before the diagnostics screen lists it, in milliseconds.
 const SLOW_COMMAND_MS: u32 = 100;
@@ -267,7 +271,7 @@ pub fn shell_over(
         })
     };
     let slow = signal(Vec::<SlowCommand>::new());
-    let result = signal(None::<SharedString>);
+    let results = Toasts::new();
     let tiles = {
         computed(move || {
             let snapshot = snapshot_signal.get();
@@ -351,9 +355,9 @@ pub fn shell_over(
             };
             spawn(async move {
                 match pick_save_path(SaveDialog::new().file_name("typr-library.sqlite3")).await {
-                    Ok(Some(path)) => result.set(Some(export_to(&db, &path).into())),
+                    Ok(Some(path)) => results.push(export_to(&db, &path).into()),
                     Ok(None) => {}
-                    Err(why) => result.set(Some(why.into())),
+                    Err(why) => results.push(why.into()),
                 }
             });
         }
@@ -372,10 +376,10 @@ pub fn shell_over(
                         let Some(archive) = paths.into_iter().next() else {
                             return;
                         };
-                        result.set(Some(import_from(&db, &archive, &attachments).into()));
+                        results.push(import_from(&db, &archive, &attachments).into());
                     }
                     Ok(None) => {}
-                    Err(why) => result.set(Some(why.into())),
+                    Err(why) => results.push(why.into()),
                 }
             });
         }
@@ -554,10 +558,23 @@ pub fn shell_over(
     // `c` cannot come to different cards.
     let on_new = new_card.clone();
 
+    // The system title bar is hidden (nsh.json): the shell starts below the window buttons, and a
+    // strip over that space moves the window.
+    let bar = move || nsh_core::element::desktop::title_bar().top;
     view()
         .flex_1()
         .flex_row()
+        .pt(bar)
         .bg(tokens::background)
+        .child(
+            view()
+                .absolute()
+                .top_0()
+                .left_0()
+                .right_0()
+                .h(bar)
+                .window_drag(true),
+        )
         .child(sidebar(state, pick))
         .child(view().flex_1().child(dynamic(move || {
             // One match on the screen: a key can only act where its screen is showing.
@@ -613,7 +630,7 @@ pub fn shell_over(
                         .into_element()
                 }
                 Screen::Diagnostics => {
-                    diagnostics(stopped, slow.get(), result, import.clone(), export.clone())
+                    diagnostics(stopped, slow.get(), results, import.clone(), export.clone())
                         .into_element()
                 }
                 Screen::Editor(id) => {

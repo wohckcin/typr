@@ -14,6 +14,7 @@ use typr::screens::editor as card_editor;
 use typr::screens::history::{Record, history};
 use typr::screens::settings::{LibraryInfo, Values, settings};
 use typr::screens::study::study;
+use typr::ui::overlay::Toasts;
 use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{CardSummary, Deck, Snapshot};
@@ -105,7 +106,7 @@ fn DiagnosticsScreen() -> impl IntoElement {
             name: "SaveCard".into(),
             millis: 240,
         }],
-        signal(None),
+        Toasts::new(),
         || {},
         || {},
     )

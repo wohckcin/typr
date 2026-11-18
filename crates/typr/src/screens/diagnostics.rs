@@ -6,7 +6,7 @@ use nsh_core::prelude::*;
 
 use crate::ui::{
     button::{Variant, button},
-    overlay::toast,
+    overlay::{Toasts, toasts},
     status::badge,
     surface, tokens,
 };
@@ -28,11 +28,11 @@ pub fn stoppage_message(stopped: bool) -> Option<&'static str> {
 }
 
 /// The diagnostics screen. `stopped` is the failure line's state; `slow` the recorded commands;
-/// `on_import` and `on_export` run the caller's dialogs; `result` is the line shown after one.
+/// `on_import` and `on_export` run the caller's dialogs; `results` shows the line after one.
 pub fn diagnostics(
     stopped: Signal<bool>,
     slow: Vec<SlowCommand>,
-    result: Signal<Option<SharedString>>,
+    results: Toasts,
     on_import: impl Fn() + 'static,
     on_export: impl Fn() + 'static,
 ) -> impl IntoElement {
@@ -85,5 +85,5 @@ pub fn diagnostics(
                         .on_press(on_export),
                 ),
         )
-        .child(toast(result))
+        .child(toasts(&results))
 }
