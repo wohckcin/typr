@@ -38,7 +38,6 @@ value that cannot be read rather than silently replacing it.
 - **WHEN** the settings table holds "abc" for a numeric key
 - **THEN** the app reports that key and value instead of running with a default
 
-
 ### Requirement: Settings are reachable from the app
 
 The system SHALL provide a settings screen reachable from the library and from a session, SHALL list its
@@ -157,3 +156,12 @@ row is left.
 
 - **WHEN** the field is emptied
 - **THEN** every row is drawn again
+
+### Requirement: Diagnostics is reachable from Settings
+
+The settings screen SHALL offer a row that opens the diagnostics screen, because the sidebar no
+longer has a Diagnostics row.
+
+#### Scenario: Opening diagnostics from settings
+- **WHEN** the user opens Settings and presses the Diagnostics row's control
+- **THEN** the diagnostics screen is shown
