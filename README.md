@@ -24,7 +24,7 @@ fails on a spacing, type, radius or colour literal, or on a `nsh_base` control u
 ## Prerequisites
 
 - [mise](https://mise.jdx.dev), which installs the pinned tools: Rust `1.99.1` with `rustfmt` and
-  `clippy`, and the `nsh` CLI `0.5.1`, all from `mise.toml`.
+  `clippy`, and the `nsh` CLI `0.6.0`, all from `mise.toml`.
 
   ```sh
   mise install     # Rust and nsh, at the versions mise.toml pins
