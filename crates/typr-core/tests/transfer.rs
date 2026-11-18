@@ -977,3 +977,27 @@ fn two_exports_to_the_same_new_path_leave_exactly_one_file() {
         "the winner wrote the whole library"
     );
 }
+
+#[test]
+fn an_archive_card_with_empty_text_still_imports() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([{"id": 1, "name": "Spanish", "parent": null}]);
+    let cards = serde_json::json!([{"id": 7, "deck": 1, "text": "", "tags": []}]);
+    let archive = write_mochi(
+        dir.path(),
+        "empty.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 1, "cards": 1}),
+    );
+    let db = open(&dir.path().join("typr.sqlite3"));
+    db.apply(
+        &Command::ImportArchive {
+            archive,
+            attachments: dir.path().join("media"),
+        },
+        NOW,
+    )
+    .expect("the import");
+    assert_eq!(db.snapshot().expect("the library").cards.len(), 1);
+}

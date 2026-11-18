@@ -398,8 +398,7 @@ fn new_deck_row(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) 
     if state.is_naming() {
         name_field("Deck name", move |name: String| {
             state.stop_naming();
-            let name = name.trim();
-            if !name.is_empty() {
+            if typr_core::edits::deck_name(&name).is_some() {
                 pick(&SharedString::from(format!("{NEW_DECK_PREFIX}{name}")));
             }
         })

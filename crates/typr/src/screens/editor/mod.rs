@@ -9,6 +9,7 @@ use nsh_core::file_dialog::OpenDialog;
 use nsh_core::prelude::*;
 
 use nsh_core::element::{JsObject, Prop};
+use typr_core::edits::has_content;
 use typr_core::keymap::{Command, Surface};
 use typr_core::sides;
 
@@ -29,11 +30,6 @@ mod fields;
 pub use diagram::{Cover, Diagram, Rect, cover_box, diagram_pane, rect_from_corners};
 pub use dialogs::{Answer, Leaving, clear_question, leave_decision, leaving_choice};
 pub use fields::{TemplateField, field_table, template_preview};
-
-/// Whether the text holds anything once trimmed; an empty card is not saved.
-pub fn has_content(markdown: &str) -> bool {
-    !markdown.trim().is_empty()
-}
 
 /// The file name a chosen picture is copied to, which is also the reference the card holds.
 ///

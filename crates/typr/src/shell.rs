@@ -10,6 +10,7 @@ use nsh_core::file_dialog::{OpenDialog, SaveDialog};
 use nsh_core::keymap::When;
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
+use typr_core::edits::{deck_for_new_card, selection_after_trash};
 use typr_core::keymap::{Command as Key, Surface, bindings_of};
 use typr_core::session::{Entry, Session};
 use typr_core::store::{
@@ -438,66 +439,41 @@ pub fn shell_over(
     });
 
     let new_card = {
-        let db = db.clone();
-        let reopen = reopen.clone();
+        let write = write.clone();
         let state_for_card = state;
         Rc::new(move || {
-            let Some(db) = db.as_ref() else {
+            let Some(deck) = deck_for_new_card(
+                &snapshot_signal.get_untracked(),
+                state_for_card.selected_key().as_deref(),
+            ) else {
                 return;
             };
-            let deck = state_for_card
-                .selected_key()
-                .as_deref()
-                .and_then(|key| key.strip_prefix("deck:"))
-                .and_then(|id| id.parse::<Id>().ok())
-                .or_else(|| {
-                    snapshot_signal
-                        .get_untracked()
-                        .decks
-                        .first()
-                        .map(|deck| deck.id)
-                });
-            let Some(deck) = deck else { return };
-            match db.apply(
-                &Command::CreateCard {
+            let made = write(
+                Command::CreateCard {
                     deck,
                     markdown: String::new(),
                 },
-                SystemClock.now_ms(),
-            ) {
-                Ok(Outcome::Card(id)) => {
-                    reopen();
-                    screen.set(Screen::Editor(id));
-                }
-                Ok(_) => {}
-                Err(error) => log::error!("new card refused: {}", crate::logging::describe(&error)),
+                true,
+            );
+            if let Some(Ok(Outcome::Card(id))) = made {
+                screen.set(Screen::Editor(id));
             }
         })
     };
 
     let delete_card = {
-        let db = db.clone();
+        let write = write.clone();
         let visible = visible.clone();
-        let reopen = reopen.clone();
         Rc::new(move || {
-            let Some(db) = db.as_ref() else {
-                return;
-            };
-            let ids = visible();
             let Some(id) = selection.get_untracked() else {
                 return;
             };
-            let Some(at) = ids.iter().position(|each| *each == id) else {
+            let before = visible();
+            if !before.contains(&id) {
                 return;
-            };
-            match db.apply(&Command::TrashCard { id }, SystemClock.now_ms()) {
-                Ok(_) => {
-                    reopen();
-                    // The card that took its place in the list now, or the new last card.
-                    let after = visible();
-                    selection.set(after.get(at).or_else(|| after.last()).copied());
-                }
-                Err(error) => log::error!("trash refused: {}", crate::logging::describe(&error)),
+            }
+            if let Some(Ok(_)) = write(Command::TrashCard { id }, true) {
+                selection.set(selection_after_trash(&before, id, &visible()));
             }
         })
     };
@@ -756,10 +732,6 @@ pub fn shell_over(
                             write_save(Command::SaveCard {
                                 id,
                                 markdown: saved.text.clone(),
-                            });
-                            write_save(Command::SetDraft {
-                                card: id,
-                                text: None,
                             });
                         })
                         .on_draft(move |draft: &editor::CardText| {

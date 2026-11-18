@@ -2,6 +2,7 @@
 
 pub mod clock;
 pub mod day;
+pub mod edits;
 pub mod fsrs;
 pub mod hidden;
 pub mod inbox;

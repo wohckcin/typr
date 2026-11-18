@@ -951,6 +951,12 @@ pub enum StoreError {
     Missing { what: &'static str, id: Id },
     #[error("a {what} called {name:?} already exists")]
     DuplicateName { what: &'static str, name: String },
+    /// A name that is empty once trimmed.
+    #[error("a {what} name cannot be blank")]
+    BlankName { what: &'static str },
+    /// A text card saved with nothing in it.
+    #[error("card {card} has no text to save")]
+    EmptyCard { card: Id },
     /// A move that would put a deck inside itself.
     #[error("deck {deck} cannot be moved inside itself")]
     Cycle { deck: Id },

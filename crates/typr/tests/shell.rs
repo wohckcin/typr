@@ -805,3 +805,40 @@ fn escape_cancels_naming_a_deck() -> Result<(), String> {
     assert!(!app.screen().shows("Spa"));
     Ok(())
 }
+
+#[test]
+fn a_new_card_from_the_inbox_skips_an_archived_first_deck() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = two_decks_on_disk("archived-first");
+    let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    // The snapshot lists decks by name, so Biology is its first deck.
+    let first = db.snapshot().unwrap().decks[0].id;
+    db.apply(
+        &typr_core::store::Command::ArchiveDeck {
+            id: first,
+            archived: true,
+        },
+        0,
+    )
+    .unwrap();
+    drop(db);
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("Spanish")?;
+    app.press_key("c")?;
+    app.wait_for("Attach image…")?;
+    let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let snapshot = reader.snapshot().unwrap();
+    let made = snapshot
+        .cards
+        .iter()
+        .find(|card| card.markdown.is_empty())
+        .expect("the new card");
+    let deck = snapshot
+        .decks
+        .iter()
+        .find(|deck| deck.id == made.deck)
+        .unwrap();
+    assert_eq!(deck.name, "Spanish");
+    Ok(())
+}

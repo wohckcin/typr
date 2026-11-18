@@ -6,9 +6,8 @@ use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::screens::editor::{
     Answer, CardText, Cover, Diagram, GroupMerge, Leaving, MaskAdded, MaskGroup, Template,
-    TemplateField, attach_image, cover_box, editor, field_table, has_content, image_reference,
-    leave_decision, leaving_choice, prompt_count, rect_from_corners, resolve_images,
-    template_preview,
+    TemplateField, attach_image, cover_box, editor, field_table, image_reference, leave_decision,
+    leaving_choice, prompt_count, rect_from_corners, resolve_images, template_preview,
 };
 
 #[component]
@@ -54,12 +53,6 @@ fn pressing_save_reports_the_text() -> Result<(), String> {
     app.press("role:button[Save]")?;
     app.wait_for("text:/saved=Question/")?;
     Ok(())
-}
-
-#[test]
-fn only_text_with_something_in_it_has_content() {
-    assert!(has_content("Question"));
-    assert!(!has_content("  \n\t "));
 }
 
 #[test]

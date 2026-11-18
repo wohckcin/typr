@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
+use crate::edits;
 use crate::fsrs::Memory;
 use crate::hidden::{self, Shape};
 use crate::library_view::ViewMode;
@@ -157,6 +158,7 @@ impl Db {
     fn dispatch(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
         match command {
             Command::CreateDeck { parent, name } => {
+                let name = edits::deck_name(name).ok_or(StoreError::BlankName { what: "deck" })?;
                 self.named_write(
                     "INSERT INTO deck (parent_id, name) VALUES (?1, ?2)",
                     params![parent, name],
@@ -166,6 +168,7 @@ impl Db {
                 Ok(Outcome::Deck(self.conn.last_insert_rowid()))
             }
             Command::RenameDeck { id, name } => {
+                let name = edits::deck_name(name).ok_or(StoreError::BlankName { what: "deck" })?;
                 let changed = self.named_write(
                     "UPDATE deck SET name = ?2 WHERE id = ?1",
                     params![id, name],
@@ -359,6 +362,9 @@ impl Db {
                         card: *id,
                         holds: "a template",
                     });
+                }
+                if !edits::has_content(markdown) {
+                    return Err(StoreError::EmptyCard { card: *id });
                 }
                 let shape = hidden::shape(markdown);
                 let changed = self.conn.execute(

@@ -12,9 +12,7 @@ pub fn cards_in(snapshot: &Snapshot, selection: Option<&str>, now_ms: i64) -> Ve
     if let Some(which) = selection.and_then(Inbox::of_key) {
         return inbox_cards(snapshot, now_ms, which);
     }
-    let deck: Option<i64> = selection
-        .and_then(|key| key.strip_prefix("deck:"))
-        .and_then(|id| id.parse().ok());
+    let deck = selection.and_then(typr_core::edits::deck_of_key);
     snapshot
         .cards
         .iter()

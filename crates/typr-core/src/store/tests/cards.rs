@@ -2275,3 +2275,114 @@ fn a_diagram_clears_back_to_an_empty_text_card() {
     let again = db.apply(&Command::ClearDiagram { card: id }, 0);
     assert!(again.is_err(), "only a diagram can be cleared");
 }
+
+fn create_deck(db: &Db, name: &str) -> Result<Outcome, StoreError> {
+    db.apply(
+        &Command::CreateDeck {
+            parent: None,
+            name: name.to_string(),
+        },
+        0,
+    )
+}
+
+#[test]
+fn a_deck_name_is_stored_trimmed_and_judged_trimmed() {
+    let dir = TempDir::new().expect("temp dir");
+    let db = open_temp(&dir);
+    create_deck(&db, " Spanish ").expect("a padded name");
+    assert_eq!(db.snapshot().expect("snapshot").decks[0].name, "Spanish");
+    let dup = create_deck(&db, " Spanish");
+    assert!(
+        matches!(dup, Err(StoreError::DuplicateName { .. })),
+        "{dup:?}"
+    );
+}
+
+#[test]
+fn a_blank_deck_name_is_refused_on_create_and_rename() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let id = deck(&mut db, "Spanish");
+    let made = create_deck(&db, "   ");
+    assert!(
+        matches!(made, Err(StoreError::BlankName { what: "deck" })),
+        "{made:?}"
+    );
+    let renamed = db.apply(
+        &Command::RenameDeck {
+            id,
+            name: "  ".into(),
+        },
+        0,
+    );
+    assert!(
+        matches!(renamed, Err(StoreError::BlankName { what: "deck" })),
+        "{renamed:?}"
+    );
+    let decks = db.snapshot().expect("snapshot").decks;
+    assert_eq!(decks.len(), 1);
+    assert_eq!(decks[0].name, "Spanish");
+}
+
+fn draft_of(db: &Db, card: Id) -> Option<String> {
+    match db.apply(&Command::Draft { card }, 0).expect("draft") {
+        Outcome::Draft(text) => text,
+        other => panic!("reading a draft: {other:?}"),
+    }
+}
+
+#[test]
+fn a_whitespace_save_is_refused_and_keeps_text_and_draft() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let id = card(&mut db, deck, "hola");
+    db.apply(
+        &Command::SetDraft {
+            card: id,
+            text: Some("typing".into()),
+        },
+        0,
+    )
+    .expect("draft");
+
+    let refused = db.apply(
+        &Command::SaveCard {
+            id,
+            markdown: "  \n ".into(),
+        },
+        0,
+    );
+    assert!(
+        matches!(refused, Err(StoreError::EmptyCard { card }) if card == id),
+        "{refused:?}"
+    );
+    assert_eq!(summary(&db, id).markdown, "hola");
+    assert_eq!(draft_of(&db, id).as_deref(), Some("typing"));
+}
+
+#[test]
+fn a_save_drops_the_draft_in_the_same_write() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Spanish");
+    let id = card(&mut db, deck, "hola");
+    db.apply(
+        &Command::SetDraft {
+            card: id,
+            text: Some("typing".into()),
+        },
+        0,
+    )
+    .expect("draft");
+    db.apply(
+        &Command::SaveCard {
+            id,
+            markdown: "adios".into(),
+        },
+        0,
+    )
+    .expect("save");
+    assert_eq!(draft_of(&db, id), None);
+}
