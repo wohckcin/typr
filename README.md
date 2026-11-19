@@ -4,7 +4,7 @@ A local-first flashcard app in the shape of Mochi: write markdown cards, review 
 schedule, keep every byte on your own disk. Built on [Native Shell](https://nsh.dev).
 
 Status: the port from Rune to Native Shell is merged; what the app promises lives in
-`openspec/specs/`, and a change in flight in `openspec/changes/`.
+`docs/specs/`, and plans in flight in `docs/superpowers/plans/`.
 
 ## Layout
 
