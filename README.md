@@ -4,7 +4,7 @@ A local-first flashcard app in the shape of Mochi: write markdown cards, review 
 schedule, keep every byte on your own disk. Built on [Native Shell](https://nsh.dev).
 
 Status: the port from Rune to Native Shell is merged; what the app promises lives in
-`docs/specs/`, and plans in flight in `docs/superpowers/plans/`.
+`docs/specs/`, and plans in flight in `docs/plans/`.
 
 ## Layout
 
@@ -20,6 +20,25 @@ study-day query takes an offset, both supplied by the app in `crates/typr/src/pa
 
 Screens are drawn only from `crates/typr/src/ui`, and only with the theme's tokens: `tests/tokens.rs`
 fails on a spacing, type, radius or colour literal, or on a `nsh_base` control used directly.
+
+## Development workflow
+
+**Where intent lives**
+
+- `docs/specs/` — what the app promises; hand-curated, not generated.
+- `docs/specs/<filename>.md` — design documents (brainstorming output), flat files at the root of `docs/specs/`.
+- `docs/plans/` — implementation plans (writing-plans output).
+
+These are the superpowers skill defaults. The 18 capability specs live in named subdirectories of `docs/specs/`; design documents are flat files at its root, not inside a subdirectory.
+
+**Flows**
+
+| Work | Flow |
+|---|---|
+| New feature | brainstorming → writing-plans → subagent-driven-development (or executing-plans) → verification-before-completion → finishing-a-development-branch |
+| Bug | systematic-debugging → test-driven-development → verification-before-completion |
+| Review | requesting-code-review → receiving-code-review |
+| Isolation/parallel | using-git-worktrees → dispatching-parallel-agents |
 
 ## Prerequisites
 
