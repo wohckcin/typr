@@ -7,7 +7,7 @@ Retire the OpenSpec CLI workflow from typr. Keep everything the project has writ
 ## Goals
 
 - The 18 capability specs survive as plain Markdown under `docs/specs/`.
-- `motion-coverage` survives as one superpowers plan under `docs/superpowers/plans/`, with its decisions, 14 tasks and 3 acceptance requirements intact.
+- `motion-coverage` survives as one plan under `docs/plans/`, with its decisions, 14 tasks and 3 acceptance requirements intact.
 - No OpenSpec CLI, config, skills, active change or archive remains in the tree.
 - README points readers at the new homes of promises and plans.
 
@@ -21,7 +21,7 @@ Retire the OpenSpec CLI workflow from typr. Keep everything the project has writ
 
 - No `openspec` command is run after the cutover.
 - Spec files move byte-for-byte; only their paths change.
-- Superpowers conventions apply: specs and plans live under `docs/superpowers/`; the durable promise record is the plain `docs/specs/` tree.
+- Superpowers defaults apply: designs are flat files under `docs/specs/` and plans under `docs/plans/`; the durable promise record is the 18 named subdirectories of `docs/specs/`.
 
 ## Approaches
 
@@ -32,10 +32,10 @@ Retire the OpenSpec CLI workflow from typr. Keep everything the project has writ
 ## Decisions
 
 - `openspec/specs/*` → `docs/specs/*` (18 dirs, unchanged content).
-- `openspec/changes/motion-coverage/` → `docs/superpowers/plans/2026-11-19-motion-coverage.md`. The proposal supplies the design, `tasks.md` supplies the checkbox sequence, and the delta spec's three requirements become the acceptance section — an unimplemented requirement does not belong in the promise record.
+- `openspec/changes/motion-coverage/` → `docs/plans/2026-11-19-motion-coverage.md`. The proposal supplies the design, `tasks.md` supplies the checkbox sequence, and the delta spec's three requirements become the acceptance section — an unimplemented requirement does not belong in the promise record.
 - `openspec/changes/archive/` (37 changes) and the rest of `openspec/` are deleted; git history is the archive.
 - Remove both the six `.claude/skills/openspec-*` symlinks and their six `.agents/skills/openspec-*` targets, plus the `.agents/skills/.openspec-target` marker. `nsh`, `nsh-design-guides` and `run-typr` stay.
-- `README.md:6-7` names `docs/specs/` as the promise record and `docs/superpowers/plans/` as work in flight.
+- `README.md:6-7` names `docs/specs/` as the promise record and `docs/plans/` as work in flight.
 - New work follows brainstorming → writing-plans → executing-plans.
 
 ## Builder notes

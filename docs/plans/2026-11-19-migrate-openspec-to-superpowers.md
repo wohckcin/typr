@@ -4,11 +4,11 @@
 
 **Goal:** Retire OpenSpec from typr while preserving the promise specs, the one unfinished change and the README's description of where work lives.
 
-**Architecture:** Move `openspec/specs/` verbatim to `docs/specs/`, fold the `motion-coverage` change into a single superpowers plan, delete the CLI tree and its skills, then point the README at the new locations. Files are moved with `git mv` so history follows them.
+**Architecture:** Move `openspec/specs/` verbatim to `docs/specs/`, fold the `motion-coverage` change into a single plan, delete the CLI tree and its skills, then point the README at the new locations. Files are moved with `git mv` so history follows them.
 
 **Tech Stack:** Git, Markdown, the superpowers brainstorming/writing-plans/executing-plans process.
 
-**Spec:** `docs/superpowers/specs/2026-11-19-migrate-openspec-to-superpowers-design.md`
+**Spec:** `docs/specs/2026-11-19-migrate-openspec-to-superpowers-design.md`
 
 ## Global Constraints
 
@@ -59,7 +59,7 @@ git add -A docs openspec && git commit -m "refactor: move capability specs under
 ### Task 2: Fold motion-coverage into a superpowers plan
 
 **Files:**
-- Create: `docs/superpowers/plans/2026-11-19-motion-coverage.md`
+- Create: `docs/plans/2026-11-19-motion-coverage.md`
 - Read only: `openspec/changes/motion-coverage/proposal.md`, `design.md`, `tasks.md`, `specs/motion/spec.md`
 
 **Interfaces:**
@@ -73,9 +73,9 @@ Use the writing-plans header. In "Decisions" copy the five decisions from `desig
 - [ ] **Step 2: Verify content survived the conversion**
 
 ```bash
-grep -c '^- \[ \]' docs/superpowers/plans/2026-11-19-motion-coverage.md       # 14
-grep -c '^#### Scenario:' docs/superpowers/plans/2026-11-19-motion-coverage.md   # 6
-grep -c '^### Requirement:' docs/superpowers/plans/2026-11-19-motion-coverage.md  # 3
+grep -c '^- \[ \]' docs/plans/2026-11-19-motion-coverage.md       # 14
+grep -c '^#### Scenario:' docs/plans/2026-11-19-motion-coverage.md   # 6
+grep -c '^### Requirement:' docs/plans/2026-11-19-motion-coverage.md  # 3
 ```
 
 Expected: `14`, `6`, `3`.
@@ -83,7 +83,7 @@ Expected: `14`, `6`, `3`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/superpowers/plans/2026-11-19-motion-coverage.md && git commit -m "docs: convert motion-coverage into a superpowers plan"
+git add docs/plans/2026-11-19-motion-coverage.md && git commit -m "docs: convert motion-coverage into a superpowers plan"
 ```
 
 ### Task 3: Delete the OpenSpec machinery
@@ -133,7 +133,7 @@ git commit -m "chore: remove OpenSpec CLI tree and skills"
 - Modify: `README.md:6-7`
 
 **Interfaces:**
-- Consumes: `docs/specs/`, `docs/superpowers/plans/`.
+- Consumes: `docs/specs/`, `docs/plans/`.
 - Produces: a README that names the new homes.
 
 - [ ] **Step 1: Rewrite the status sentence**
@@ -142,7 +142,7 @@ Replace the two lines with:
 
 ```markdown
 Status: the port from Rune to Native Shell is merged; what the app promises lives in
-`docs/specs/`, and plans in flight in `docs/superpowers/plans/`.
+`docs/specs/`, and plans in flight in `docs/plans/`.
 ```
 
 - [ ] **Step 2: Verify no stale live reference remains**
@@ -151,7 +151,7 @@ Status: the port from Rune to Native Shell is merged; what the app promises live
 grep -rIn --exclude-dir=.git --exclude-dir=target 'openspec\|opsx' README.md nsh.json mise.toml Cargo.toml .gitignore scripts .github 2>/dev/null || true
 ```
 
-Expected: no output. The migration docs under `docs/superpowers/` intentionally name OpenSpec, so the search is scoped to live config/metadata paths.
+Expected: no output. The migration docs under `docs/` intentionally name OpenSpec, so the search is scoped to live config/metadata paths.
 
 - [ ] **Step 3: Verify the surviving skill set**
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust, Native Shell motion tokens in `crates/typr/src/ui/motion.rs`, the screen harness in `crates/typr/tests/`.
 
-**Spec:** `docs/superpowers/specs/2026-11-19-migrate-openspec-to-superpowers-design.md`
+**Spec:** `docs/specs/2026-11-19-migrate-openspec-to-superpowers-design.md`
 
 ## Decisions
 
