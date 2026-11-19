@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust, Native Shell motion tokens in `crates/typr/src/ui/motion.rs`, the screen harness in `crates/typr/tests/`.
 
-**Spec:** `docs/specs/2026-11-19-migrate-openspec-to-superpowers-design.md`
+**Spec:** This plan's Decisions and Acceptance sections; the motion source was the retired `openspec/changes/motion-coverage/` change.
 
 ## Decisions
 
@@ -62,7 +62,7 @@ Every added movement is removed under reduced motion, and the state change stays
 ### 4. The vocabulary
 
 - [ ] 4.1 `PRESS_SCALE_ICON`: delete it from `crates/typr/src/ui/motion.rs`, or apply it to an icon button that
-      exists. Record which in design.md Decision 4.
+      exists. Record which in Decision 4 above.
       Verification: `grep -rnw PRESS_SCALE_ICON crates/typr/src` names either a control or nothing.
 - [ ] 4.2 `tests/tokens.rs`: a case that every `pub const` in `ui/motion.rs` is named outside it.
       Verification: the case fails when a token is planted unused, passes on the tree after 1–3.
