@@ -31,11 +31,22 @@ fails on a spacing, type, radius or colour literal, or on a `nsh_base` control u
 
 These are the superpowers skill defaults. The 18 capability specs live in named subdirectories of `docs/specs/`; design documents are flat files at its root, not inside a subdirectory.
 
-**Flows**
+**The basic workflow**
+
+1. **brainstorming** — Activates before building anything. Draws out what you actually want, and why, through questions that get you describing it, then plays its understanding back for correction. Small changes get agreed in chat; projects get a written design document a builder could plan from.
+2. **using-git-worktrees** — Activates after design approval. Creates isolated workspace on new branch, runs project setup, verifies clean test baseline.
+3. **writing-plans** — Activates with approved design. Breaks work into bite-sized tasks (2-5 minutes each). Every task has exact file paths, complete code, verification steps.
+4. **subagent-driven-development** or **executing-plans** — Activates with plan. Either dispatches a fresh subagent per task with a review after each (most thorough), or implements every task inline in the current session with one fresh review of the whole branch at the end (cheapest).
+5. **test-driven-development** — Activates during implementation. Enforces RED-GREEN-REFACTOR: write failing test, watch it fail, write minimal code, watch it pass, commit. Deletes code written before tests.
+6. **requesting-code-review** — Activates between tasks. Reviews against plan, reports issues by severity. Critical issues block progress.
+7. **finishing-a-development-branch** — Activates when tasks complete. Verifies tests, presents options (merge/PR/keep/discard), cleans up worktree.
+
+The agent checks for relevant skills before any task. Mandatory workflows, not suggestions.
+
+**Other flows**
 
 | Work | Flow |
 |---|---|
-| New feature | brainstorming → writing-plans → subagent-driven-development (or executing-plans) → verification-before-completion → finishing-a-development-branch |
 | Bug | systematic-debugging → test-driven-development → verification-before-completion |
 | Review | requesting-code-review → receiving-code-review |
 | Isolation/parallel | using-git-worktrees → dispatching-parallel-agents |
