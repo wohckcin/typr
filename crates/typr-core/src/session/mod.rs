@@ -173,6 +173,15 @@ pub enum Mode {
     Cram,
 }
 
+/// One prompt of one card: what a session answers, since a card can hold several.
+type Prompt = (Id, String);
+
+impl Entry {
+    fn key(&self) -> Prompt {
+        (self.card, self.prompt.clone())
+    }
+}
+
 /// The cards this session is walking, in order.
 #[derive(Debug)]
 pub struct Session {
@@ -183,21 +192,23 @@ pub struct Session {
     revealed: usize,
     /// Grades recorded in this session, in the order they were answered.
     pub grades: Vec<Grade>,
-    /// The grade sent to the store and not yet acknowledged, with the card it was given for: the
-    /// answer names a card, never a position, because the user may move on before it lands.
-    awaiting: Option<(u64, Id, Grade)>,
+    /// The grade sent to the store and not yet acknowledged, with the prompt it was given for: the
+    /// answer names a prompt, never a position, because the user may move on before it lands.
+    awaiting: Option<(u64, Prompt, Grade)>,
     /// A grade chosen but not yet sent.
-    pending: Option<(Id, Grade)>,
+    pending: Option<(Prompt, Grade)>,
     /// Cards whose relearning step is still in the future, and when it lands.
     waiting: Vec<(i64, Entry)>,
     /// Whether the current card is being revisited read-only.
     pub read_only: bool,
-    /// Cards answered in this session. They stay in the queue so `backward` can show them again,
+    /// Prompts answered in this session. They stay in the queue so `backward` can show them again,
     /// and are skipped everywhere the queue is read forward.
-    answered: HashSet<Id>,
-    /// Cards that joined this session with a schedule already behind them. They keep the relearning
-    /// route after a lapse even when the session itself was opened on the new-card queue.
-    scheduled: HashSet<Id>,
+    answered: HashSet<Prompt>,
+    /// Prompts that joined this session with a schedule already behind them. They keep the
+    /// relearning route after a lapse even when the session itself was opened on the new-card queue.
+    scheduled: HashSet<Prompt>,
+    /// How long a forgotten due prompt waits before it is asked again.
+    learning_step_ms: i64,
 }
 
 impl Session {
@@ -237,9 +248,16 @@ impl Session {
             read_only: false,
             answered: HashSet::new(),
             scheduled: HashSet::new(),
+            learning_step_ms: LEARNING_STEP_MS,
         };
         session.show_first_side();
         session
+    }
+
+    /// Wait `ms` instead of the default step before a forgotten due prompt comes back.
+    pub fn with_learning_step(mut self, ms: i64) -> Session {
+        self.learning_step_ms = ms;
+        self
     }
 
     /// Which queue this session walks, or that it walks a filter instead.
@@ -258,14 +276,6 @@ impl Session {
             None => 0,
         };
         self.read_only = false;
-    }
-
-    /// The prompt key of one card in this session, if it is here at all.
-    pub fn prompt_of(&self, card: Id) -> Option<&str> {
-        self.entries
-            .iter()
-            .find(|entry| entry.card == card)
-            .map(|entry| entry.prompt.as_str())
     }
 
     /// The card on screen, if there is one.
@@ -354,20 +364,21 @@ impl Session {
         true
     }
 
-    /// Choose a grade for the card on screen. The caller sends it and reports the id back.
-    pub fn grade(&mut self, grade: Grade) -> Option<(Id, Grade)> {
+    /// Choose a grade for the prompt on screen. The caller sends it under that card and prompt
+    /// key, and reports the id back.
+    pub fn grade(&mut self, grade: Grade) -> Option<(Id, String, Grade)> {
         if !self.gradeable() || self.pending.is_some() {
             return None;
         }
-        let card = self.current()?.card;
-        self.pending = Some((card, grade));
-        Some((card, grade))
+        let (card, prompt) = self.current()?.key();
+        self.pending = Some(((card, prompt.clone()), grade));
+        Some((card, prompt, grade))
     }
 
     /// The store has taken the grade under `id`.
     pub fn sent(&mut self, id: u64) {
-        if let Some((card, grade)) = self.pending.take() {
-            self.awaiting = Some((id, card, grade));
+        if let Some((prompt, grade)) = self.pending.take() {
+            self.awaiting = Some((id, prompt, grade));
         }
     }
 
@@ -379,8 +390,8 @@ impl Session {
 
     /// The store did not take the grade: the card stays as it was, so it can be answered again.
     pub fn refuse(&mut self, id: u64) {
-        if let Some((awaiting, _, _)) = self.awaiting {
-            if awaiting != id {
+        if let Some((awaiting, _, _)) = &self.awaiting {
+            if *awaiting != id {
                 return;
             }
             self.awaiting = None;
@@ -394,33 +405,30 @@ impl Session {
         if self.mode != Mode::Cram {
             return false;
         }
-        let Some((card, grade)) = self.pending.take() else {
+        let Some((prompt, grade)) = self.pending.take() else {
             return false;
         };
         self.grades.push(grade);
-        self.cram_answer(card, grade);
+        self.cram_answer(prompt, grade);
         true
     }
 
     /// The store has answered `id`; the session can move on.
     pub fn acknowledge(&mut self, id: u64, now_ms: i64) -> bool {
-        let Some((awaiting, card, grade)) = self.awaiting else {
+        let Some((_, prompt, grade)) = self.awaiting.take_if(|(awaiting, _, _)| *awaiting == id)
+        else {
             return false;
         };
-        if awaiting != id {
-            return false;
-        }
-        self.awaiting = None;
         self.grades.push(grade);
         if self.mode == Mode::Cram {
             // The mode's rule, not the transport's: a cram session never sends a grade, but a
             // grade that did come back must still move the card the cram way.
-            self.cram_answer(card, grade);
+            self.cram_answer(prompt, grade);
             return true;
         }
         // A card that arrived with a schedule behind it keeps that schedule: it waits out its
         // relearning step instead of being handed straight back as if it were new.
-        let queue = if self.scheduled.contains(&card) {
+        let queue = if self.scheduled.contains(&prompt) {
             Queue::Due
         } else {
             self.queue
@@ -428,29 +436,29 @@ impl Session {
         match (queue, grade) {
             // A forgotten card is not answered: one leaves the queue for later, the other comes
             // straight back, and neither counts as done.
-            (Queue::New, Grade::Forgot) => self.requeue(card),
+            (Queue::New, Grade::Forgot) => self.requeue(&prompt),
             (Queue::Due, Grade::Forgot) => {
-                if let Some(entry) = self.take(card) {
-                    self.waiting.push((now_ms + LEARNING_STEP_MS, entry));
+                if let Some(entry) = self.take(&prompt) {
+                    self.waiting.push((now_ms + self.learning_step_ms, entry));
                 }
             }
-            _ => self.answer(card),
+            _ => self.answer(prompt),
         }
         true
     }
 
     /// A cram answer moves the card within the session and nowhere else: remembered is done,
     /// forgot comes round again before the run can finish.
-    fn cram_answer(&mut self, card: Id, grade: Grade) {
+    fn cram_answer(&mut self, prompt: Prompt, grade: Grade) {
         match grade {
-            Grade::Forgot => self.requeue(card),
-            Grade::Remembered => self.answer(card),
+            Grade::Forgot => self.requeue(&prompt),
+            Grade::Remembered => self.answer(prompt),
         }
     }
 
-    /// Put a card back at the end of the queue, so this run asks it again.
-    fn requeue(&mut self, card: Id) {
-        if let Some(entry) = self.take(card) {
+    /// Put a prompt back at the end of the queue, so this run asks it again.
+    fn requeue(&mut self, prompt: &Prompt) {
+        if let Some(entry) = self.take(prompt) {
             let empty = self.current().is_none();
             self.entries.push(entry);
             if empty {
@@ -459,10 +467,11 @@ impl Session {
         }
     }
 
-    /// Record that `card` is answered, and step over it if the cursor is on it.
-    fn answer(&mut self, card: Id) {
-        self.answered.insert(card);
-        if self.entries.get(self.at).map(|entry| entry.card) == Some(card) {
+    /// Record that `prompt` is answered, and step over it if the cursor is on it.
+    fn answer(&mut self, prompt: Prompt) {
+        let on_screen = self.current().is_some_and(|entry| entry.key() == prompt);
+        self.answered.insert(prompt);
+        if on_screen {
             self.at += 1;
             self.seek();
             self.show_first_side();
@@ -474,15 +483,18 @@ impl Session {
         while self
             .entries
             .get(self.at)
-            .is_some_and(|entry| self.answered.contains(&entry.card))
+            .is_some_and(|entry| self.answered.contains(&entry.key()))
         {
             self.at += 1;
         }
     }
 
-    /// Lift a card out of the queue wherever it sits, leaving the cursor on the card the user sees.
-    fn take(&mut self, card: Id) -> Option<Entry> {
-        let index = self.entries.iter().position(|entry| entry.card == card)?;
+    /// Lift a prompt out of the queue wherever it sits, leaving the cursor on the one the user sees.
+    fn take(&mut self, prompt: &Prompt) -> Option<Entry> {
+        let index = self
+            .entries
+            .iter()
+            .position(|entry| entry.key() == *prompt)?;
         let entry = self.entries.remove(index);
         if index < self.at {
             self.at -= 1;
@@ -514,7 +526,7 @@ impl Session {
             .get(self.at.min(self.entries.len())..)
             .unwrap_or_default()
             .iter()
-            .filter(|entry| !self.answered.contains(&entry.card))
+            .filter(|entry| !self.answered.contains(&entry.key()))
             .map(|entry| entry.card)
             .collect()
     }
@@ -528,14 +540,14 @@ impl Session {
         let mut shuffle = crate::shuffle::Shuffle::new(seed);
         let mut index = self.at;
         while index < self.entries.len() {
-            if self.answered.contains(&self.entries[index].card) {
+            if self.answered.contains(&self.entries[index].key()) {
                 index += 1;
                 continue;
             }
             let overdue = self.entries[index].overdue;
             let mut end = index;
             while end < self.entries.len()
-                && !self.answered.contains(&self.entries[end].card)
+                && !self.answered.contains(&self.entries[end].key())
                 && self.entries[end].overdue == overdue
             {
                 end += 1;
@@ -569,7 +581,7 @@ impl Session {
     /// A prompt that fell due while the session was running joins it, with the schedule it had.
     pub fn arrive(&mut self, entry: Entry) {
         let empty = self.current().is_none();
-        self.scheduled.insert(entry.card);
+        self.scheduled.insert(entry.key());
         self.entries.push(entry);
         if empty {
             self.show_first_side();

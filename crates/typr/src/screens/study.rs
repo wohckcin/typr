@@ -104,10 +104,7 @@ pub fn study(
     };
     let grade = move |g: Grade| {
         let sent = session.with(|s| s.borrow_mut().grade(g));
-        if let Some((id, grade)) = sent {
-            let key = session
-                .with(|s| s.borrow().prompt_of(id).map(str::to_owned))
-                .unwrap_or_default();
+        if let Some((id, key, grade)) = sent {
             let taken = grade_out(id, key, grade).is_ok();
             refused.set(!taken);
             session.with(|s| {
