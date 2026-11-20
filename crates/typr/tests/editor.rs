@@ -622,3 +622,42 @@ fn the_way_back_asks_while_the_source_holds_the_keyboard() -> Result<(), String>
     app.wait_for("Save this card before leaving?")?;
     Ok(())
 }
+
+#[test]
+fn attaching_a_second_picture_of_the_same_name_keeps_the_first() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let first = dir.path().join("one").join("cycle.png");
+    let second = dir.path().join("two").join("cycle.png");
+    std::fs::create_dir_all(first.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(second.parent().unwrap()).unwrap();
+    std::fs::write(&first, b"first").unwrap();
+    std::fs::write(&second, b"second").unwrap();
+
+    let root = dir.path().join("attachments");
+    let one = attach_image(&first, &root).expect("first");
+    let two = attach_image(&second, &root).expect("second");
+    assert_ne!(one, two);
+    assert_eq!(std::fs::read(root.join(&one)).unwrap(), b"first");
+    assert_eq!(std::fs::read(root.join(&two)).unwrap(), b"second");
+}
+
+#[test]
+fn a_picture_with_spaces_and_brackets_in_its_name_is_found_and_resolved() {
+    let name = "Screenshot (1).png";
+    let markdown = format!("see {}", image_reference("shot", name));
+    assert_eq!(typr::screens::editor::image_references(&markdown), [name]);
+    let root = std::path::Path::new("/tmp/typr/attachments");
+    assert_eq!(
+        resolve_images(&markdown, root),
+        "see ![shot](</tmp/typr/attachments/Screenshot (1).png>)"
+    );
+}
+
+#[test]
+fn a_data_folder_with_a_space_still_resolves_to_a_destination_the_renderer_reads() {
+    let root = std::path::Path::new("/Users/me/Library/Application Support/typr/attachments");
+    assert_eq!(
+        resolve_images("![x](a.png)", root),
+        "![x](</Users/me/Library/Application Support/typr/attachments/a.png>)"
+    );
+}
