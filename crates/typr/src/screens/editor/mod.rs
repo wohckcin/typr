@@ -31,26 +31,50 @@ pub use diagram::{Cover, Diagram, Rect, cover_box, diagram_pane, rect_from_corne
 pub use dialogs::{Answer, Leaving, clear_question, leave_decision, leaving_choice};
 pub use fields::{TemplateField, field_table, template_preview};
 
-/// The file name a chosen picture is copied to, which is also the reference the card holds.
+/// The file name a chosen picture is copied to, which is also the reference the card holds. A name
+/// already in use gets `-2`, `-3`, so a second picture never replaces the first.
 ///
 /// A copy that cannot be made is refused rather than reported: a card keeps its previous picture
 /// and the caller shows why.
 pub fn attach_image(source: &Path, root: &Path) -> std::io::Result<String> {
-    let name = source
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, "the file has no name")
-        })?;
-    std::fs::create_dir_all(root)?;
-    std::fs::copy(source, root.join(name))?;
-    Ok(name.to_owned())
+    typr_core::transfer::attach(root, source)
+}
+
+/// An image destination as markdown reads it: a name with spaces or parentheses goes in `<...>`.
+// shortcut: a name holding `<` or `>` is not escaped, when such names turn up.
+fn destination_text(path: &str) -> String {
+    if path.contains(|c: char| c.is_whitespace() || "()<>".contains(c)) {
+        format!("<{path}>")
+    } else {
+        path.to_owned()
+    }
+}
+
+/// The destination that opens `text` (what follows `](`) and how many bytes it takes through its
+/// closing `)`: `<...>` as written, or bare with balanced parentheses, as CommonMark reads it.
+fn destination(text: &str) -> Option<(&str, usize)> {
+    if let Some(inner) = text.strip_prefix('<') {
+        let end = inner.find('>')?;
+        return inner[end + 1..]
+            .starts_with(')')
+            .then(|| (&inner[..end], end + 3));
+    }
+    let mut depth = 0;
+    for (at, c) in text.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => return Some((&text[..at], at + 1)),
+            ')' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
 }
 
 /// The image reference written into the card: `![alt](name)`, so a card's text stays a markdown
 /// image and the store copies the picture beside the library.
 pub fn image_reference(alt: &str, name: &str) -> String {
-    format!("![{alt}]({name})")
+    format!("![{alt}]({})", destination_text(name))
 }
 
 /// The card's text with `![alt](name)` rewritten to the absolute path under `root`, so the renderer
@@ -69,11 +93,11 @@ pub fn resolve_images(markdown: &str, root: &Path) -> String {
             out.push_str(after);
             return out;
         };
-        let Some(end) = after[close + 2..].find(')') else {
+        let tail = &after[close + 2..];
+        let Some((src, used)) = destination(tail) else {
             out.push_str(after);
             return out;
         };
-        let src = &after[close + 2..close + 2 + end];
         let inside = !src.trim().is_empty()
             && Path::new(src.trim()).is_absolute().eq(&false)
             && !Path::new(src.trim())
@@ -81,12 +105,14 @@ pub fn resolve_images(markdown: &str, root: &Path) -> String {
                 .any(|c| matches!(c, std::path::Component::ParentDir));
         out.push_str(&after[..close + 2]);
         if inside {
-            out.push_str(&root.join(src.trim()).display().to_string());
+            out.push_str(&destination_text(
+                &root.join(src.trim()).display().to_string(),
+            ));
         } else {
-            out.push_str(src);
+            out.push_str(&tail[..used - 1]);
         }
         out.push(')');
-        rest = &after[close + 2 + end + 1..];
+        rest = &tail[used..];
     }
     out.push_str(rest);
     out
@@ -109,11 +135,12 @@ pub fn image_references(markdown: &str) -> Vec<String> {
     while let Some(at) = rest.find("![") {
         let after = &rest[at + 2..];
         let Some(close) = after.find("](") else { break };
-        let Some(end) = after[close + 2..].find(')') else {
+        let tail = &after[close + 2..];
+        let Some((src, used)) = destination(tail) else {
             break;
         };
-        found.push(after[close + 2..close + 2 + end].to_owned());
-        rest = &after[close + 2 + end + 1..];
+        found.push(src.to_owned());
+        rest = &tail[used..];
     }
     found
 }
