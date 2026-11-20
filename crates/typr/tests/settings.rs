@@ -6,9 +6,7 @@ use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use std::path::PathBuf;
 
-use typr::screens::settings::{
-    LibraryInfo, NEW_CARD_CAP_MAX, Values, check_new_card_cap, settings,
-};
+use typr::screens::settings::{LibraryInfo, Values, check_new_card_cap, settings};
 
 fn library() -> LibraryInfo {
     let mut info = LibraryInfo::default();
@@ -56,9 +54,7 @@ fn the_screen_offers_import_and_export() -> Result<(), String> {
 fn an_out_of_range_cap_is_refused_and_the_old_value_stays() {
     assert_eq!(
         check_new_card_cap("100000"),
-        Err(format!(
-            "New cards a day must be {NEW_CARD_CAP_MAX} or less"
-        ))
+        Err("New cards a day must be 1000 or less".to_string())
     );
     assert!(check_new_card_cap("abc").is_err());
     assert_eq!(check_new_card_cap(" 25 "), Ok(25));
@@ -71,7 +67,7 @@ fn a_refused_cap_names_its_limit_on_screen() -> Result<(), String> {
     app.clear("text:20")?;
     app.type_text("text: >> nth=1", "100000")?;
     app.press("role:button[Apply]")?;
-    app.wait_for("text:/10000 or less/")?;
+    app.wait_for("text:/1000 or less/")?;
     app.wait_for("text:/cap=20/")?;
     Ok(())
 }

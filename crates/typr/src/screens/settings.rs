@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use nsh_core::prelude::*;
-use typr_core::store::{Db, Theme};
+use typr_core::store::{Db, MAX_NEW_PER_DAY, Theme};
 
 use crate::ui::{
     button::{Variant, button},
@@ -22,20 +22,15 @@ use crate::ui::{
     tokens,
 };
 
-/// The most new cards a day may be asked for.
-pub const NEW_CARD_CAP_MAX: u32 = 10_000;
-
-/// Checks a new-card cap typed by the user. The error names the limit so the user knows what is
-/// allowed.
+/// Checks a new-card cap typed by the user against the limit the store keeps. The error names the
+/// limit so the user knows what is allowed.
 pub fn check_new_card_cap(text: &str) -> Result<u32, String> {
     let value: u32 = text
         .trim()
         .parse()
-        .map_err(|_| format!("New cards a day must be a whole number up to {NEW_CARD_CAP_MAX}"))?;
-    if value > NEW_CARD_CAP_MAX {
-        return Err(format!(
-            "New cards a day must be {NEW_CARD_CAP_MAX} or less"
-        ));
+        .map_err(|_| format!("New cards a day must be a whole number up to {MAX_NEW_PER_DAY}"))?;
+    if value > MAX_NEW_PER_DAY {
+        return Err(format!("New cards a day must be {MAX_NEW_PER_DAY} or less"));
     }
     Ok(value)
 }

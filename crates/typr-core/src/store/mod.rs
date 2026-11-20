@@ -18,7 +18,7 @@ use crate::library_view::ViewMode;
 
 pub use db::{Db, Folded, folded};
 pub use schema::{CURRENT_VERSION, SchemaFacts};
-pub use settings::{Group, SettingKey, SettingValue, Theme};
+pub use settings::{Group, MAX_NEW_PER_DAY, SettingKey, SettingValue, Theme};
 pub use task::{Handle, Waker, WorkerStatus};
 pub use view::{SavedView, Sort, SortDir, ViewSpec, shuffled};
 
