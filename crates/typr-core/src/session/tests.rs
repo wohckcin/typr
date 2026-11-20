@@ -638,3 +638,23 @@ fn a_cram_session_repeats_what_was_forgotten() {
         vec![Grade::Forgot, Grade::Remembered, Grade::Remembered]
     );
 }
+
+#[test]
+fn two_prompts_of_one_card_are_each_asked() {
+    let mut session = Session::new(
+        Queue::New,
+        vec![
+            Entry::masked(1, "cloze:1", "[ … ] b", "a b", 0),
+            Entry::masked(1, "cloze:2", "a [ … ]", "a b", 0),
+        ],
+    );
+    answer(&mut session, Grade::Remembered, NOON);
+
+    assert!(!session.finished(), "the second prompt is still to answer");
+    assert_eq!(
+        session.current().map(|entry| entry.prompt.as_str()),
+        Some("cloze:2")
+    );
+    answer(&mut session, Grade::Remembered, NOON);
+    assert!(session.finished());
+}
