@@ -61,6 +61,28 @@ fn an_empty_deck_offers_a_new_card() -> Result<(), String> {
     Ok(())
 }
 
+#[component]
+fn SoonDue() -> impl IntoElement {
+    use typr::screens::grid::Schedule;
+    typr::ui::tokens::install();
+    let mut soon = tiles(2);
+    soon[0].schedule = Schedule::Interval(0);
+    soon[1].schedule = Schedule::Interval(1);
+    let memo = computed(move || soon.clone());
+    view()
+        .flex_1()
+        .child(grid(memo, signal(None), || {}, |_| {}))
+}
+
+#[test]
+fn a_card_due_within_a_day_does_not_read_as_zero_days() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<SoonDue>())).unwrap();
+    app.wait_for("Under a day")?;
+    app.wait_for("1 day")?;
+    assert!(!app.screen().shows("0 days"));
+    Ok(())
+}
+
 #[test]
 fn a_recycled_cell_shows_the_row_it_is_given() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
