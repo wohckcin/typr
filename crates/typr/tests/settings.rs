@@ -198,3 +198,17 @@ fn clearing_the_query_restores_the_rows() -> Result<(), String> {
     app.wait_for("Show review counts")?;
     Ok(())
 }
+
+#[test]
+fn the_screen_accepts_exactly_the_caps_the_store_keeps() {
+    use typr_core::store::{SettingKey, SettingValue};
+    for cap in [0_u32, 1, 999, 1_000, 1_001, 10_000] {
+        assert_eq!(
+            check_new_card_cap(&cap.to_string()).is_ok(),
+            SettingKey::NewPerDay
+                .validate(&SettingValue::Number(cap))
+                .is_ok(),
+            "a cap of {cap}"
+        );
+    }
+}
