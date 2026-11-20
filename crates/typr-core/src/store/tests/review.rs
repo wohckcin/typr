@@ -1441,3 +1441,30 @@ fn a_new_prompt_on_a_reviewed_card_counts_toward_the_daily_cap() {
         "the reverse prompt was first answered today"
     );
 }
+
+#[test]
+fn a_card_whose_prompts_are_all_learned_today_counts_once_toward_the_daily_cap() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Counting");
+    let card = card(&mut db, deck, "front\n---\nback");
+    for key in ["fwd", "rev"] {
+        db.apply(
+            &Command::Grade {
+                card,
+                key: key.to_string(),
+                grade: Grade::Remembered,
+                duration_ms: None,
+            },
+            NOON,
+        )
+        .expect("grade");
+    }
+
+    assert_eq!(
+        db.learned_on(crate::day::study_day(NOON, 0), 0)
+            .expect("learned"),
+        1,
+        "the cap counts cards, so one card learned both ways takes one place"
+    );
+}
