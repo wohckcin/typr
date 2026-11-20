@@ -157,6 +157,9 @@ pub fn attach_bytes(root: &Path, name: &str, bytes: &[u8]) -> std::io::Result<St
 
 fn write_attachment(root: &Path, name: &str, bytes: &[u8]) -> std::io::Result<String> {
     std::fs::create_dir_all(root)?;
+    // A markdown destination cannot hold `<` or `>`, so the copy is named without them.
+    let name = name.replace(['<', '>'], "_");
+    let name = name.as_str();
     let (stem, extension) = match name.rfind('.') {
         Some(dot) if dot > 0 => (&name[..dot], &name[dot..]),
         _ => (name, ""),
