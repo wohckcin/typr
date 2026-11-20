@@ -699,7 +699,7 @@ pub fn shell_over(
                 }
                 Screen::Settings => {
                     let cap = snapshot_signal.get_untracked().settings.new_per_day;
-                    let mut values = Values::new(cap, true);
+                    let mut values = Values::new(cap);
                     values.theme = theme;
                     let write_cap = write.clone();
                     settings(

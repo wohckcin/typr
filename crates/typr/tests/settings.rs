@@ -21,7 +21,7 @@ fn library() -> LibraryInfo {
 #[component]
 fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
-    let values = Values::new(20, true);
+    let values = Values::new(20);
     view()
         .child(settings(values, library(), |_| {}, || {}, || {}, || {}))
         .child(text(move || format!("cap={}", values.cap.get())))
@@ -144,22 +144,16 @@ fn the_theme_control_writes_the_stored_theme() -> Result<(), String> {
 fn a_row_matches_by_a_case_insensitive_part_of_its_label() {
     use typr::screens::settings::row_matches;
     assert!(
-        row_matches("Show review counts", ""),
+        row_matches("New cards a day", ""),
         "an empty query shows every row"
     );
+    assert!(row_matches("New cards a day", "   "), "so does a blank one");
+    assert!(row_matches("New cards a day", "CARDS"), "case is ignored");
     assert!(
-        row_matches("Show review counts", "   "),
-        "so does a blank one"
-    );
-    assert!(
-        row_matches("Show review counts", "REVIEW"),
-        "case is ignored"
-    );
-    assert!(
-        row_matches("Show review counts", "w rev"),
+        row_matches("New cards a day", "s a d"),
         "any part of the label"
     );
-    assert!(!row_matches("Theme", "counts"));
+    assert!(!row_matches("Theme", "cards"));
 }
 
 #[test]
@@ -169,7 +163,7 @@ fn typing_a_name_hides_the_other_rows() -> Result<(), String> {
     app.type_text("Find a setting", "theme")?;
     app.wait_for_gone("New cards a day", std::time::Duration::from_secs(5))?;
     assert!(app.screen().shows("Theme"), "the matching row stays");
-    assert!(!app.screen().shows("Show review counts"), "the others go");
+    assert!(!app.screen().shows("Database"), "the others go");
     Ok(())
 }
 
@@ -191,7 +185,7 @@ fn clearing_the_query_restores_the_rows() -> Result<(), String> {
     app.wait_for_gone("New cards a day", std::time::Duration::from_secs(5))?;
     app.clear("text:theme")?;
     app.wait_for("New cards a day")?;
-    app.wait_for("Show review counts")?;
+    app.wait_for("Theme")?;
     Ok(())
 }
 

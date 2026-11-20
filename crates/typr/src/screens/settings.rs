@@ -46,8 +46,6 @@ pub struct Values {
     pub cap_text: Signal<String>,
     /// The cap in force: the last accepted value.
     pub cap: Signal<u32>,
-    /// Whether the interface draws reviews' counts.
-    pub show_counts: Signal<bool>,
     /// The appearance in force. The caller replaces this with its own signal to store and apply it.
     pub theme: Signal<Theme>,
     /// What was typed in "Find a setting".
@@ -57,12 +55,11 @@ pub struct Values {
 }
 
 impl Values {
-    /// Values starting at `cap` with counts shown or hidden.
-    pub fn new(cap: u32, show_counts: bool) -> Self {
+    /// Values starting at `cap`.
+    pub fn new(cap: u32) -> Self {
         Self {
             cap_text: signal(cap.to_string()),
             cap: signal(cap),
-            show_counts: signal(show_counts),
             theme: signal(Theme::default()),
             query: signal(String::new()),
             refusal: signal(None),
@@ -262,17 +259,6 @@ pub fn settings(
                     Theme::ALL.map(|theme| (theme.label(), theme)).to_vec(),
                     move || values.theme.get(),
                     move |theme| values.theme.set(theme),
-                )
-                .into_element()
-            }),
-        ),
-        (
-            "Show review counts",
-            Rc::new(move || {
-                segmented(
-                    vec![("Off", false), ("On", true)],
-                    move || values.show_counts.get(),
-                    move |on| values.show_counts.set(on),
                 )
                 .into_element()
             }),

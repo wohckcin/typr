@@ -94,14 +94,7 @@ fn HistoryScreen() -> impl IntoElement {
 #[component]
 fn SettingsScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    settings(
-        Values::new(20, true),
-        library_info(),
-        |_| {},
-        || {},
-        || {},
-        || {},
-    )
+    settings(Values::new(20), library_info(), |_| {}, || {}, || {}, || {})
 }
 
 #[component]

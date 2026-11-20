@@ -131,11 +131,6 @@ by its value.
 - **WHEN** the reader presses `Light` in the theme control
 - **THEN** that segment becomes the selected one and the others do not
 
-#### Scenario: A flag is Off and On
-
-- **WHEN** "Show review counts" is drawn
-- **THEN** it offers the segments `Off` and `On`, and the one in force is selected
-
 ### Requirement: A setting can be found by name
 
 The settings screen SHALL carry a header with the breadcrumb "Settings / General" and a field labelled "Find a

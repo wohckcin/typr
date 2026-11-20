@@ -185,7 +185,7 @@ fn HistoryScreen() -> impl IntoElement {
 fn SettingsScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     settings(
-        Values::new(20, true),
+        Values::new(20),
         {
             let mut info = LibraryInfo::default();
             info.database = PathBuf::from("/tmp/typr/typr.sqlite3");
