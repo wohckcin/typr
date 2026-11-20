@@ -125,7 +125,7 @@ jobs:
       # file is named on purpose: `nsh test` with no argument also runs the crate's Rust tests,
       # which the checks job already ran against the whole workspace.
       - name: Test the app through the CLI
-        run: nsh test desktop.test.tsx --junit test-results.xml
+        run: nsh test tests/desktop.test.tsx --junit test-results.xml
 
       # The one artifact the workflow uploads, whatever the tests said, so a red run can be read.
       - name: Upload the test results
