@@ -119,9 +119,9 @@ fn the_settings_row_opens_settings_and_escape_returns() -> Result<(), String> {
     let mut app = start();
     app.wait_for("Settings")?;
     app.press("Settings")?;
-    app.wait_for("Show review counts")?;
+    app.wait_for("Find a setting")?;
     app.press_key("escape")?;
-    app.wait_for_gone("Show review counts", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone("Find a setting", std::time::Duration::from_secs(5))?;
     app.wait_for("Spanish 1")?;
     Ok(())
 }
@@ -725,9 +725,9 @@ fn the_library_opens_on_the_inbox_and_escape_returns_to_it() -> Result<(), Strin
     app.press("Biology")?;
     app.wait_for("the cell")?;
     app.press("Settings")?;
-    app.wait_for("Show review counts")?;
+    app.wait_for("Find a setting")?;
     app.press_key("escape")?;
-    app.wait_for_gone("Show review counts", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone("Find a setting", std::time::Duration::from_secs(5))?;
     assert!(
         !app.screen().shows("the cell"),
         "Escape went back to the Inbox"
@@ -740,9 +740,9 @@ fn the_search_row_shows_the_library_from_another_screen() -> Result<(), String> 
     let mut app = start();
     app.wait_for("Settings")?;
     app.press("Settings")?;
-    app.wait_for("Show review counts")?;
+    app.wait_for("Find a setting")?;
     app.press("Search")?;
-    app.wait_for_gone("Show review counts", std::time::Duration::from_secs(5))?;
+    app.wait_for_gone("Find a setting", std::time::Duration::from_secs(5))?;
     Ok(())
 }
 
