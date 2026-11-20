@@ -133,3 +133,50 @@ fn an_accepted_save_reads_saved_and_is_stored() -> Result<(), String> {
     assert!(markdown.starts_with('!'), "{markdown}");
     Ok(())
 }
+
+#[test]
+fn an_edited_template_field_is_stored_with_the_card() -> Result<(), String> {
+    use typr_core::store::Command;
+    let _turn = DATA_DIR.lock().unwrap_or_else(|e| e.into_inner());
+    let (root, card) = library_with_card("fields");
+    let db = Db::open(&root.join("typr.sqlite3")).unwrap();
+    let deck = db.snapshot().unwrap().decks[0].id;
+    db.apply(
+        &Command::SetDeckTemplate {
+            deck,
+            template: Some("<<Word>>\n---\n<<Meaning>>".to_owned()),
+        },
+        0,
+    )
+    .unwrap();
+    let fields = |meaning: &str| Command::SetFields {
+        card,
+        fields: vec![
+            ("Word".to_owned(), "gato".to_owned()),
+            ("Meaning".to_owned(), meaning.to_owned()),
+        ],
+    };
+    db.apply(&fields("cat"), 0).unwrap();
+    drop(db);
+
+    let mut app = start(&root);
+    app.wait_for("role:button[gato]")?;
+    app.press("role:button[gato]")?;
+    app.wait_for("Fields")?;
+    app.clear("text:cat >> nth=2")?;
+    app.type_text("text:Value", "feline")?;
+    app.wait_for("Unsaved")?;
+    app.press("role:button[Save]")?;
+    app.wait_for("Saved")?;
+    let stored = Db::open(&root.join("typr.sqlite3"))
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    let stored = stored.cards.iter().find(|c| c.id == card).unwrap();
+    assert!(
+        stored.markdown.contains("feline"),
+        "the card text is rendered from the edited field: {}",
+        stored.markdown
+    );
+    Ok(())
+}
