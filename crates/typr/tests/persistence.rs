@@ -53,6 +53,6 @@ fn an_imported_archive_shows_in_the_sidebar_without_a_restart() -> Result<(), St
     ])?;
     app.wait_for("Import")?;
     app.press("Import")?;
-    app.wait_for("Imported")?;
+    app.wait_for("Imported 1")?;
     Ok(())
 }
