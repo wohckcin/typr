@@ -208,3 +208,11 @@ fn the_screen_accepts_exactly_the_caps_the_store_keeps() {
         );
     }
 }
+
+#[test]
+fn the_screen_offers_no_review_counts_switch_that_nothing_reads() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
+    app.wait_for("Theme")?;
+    assert!(!app.screen().shows("Show review counts"));
+    Ok(())
+}
