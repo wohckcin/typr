@@ -123,6 +123,29 @@ fn open(archive: &Path) -> Result<ZipArchive<File>, StoreError> {
     })
 }
 
+/// The most one archive entry may inflate to. A zip header's size is the archive's own claim, so
+/// the read is bounded here instead. 64 MiB is far above any real `cards.json` or picture, and
+/// small enough that a zip bomb cannot exhaust memory.
+const ENTRY_LIMIT: u64 = 64 * 1024 * 1024;
+
+fn read_entry(entry: impl Read, name: &str, archive: &Path) -> Result<Vec<u8>, StoreError> {
+    let mut bytes = Vec::new();
+    entry
+        .take(ENTRY_LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| StoreError::Archive {
+            path: archive.to_path_buf(),
+            reason: format!("{name} could not be read: {error}"),
+        })?;
+    if bytes.len() as u64 > ENTRY_LIMIT {
+        return Err(StoreError::Archive {
+            path: archive.to_path_buf(),
+            reason: format!("{name} is larger than the {} MiB limit", ENTRY_LIMIT >> 20),
+        });
+    }
+    Ok(bytes)
+}
+
 /// Read one JSON entry, naming the entry when it is missing or malformed.
 fn read_json<T: DeserializeOwned>(
     zip: &mut ZipArchive<File>,
@@ -133,14 +156,8 @@ fn read_json<T: DeserializeOwned>(
         path: archive.to_path_buf(),
         reason: format!("no {name}: {error}"),
     })?;
-    let mut text = String::new();
-    entry
-        .read_to_string(&mut text)
-        .map_err(|error| StoreError::Archive {
-            path: archive.to_path_buf(),
-            reason: format!("{name} could not be read: {error}"),
-        })?;
-    serde_json::from_str(&text).map_err(|error| StoreError::Archive {
+    let bytes = read_entry(&mut entry, name, archive)?;
+    serde_json::from_slice(&bytes).map_err(|error| StoreError::Archive {
         path: archive.to_path_buf(),
         reason: format!("{name} is not valid JSON: {error}"),
     })
@@ -303,7 +320,12 @@ fn import_into(
                     reason: "a deck command did not return a deck".to_string(),
                 });
             };
-            deck_ids.insert(deck.id, id);
+            if deck_ids.insert(deck.id, id).is_some() {
+                return Err(StoreError::Archive {
+                    path: archive.to_path_buf(),
+                    reason: format!("deck {} appears more than once", deck.id),
+                });
+            }
             placed += 1;
         }
         if placed == 0 {
@@ -466,13 +488,7 @@ fn picture(zip: &mut ZipArchive<File>, entry: &str, archive: &Path) -> Result<Ve
         path: archive.to_path_buf(),
         reason: format!("the archive holds no picture {entry:?}"),
     })?;
-    let mut bytes = Vec::with_capacity(usize::try_from(file.size()).unwrap_or(0));
-    file.read_to_end(&mut bytes)
-        .map_err(|error| StoreError::Archive {
-            path: archive.to_path_buf(),
-            reason: format!("picture {entry:?} could not be read: {error}"),
-        })?;
-    Ok(bytes)
+    read_entry(&mut file, &format!("picture {entry:?}"), archive)
 }
 
 fn bad_review(archive: &Path, card: i64, reason: &str) -> StoreError {
