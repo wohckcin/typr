@@ -52,11 +52,19 @@ pub fn export_to(db: &Db, target: &std::path::Path) -> String {
 /// Imports the Mochi archive at `archive` and gives the line the diagnostics screen states: what
 /// arrived, or why the file was refused.
 pub fn import_from(db: &Db, archive: &std::path::Path, attachments: &std::path::Path) -> String {
-    let command = Command::ImportArchive {
+    let command = import_command(archive, attachments);
+    import_line(db.apply(&command, SystemClock.now_ms()), archive)
+}
+
+fn import_command(archive: &std::path::Path, attachments: &std::path::Path) -> Command {
+    Command::ImportArchive {
         archive: archive.to_path_buf(),
         attachments: attachments.to_path_buf(),
-    };
-    match db.apply(&command, SystemClock.now_ms()) {
+    }
+}
+
+fn import_line(result: Result<Outcome, StoreError>, archive: &std::path::Path) -> String {
+    match result {
         Ok(typr_core::store::Outcome::Imported(report)) => format!(
             "Imported {} decks, {} cards, {} reviews and {} pictures from {}",
             report.decks,
@@ -407,12 +415,10 @@ pub fn shell_over(
         }
     };
     let import = {
-        let db = db.clone();
+        let write = write.clone();
         let attachments = attachments.clone();
         move || {
-            let Some(db) = db.clone() else {
-                return;
-            };
+            let write = write.clone();
             let attachments = attachments.clone();
             spawn(async move {
                 match pick_paths(OpenDialog::files()).await {
@@ -420,7 +426,10 @@ pub fn shell_over(
                         let Some(archive) = paths.into_iter().next() else {
                             return;
                         };
-                        results.push(import_from(&db, &archive, &attachments).into());
+                        // Through the one writer: a stoppage is flagged and the snapshot re-read.
+                        if let Some(result) = write(import_command(&archive, &attachments), true) {
+                            results.push(import_line(result, &archive).into());
+                        }
                     }
                     Ok(None) => {}
                     Err(why) => results.push(why.into()),
