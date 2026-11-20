@@ -126,6 +126,9 @@ pub fn import(
     let mut cards = Vec::new();
     for (number, row) in rows.iter().enumerate().skip(1) {
         let line = number + 1;
+        if row.iter().all(|cell| cell.trim().is_empty()) {
+            continue;
+        }
         if row.len() != header.len() {
             return Err(StoreError::Malformed {
                 path: source.to_path_buf(),
@@ -137,9 +140,6 @@ pub fn import(
             });
         }
         let markdown = columns.get(row, 4);
-        if row.iter().all(|cell| cell.trim().is_empty()) {
-            continue;
-        }
         let sides =
             columns
                 .get(row, 1)
