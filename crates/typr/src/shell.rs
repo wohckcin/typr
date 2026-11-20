@@ -300,13 +300,14 @@ pub fn shell_over(
                     Vec::new()
                 }
             };
-            let cards = snapshot_signal.get_untracked().cards;
-            let entries: Vec<Entry> = entries_for(&cards, &pairs);
+            let snapshot = snapshot_signal.get_untracked();
+            let entries: Vec<Entry> = entries_for(&snapshot.cards, &pairs);
             if entries.is_empty() {
                 return;
             }
+            let step = snapshot.settings.learning_step_ms();
             screen.set(Screen::Study(Rc::new(std::cell::RefCell::new(
-                Session::new(queue, entries),
+                Session::new(queue, entries).with_learning_step(step),
             ))));
         })
     };
