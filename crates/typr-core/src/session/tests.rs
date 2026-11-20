@@ -18,7 +18,7 @@ fn answer(session: &mut Session, grade: Grade, now_ms: i64) {
     while session.hidden() > 0 {
         assert!(session.reveal());
     }
-    let (_, sent) = session.grade(grade).expect("the grade is offered");
+    let (_, _, sent) = session.grade(grade).expect("the grade is offered");
     assert_eq!(sent, grade);
     session.sent(7);
     assert!(session.acknowledge(7, now_ms));
@@ -61,7 +61,7 @@ fn a_three_sided_card_is_one_review() {
     assert!(session.reveal());
     assert!(!session.reveal(), "there is no fourth side");
     assert!(session.gradeable());
-    assert_eq!(session.grade(Grade::Remembered).map(|(c, _)| c), Some(1));
+    assert_eq!(session.grade(Grade::Remembered).map(|(c, _, _)| c), Some(1));
 
     session.sent(1);
     session.acknowledge(1, NOON);
@@ -206,7 +206,7 @@ fn a_grade_is_ignored_until_the_store_answers() {
 fn a_refused_grade_frees_the_card_again() {
     let mut session = Session::new(Queue::Due, vec![entry(1, &["front"])]);
 
-    let (_, grade) = session.grade(Grade::Remembered).expect("offered");
+    let (_, _, grade) = session.grade(Grade::Remembered).expect("offered");
     assert_eq!(grade, Grade::Remembered);
     session.sent(4);
     assert!(!session.gradeable(), "the card waits on the store");
@@ -283,7 +283,7 @@ fn a_grade_lands_on_the_card_it_was_given_for() {
     );
     assert_eq!(
         session.grade(Grade::Remembered),
-        Some((1, Grade::Remembered))
+        Some((1, "fwd".to_string(), Grade::Remembered))
     );
     session.sent(11);
     assert!(
@@ -515,7 +515,7 @@ fn a_mask_group_is_one_face() {
     );
     assert_eq!(
         session.grade(Grade::Remembered),
-        Some((4, Grade::Remembered))
+        Some((4, "mask:2".to_string(), Grade::Remembered))
     );
 }
 
@@ -552,7 +552,7 @@ fn one_card_three_passes() {
         }
         assert_eq!(
             session.grade(grade),
-            Some((1, grade)),
+            Some((1, "fwd".to_string(), grade)),
             "pass {} asks the same card again",
             pass + 1
         );
@@ -585,7 +585,7 @@ fn a_cram_session_writes_no_schedule() {
     }
     assert_eq!(
         session.grade(Grade::Remembered),
-        Some((1, Grade::Remembered))
+        Some((1, "fwd".to_string(), Grade::Remembered))
     );
     assert!(
         session.answer_here(),
@@ -655,6 +655,24 @@ fn two_prompts_of_one_card_are_each_asked() {
         session.current().map(|entry| entry.prompt.as_str()),
         Some("cloze:2")
     );
-    answer(&mut session, Grade::Remembered, NOON);
+    assert!(session.reveal());
+    assert_eq!(
+        session.grade(Grade::Remembered),
+        Some((1, "cloze:2".to_string(), Grade::Remembered)),
+        "the grade is sent under the prompt on screen"
+    );
+    session.sent(8);
+    assert!(session.acknowledge(8, NOON));
     assert!(session.finished());
+}
+
+#[test]
+fn a_forgotten_due_card_waits_the_step_the_session_was_given() {
+    let mut session =
+        Session::new(Queue::Due, vec![entry(1, &["front"])]).with_learning_step(30 * 60_000);
+    answer(&mut session, Grade::Forgot, NOON);
+
+    assert_eq!(session.next_wake(NOON), Some(30 * 60_000));
+    assert_eq!(session.advance_clock(NOON + LEARNING_STEP_MS), 0);
+    assert_eq!(session.advance_clock(NOON + 30 * 60_000), 1);
 }

@@ -105,7 +105,7 @@ fn a_grade_is_sent_out_with_its_card() {
     assert!(can_reveal(&session));
     session.reveal();
     let sent = session.grade(typr_core::store::Grade::Remembered);
-    assert_eq!(sent.map(|(id, _)| id), Some(7));
+    assert_eq!(sent.map(|(id, _, _)| id), Some(7));
     grades.borrow_mut().push(7);
     assert_eq!(grades.borrow().len(), 1);
 }
