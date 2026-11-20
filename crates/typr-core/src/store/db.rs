@@ -414,6 +414,7 @@ impl Db {
                     "UPDATE card SET trashed_at = ?2 WHERE id = ?1",
                     params![id, now_ms],
                 )?;
+                self.rebuild_card_name(*id)?;
                 Ok(Outcome::Changed(changed))
             }
             Command::RestoreCard { id } => {
@@ -421,6 +422,7 @@ impl Db {
                     "UPDATE card SET trashed_at = NULL WHERE id = ?1",
                     params![id],
                 )?;
+                self.rebuild_card_name(*id)?;
                 Ok(Outcome::Changed(changed))
             }
             Command::SetDraft { card, text } => match text {
@@ -1119,6 +1121,19 @@ impl Db {
             }
         }
         Ok(None)
+    }
+
+    /// Re-resolve the cards that name `card`, after it enters or leaves the trash.
+    fn rebuild_card_name(&self, card: Id) -> Result<(), StoreError> {
+        let name: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT name FROM card WHERE id = ?1",
+                params![card],
+                |row| row.get(0),
+            )
+            .optional()?;
+        self.rebuild_named(&name.unwrap_or_default())
     }
 
     /// Re-resolve every card whose text names `name`.
