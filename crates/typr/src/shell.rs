@@ -72,6 +72,12 @@ pub fn import_from(db: &Db, archive: &std::path::Path, attachments: &std::path::
     }
 }
 
+/// How many study days before `now` a prompt fell due, which is what a session's `Entry` orders and
+/// reshuffles by.
+pub fn overdue_days(now_ms: i64, due_at: i64, _offset_ms: i64) -> i64 {
+    (now_ms - due_at).max(0)
+}
+
 /// What the work area shows. One value owns it, so a key can only act where its screen is showing
 /// and a screen can only be entered by setting it.
 #[derive(Clone)]
@@ -265,7 +271,7 @@ pub fn shell_over(
             let pairs: Vec<(Id, String, i64)> = match db.apply(&command, now) {
                 Ok(Outcome::Due(prompts)) => prompts
                     .into_iter()
-                    .map(|p| (p.card, p.key, (now - p.due_at).max(0)))
+                    .map(|p| (p.card, p.key, overdue_days(now, p.due_at, offset)))
                     .collect(),
                 Ok(Outcome::New(prompts)) => {
                     prompts.into_iter().map(|p| (p.card, p.key, 0)).collect()

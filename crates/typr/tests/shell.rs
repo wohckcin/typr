@@ -842,3 +842,18 @@ fn a_new_card_from_the_inbox_skips_an_archived_first_deck() -> Result<(), String
     assert_eq!(deck.name, "Spanish");
     Ok(())
 }
+
+#[test]
+fn a_prompts_overdue_is_counted_in_study_days() {
+    use typr::shell::overdue_days;
+    const HOUR: i64 = 3_600_000;
+    let noon = 1_768_132_800_000;
+    // Due at 09:00 and at 11:00 the same day: one study day, whatever the hours between.
+    assert_eq!(overdue_days(noon, noon - 3 * HOUR, 0), 0);
+    assert_eq!(overdue_days(noon, noon - HOUR, 0), 0);
+    // Due the previous afternoon, and three days back.
+    assert_eq!(overdue_days(noon, noon - 20 * HOUR, 0), 1);
+    assert_eq!(overdue_days(noon, noon - 72 * HOUR, 0), 3);
+    // Not due yet is not overdue.
+    assert_eq!(overdue_days(noon, noon + HOUR, 0), 0);
+}
