@@ -2386,3 +2386,33 @@ fn a_save_drops_the_draft_in_the_same_write() {
     .expect("save");
     assert_eq!(draft_of(&db, id), None);
 }
+
+#[test]
+fn trashing_and_restoring_a_card_moves_the_references_to_it() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Biology");
+    let target = card(&mut db, deck, "Krebs cycle\n---\nThe second stage");
+    let referrer = card(&mut db, deck, "Notes\n---\nSee [[Krebs cycle]]");
+    assert_eq!(summary(&db, referrer).references.len(), 1);
+
+    db.apply(&Command::TrashCard { id: target }, NOON)
+        .expect("trash");
+    assert!(
+        summary(&db, referrer).references.is_empty(),
+        "a reference never points into the trash"
+    );
+    assert!(db.backlinks(target).expect("backlinks").is_empty());
+
+    db.apply(&Command::RestoreCard { id: target }, NOON)
+        .expect("restore");
+    assert_eq!(
+        summary(&db, referrer)
+            .references
+            .iter()
+            .map(|r| r.id)
+            .collect::<Vec<_>>(),
+        vec![target],
+        "the restored card answers to its name again"
+    );
+}
