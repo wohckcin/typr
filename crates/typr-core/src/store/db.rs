@@ -1814,14 +1814,14 @@ impl Db {
         Ok(ordered)
     }
 
-    /// Cards that graduated on one study day, counted across every deck.
+    /// Prompts that graduated on one study day, counted across every deck.
     ///
-    /// A grade before the card ever left the new queue does not count: the cap is on cards
-    /// *learned*, not on how many times a new card was answered today.
+    /// A grade before the prompt ever left the new queue does not count: the cap is on prompts
+    /// *learned*, not on how many times a new prompt was answered today.
     pub fn learned_on(&self, day: i64, offset_ms: i64) -> Result<u32, StoreError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT MIN(at) FROM review_log WHERE phase <> 'learn' GROUP BY card_id")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT MIN(at) FROM review_log WHERE phase <> 'learn' GROUP BY card_id, key",
+        )?;
         let firsts = stmt
             .query_map([], |row| row.get::<_, i64>(0))?
             .collect::<Result<Vec<_>, _>>()?;
