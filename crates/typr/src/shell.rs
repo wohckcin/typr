@@ -10,6 +10,7 @@ use nsh_core::file_dialog::{OpenDialog, SaveDialog};
 use nsh_core::keymap::When;
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
+use typr_core::day::study_day;
 use typr_core::edits::{deck_for_new_card, selection_after_trash};
 use typr_core::keymap::{Command as Key, Surface, bindings_of};
 use typr_core::session::{Entry, Session};
@@ -74,8 +75,8 @@ pub fn import_from(db: &Db, archive: &std::path::Path, attachments: &std::path::
 
 /// How many study days before `now` a prompt fell due, which is what a session's `Entry` orders and
 /// reshuffles by.
-pub fn overdue_days(now_ms: i64, due_at: i64, _offset_ms: i64) -> i64 {
-    (now_ms - due_at).max(0)
+pub fn overdue_days(now_ms: i64, due_at: i64, offset_ms: i64) -> i64 {
+    (study_day(now_ms, offset_ms) - study_day(due_at, offset_ms)).max(0)
 }
 
 /// What the work area shows. One value owns it, so a key can only act where its screen is showing
