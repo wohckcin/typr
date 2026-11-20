@@ -661,3 +661,21 @@ fn a_data_folder_with_a_space_still_resolves_to_a_destination_the_renderer_reads
         "![x](</Users/me/Library/Application Support/typr/attachments/a.png>)"
     );
 }
+
+#[test]
+fn a_picture_named_with_angle_brackets_is_referenced_by_a_name_that_resolves() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let source = dir.path().join("a <b>.png");
+    std::fs::write(&source, b"png").expect("source");
+    let root = dir.path().join("attachments");
+
+    let name = attach_image(&source, &root).expect("attach");
+    let markdown = image_reference("b", &name);
+    let found = typr::screens::editor::image_references(&markdown);
+    assert_eq!(found.len(), 1, "{markdown}");
+    assert!(
+        root.join(&found[0]).is_file(),
+        "{markdown} names {:?}",
+        found[0]
+    );
+}
