@@ -7,7 +7,7 @@ import { expect, open, test } from "nsh/test";
 
 test("the app opens with its navigation", async () => {
   const app = await open("..");
-  for (const label of ["Search", "All cards", "Utilities", "Settings", "Diagnostics"]) {
+  for (const label of ["Search", "Inbox", "Due today", "New cards", "Settings", "Trash"]) {
     expect(app.texts()).toContain(label);
   }
   // The library's state is said either way: a headless run has no data folder, a real one has, and a
@@ -24,7 +24,7 @@ test("the search field is on the library screen and the chord reaches it", async
   await app.type("text:Search cards", "ga");
   // The field's contents cannot be read back on the host, so the test proves the field is reachable
   // and the chord and keystrokes leave the screen standing, not what it then holds.
-  expect(app.texts()).toContain("All cards");
+  expect(app.texts()).toContain("Inbox");
 });
 
 test("Settings opens and Escape returns to the library", async () => {
@@ -33,8 +33,8 @@ test("Settings opens and Escape returns to the library", async () => {
   await app.waitFor("text:Theme");
   expect(app.texts()).toContain("Apply");
   await app.keyboard.press("escape");
-  await app.waitFor("text:All cards");
-  expect(app.texts()).toContain("All cards");
+  await app.waitFor("text:Inbox");
+  expect(app.texts()).not.toContain("Apply");
 });
 
 test("a button answers the pointer where there is one", async () => {
