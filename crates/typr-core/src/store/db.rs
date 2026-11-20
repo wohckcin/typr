@@ -119,6 +119,16 @@ impl Db {
             return Ok(Outcome::Exported);
         }
         let tx = self.conn.unchecked_transaction()?;
+        // The import copies pictures before the rows commit, so it owns the commit to undo them.
+        if let Command::ImportArchive {
+            archive,
+            attachments,
+        } = command
+        {
+            let commit = move || tx.commit().map_err(StoreError::from);
+            return mochi::import(self, archive, attachments, now_ms, commit)
+                .map(Outcome::Imported);
+        }
         let outcome = self.dispatch(command, now_ms)?;
         tx.commit()?;
         Ok(outcome)
@@ -583,6 +593,7 @@ impl Db {
                 archive,
                 attachments,
                 now_ms,
+                || Ok(()),
             )?)),
             // Export normally never reaches here: `apply` runs it before opening a transaction.
             // The arm keeps the match total and gives a clear failure if it is ever staged.
