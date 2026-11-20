@@ -42,3 +42,17 @@ fn an_applied_new_card_cap_is_stored() -> Result<(), String> {
     assert_eq!(stored, 35);
     Ok(())
 }
+
+#[test]
+fn an_imported_archive_shows_in_the_sidebar_without_a_restart() -> Result<(), String> {
+    let _turn = DATA_DIR.lock().unwrap_or_else(|e| e.into_inner());
+    let root = library("import");
+    let mut app = start(&root);
+    app.on_pick_paths(vec![
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/mochi-import.mochi"),
+    ])?;
+    app.wait_for("Import")?;
+    app.press("Import")?;
+    app.wait_for("Imported")?;
+    Ok(())
+}
