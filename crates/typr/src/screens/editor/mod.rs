@@ -189,6 +189,9 @@ pub struct EditorProps {
     /// The directory attached pictures are copied to.
     #[prop(default)]
     pub attachments: Prop<SharedString>,
+    /// Why the last save was refused, shown under the Save button until the caller clears it.
+    #[prop(default)]
+    pub save_error: Prop<Option<SharedString>>,
 }
 
 /// The card's text, as the editor reports it.
@@ -312,6 +315,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
             .unwrap_or_default(),
     );
     let attach_error = signal(None::<SharedString>);
+    let save_error = props.save_error;
     // Leaving asks first only when the draft differs from what was saved.
     let dirty = move || draft.with(|d| saved.with(|s| d != s));
     if let Some(key) = keystroke_of(Surface::Editor, Command::Leave) {
@@ -393,7 +397,6 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                 .disabled(move || draft.with(|d| !has_content(d)))
                                 .on_press(move || {
                                     let text = draft.get_untracked();
-                                    saved.set(text.clone());
                                     cx.emit(EditorEvent::Save(CardText { text }));
                                 }),
                         )
@@ -473,6 +476,13 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                     });
                                 }),
                         )
+                        .child(dynamic(move || match save_error.get() {
+                            Some(reason) => text(reason)
+                                .text_xs()
+                                .text_color(tokens::destructive)
+                                .into_element(),
+                            None => view().into_element(),
+                        }))
                         .child(dynamic(move || match attach_error.get() {
                             Some(reason) => text(reason)
                                 .text_xs()
@@ -535,7 +545,6 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
             Answer::Save => {
                 let text = draft.get_untracked();
                 if has_content(&text) {
-                    saved.set(text.clone());
                     cx.emit(EditorEvent::Save(CardText { text }));
                 }
                 cx.emit(EditorEvent::Leave);

@@ -744,28 +744,43 @@ pub fn shell_over(
                             rows: card.masks.iter().map(Cover::of).collect(),
                         });
                     let draft = db.as_ref().and_then(|db| db.draft(id).ok().flatten());
-                    let write_save = apply.clone();
+                    let write_save = write.clone();
                     let write_draft = quiet_apply.clone();
                     let leaving = screen;
+                    // A refused save keeps the editor open: leaving after it would drop the text the
+                    // store did not take. Typing again clears the refusal.
+                    let save_error = signal(None::<SharedString>);
                     editor::editor()
                         .saved(card.markdown.clone())
                         .draft(draft.map(SharedString::from))
                         .template(template)
                         .diagram(diagram)
                         .attachments(attachments.to_string_lossy().to_string())
+                        .save_error(move || save_error.get())
                         .on_save(move |saved: &editor::CardText| {
-                            write_save(Command::SaveCard {
+                            let command = Command::SaveCard {
                                 id,
                                 markdown: saved.text.clone(),
-                            });
+                            };
+                            if let Some(Err(error)) = write_save(command, true) {
+                                save_error.set(Some(
+                                    format!("Not saved: {}", crate::logging::describe(&error))
+                                        .into(),
+                                ));
+                            }
                         })
                         .on_draft(move |draft: &editor::CardText| {
+                            save_error.set(None);
                             write_draft(Command::SetDraft {
                                 card: id,
                                 text: Some(draft.text.clone()),
                             })
                         })
-                        .on_leave(move || leaving.set(Screen::Library))
+                        .on_leave(move || {
+                            if save_error.get_untracked().is_none() {
+                                leaving.set(Screen::Library)
+                            }
+                        })
                         .on_discard({
                             let write = quiet_apply.clone();
                             move || {

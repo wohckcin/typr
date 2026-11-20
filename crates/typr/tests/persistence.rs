@@ -112,3 +112,24 @@ fn a_refused_save_leaves_the_card_unsaved_and_says_why() -> Result<(), String> {
     app.wait_for("text:/not saved/i")?;
     Ok(())
 }
+
+#[test]
+fn an_accepted_save_reads_saved_and_is_stored() -> Result<(), String> {
+    let _turn = DATA_DIR.lock().unwrap_or_else(|e| e.into_inner());
+    let (root, card) = library_with_card("accepted");
+    let mut app = start(&root);
+    app.wait_for("role:button[gato]")?;
+    app.press("role:button[gato]")?;
+    app.wait_for("Card source")?;
+    app.type_text("label:Card source", "!")?;
+    app.wait_for("Unsaved")?;
+    app.press("role:button[Save]")?;
+    app.wait_for("Saved")?;
+    let stored = Db::open(&root.join("typr.sqlite3"))
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    let markdown = &stored.cards.iter().find(|c| c.id == card).unwrap().markdown;
+    assert!(markdown.starts_with('!'), "{markdown}");
+    Ok(())
+}
