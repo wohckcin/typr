@@ -1001,3 +1001,105 @@ fn an_archive_card_with_empty_text_still_imports() {
     .expect("the import");
     assert_eq!(db.snapshot().expect("the library").cards.len(), 1);
 }
+
+#[test]
+fn a_csv_with_a_trailing_blank_line_imports() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let deck = new_deck(&db, "Biology");
+    let path = dir.path().join("blank.csv");
+    std::fs::write(
+        &path,
+        "deck, sides, tags, fields, markdown\nD,1,[],{},hello\n\n",
+    )
+    .expect("a file with a blank line");
+
+    db.apply(&Command::ImportCsv { deck, source: path }, NOW)
+        .expect("a blank line is not a row");
+    assert_eq!(db.snapshot().expect("the library").cards.len(), 1);
+}
+
+#[test]
+fn a_headingless_markdown_file_keeps_a_first_card_that_starts_with_a_hash() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let deck = new_deck(&db, "Notes");
+    let path = dir.path().join("notes.md");
+    std::fs::write(&path, "# not a heading\nbody\n\nsecond card\n").expect("a headingless file");
+
+    db.apply(&Command::ImportMarkdown { deck, source: path }, NOW)
+        .expect("the import");
+    let mut cards: Vec<String> = db
+        .snapshot()
+        .expect("the library")
+        .cards
+        .into_iter()
+        .map(|card| card.markdown)
+        .collect();
+    cards.sort();
+    assert_eq!(cards, ["# not a heading\nbody", "second card"]);
+}
+
+#[test]
+fn duplicate_archive_deck_ids_are_refused() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([
+        {"id": 1, "name": "A", "parent": null},
+        {"id": 1, "name": "B", "parent": null},
+    ]);
+    let cards = serde_json::json!([{"id": 1, "deck": 1, "text": "q"}]);
+    let archive = write_mochi(
+        dir.path(),
+        "dup.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 2, "cards": 1}),
+    );
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let error = db
+        .apply(
+            &Command::ImportArchive {
+                archive,
+                attachments: dir.path().join("media"),
+            },
+            NOW,
+        )
+        .expect_err("two decks cannot share an id");
+    assert!(
+        matches!(error, StoreError::Archive { ref reason, .. } if reason.contains("deck 1")),
+        "the refusal names the id: {error:?}"
+    );
+    assert!(db.snapshot().expect("the library").decks.is_empty());
+}
+
+#[test]
+fn an_oversized_archive_picture_is_refused() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([{"id": 1, "name": "Anatomy", "parent": null}]);
+    let cards = serde_json::json!([{"id": 1, "deck": 1, "text": "", "image": "media/big.png"}]);
+    let huge = vec![0u8; 65 * 1024 * 1024];
+    let archive = write_mochi_media(
+        dir.path(),
+        "big.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 1, "cards": 1, "images": 1}),
+        &[("media/big.png", &huge)],
+    );
+    let attachments = dir.path().join("media");
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let error = db
+        .apply(
+            &Command::ImportArchive {
+                archive,
+                attachments: attachments.clone(),
+            },
+            NOW,
+        )
+        .expect_err("a picture past the limit is refused");
+    assert!(
+        matches!(error, StoreError::Archive { ref reason, .. } if reason.contains("larger")),
+        "the refusal says the entry is too large: {error:?}"
+    );
+    assert!(!attachments.join("big.png").exists());
+}
