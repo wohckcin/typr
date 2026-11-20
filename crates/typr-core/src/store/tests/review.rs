@@ -1414,3 +1414,30 @@ fn the_retention_range_is_inclusive_at_both_ends() {
         "the last accepted value is what stays"
     );
 }
+
+#[test]
+fn a_new_prompt_on_a_reviewed_card_counts_toward_the_daily_cap() {
+    let dir = TempDir::new().expect("temp dir");
+    let mut db = open_temp(&dir);
+    let deck = deck(&mut db, "Counting");
+    let card = card(&mut db, deck, "front\n---\nback");
+    for (key, at) in [("fwd", NOON - 72 * HOUR), ("rev", NOON)] {
+        db.apply(
+            &Command::Grade {
+                card,
+                key: key.to_string(),
+                grade: Grade::Remembered,
+                duration_ms: None,
+            },
+            at,
+        )
+        .expect("grade");
+    }
+
+    assert_eq!(
+        db.learned_on(crate::day::study_day(NOON, 0), 0)
+            .expect("learned"),
+        1,
+        "the reverse prompt was first answered today"
+    );
+}
