@@ -89,8 +89,8 @@ pub fn overdue_days(now_ms: i64, due_at: i64, offset_ms: i64) -> i64 {
 
 /// Brings the relearning cards of `session` whose wait is over back into its queue. True when any
 /// came back, so the screen shows them.
-pub fn wake_session(_session: &std::cell::RefCell<Session>, _now_ms: i64) -> bool {
-    false
+pub fn wake_session(session: &std::cell::RefCell<Session>, now_ms: i64) -> bool {
+    session.borrow_mut().advance_clock(now_ms) > 0
 }
 
 /// What the work area shows. One value owns it, so a key can only act where its screen is showing
@@ -310,6 +310,16 @@ pub fn shell_over(
             ))));
         })
     };
+    // A forgotten card waits out its relearning step inside the session; this tick lets it back in
+    // and rebuilds the session screen to show it.
+    let woken = signal(0_u32);
+    set_interval(std::time::Duration::from_secs(1), move || {
+        if let Screen::Study(session) = screen.get_untracked()
+            && wake_session(&session, SystemClock.now_ms())
+        {
+            woken.update(|count| *count += 1);
+        }
+    });
     let slow = signal(Vec::<SlowCommand>::new());
     let results = Toasts::new();
     let tiles = {
@@ -661,6 +671,7 @@ pub fn shell_over(
             match screen.get() {
                 // A running session takes the whole work area until it is left.
                 Screen::Study(session) => {
+                    woken.get();
                     let grade_write = write.clone();
                     let reopen = reopen.clone();
                     study(
