@@ -68,7 +68,12 @@ pub fn import(db: &Db, deck: Id, source: &Path, now_ms: i64) -> Result<ImportRep
         .unwrap_or(&text)
         .replace("\r\n", "\n");
     let body = match text.find('\n') {
-        Some(end) if text[..end].trim_start().starts_with("# ") => &text[end + 1..],
+        Some(end)
+            if text[..end].trim_start().starts_with("# ")
+                && (text[end + 1..].is_empty() || text[end + 1..].starts_with('\n')) =>
+        {
+            &text[end + 1..]
+        }
         None if text.trim_start().starts_with("# ") => "",
         _ => text.as_str(),
     };
