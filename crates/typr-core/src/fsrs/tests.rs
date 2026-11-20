@@ -199,3 +199,18 @@ fn a_malformed_weight_list_is_refused() {
         }
     }
 }
+
+#[test]
+fn a_lapse_never_raises_stability() {
+    let memory = Memory {
+        stability: 1.0,
+        difficulty: 5.0,
+    };
+    let lapsed = update(memory, MISS, 30.0, &DEFAULT_WEIGHTS);
+    assert!(
+        lapsed.stability <= memory.stability,
+        "a miss after a long gap raised stability from {} to {}",
+        memory.stability,
+        lapsed.stability
+    );
+}
