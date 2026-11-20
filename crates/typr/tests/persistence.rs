@@ -56,3 +56,59 @@ fn an_imported_archive_shows_in_the_sidebar_without_a_restart() -> Result<(), St
     app.wait_for("Imported 1")?;
     Ok(())
 }
+
+/// A library with one card, "gato", in a deck of its own.
+fn library_with_card(name: &str) -> (std::path::PathBuf, i64) {
+    use typr_core::store::{Command, Outcome};
+    let root = library(name);
+    let db = Db::open(&root.join("typr.sqlite3")).unwrap();
+    let deck = match db
+        .apply(
+            &Command::CreateDeck {
+                parent: None,
+                name: "Spanish".to_owned(),
+            },
+            0,
+        )
+        .unwrap()
+    {
+        Outcome::Deck(id) => id,
+        other => panic!("deck: {other:?}"),
+    };
+    let card = match db
+        .apply(
+            &Command::CreateCard {
+                deck,
+                markdown: "gato\n---\ncat".to_owned(),
+            },
+            0,
+        )
+        .unwrap()
+    {
+        Outcome::Card(id) => id,
+        other => panic!("card: {other:?}"),
+    };
+    (root, card)
+}
+
+#[test]
+fn a_refused_save_leaves_the_card_unsaved_and_says_why() -> Result<(), String> {
+    use typr_core::store::Command;
+    let _turn = DATA_DIR.lock().unwrap_or_else(|e| e.into_inner());
+    let (root, card) = library_with_card("refused");
+    let mut app = start(&root);
+    app.wait_for("role:button[gato]")?;
+    app.press("role:button[gato]")?;
+    app.wait_for("Card source")?;
+    // The card is emptied from the trash behind the open editor, so the store refuses the save.
+    let other = Db::open(&root.join("typr.sqlite3")).unwrap();
+    other.apply(&Command::TrashCard { id: card }, 0).unwrap();
+    other.apply(&Command::EmptyTrash, 0).unwrap();
+    app.type_text("label:Card source", "!")?;
+    app.press("role:button[Save]")?;
+    app.settle();
+    assert!(app.screen().shows("Unsaved"), "a refused save is not Saved");
+    assert!(!app.screen().shows("Saved"));
+    app.wait_for("text:/not saved/i")?;
+    Ok(())
+}
