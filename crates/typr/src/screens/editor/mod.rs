@@ -201,6 +201,12 @@ pub struct CardText {
     pub text: String,
 }
 
+/// The fields of a templated card, as the user has them.
+#[derive(Clone, Debug, Default, PartialEq, JsObject)]
+pub struct FieldValues {
+    pub fields: Vec<TemplateField>,
+}
+
 /// One rectangle dragged onto the picture, and the group it joins.
 #[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
 pub struct MaskAdded {
@@ -237,6 +243,8 @@ pub struct DiagramStart {
 pub enum EditorEvent {
     /// The text, to write down as the card.
     Save(CardText),
+    /// A templated card's fields, to write down so its text is rendered from them.
+    SaveFields(FieldValues),
     /// The text as it is typed, to keep as the draft.
     Draft(CardText),
     /// Leaving, with nothing unsaved.
@@ -316,8 +324,27 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
     );
     let attach_error = signal(None::<SharedString>);
     let save_error = props.save_error;
-    // Leaving asks first only when the draft differs from what was saved.
-    let dirty = move || draft.with(|d| saved.with(|s| d != s));
+    let templated = table_template.is_some();
+    let opened_fields = signal(fields.get_untracked());
+    // Leaving asks first only when the draft or a field differs from what was saved.
+    let dirty = move || {
+        draft.with(|d| saved.with(|s| d != s))
+            || fields.with(|now| opened_fields.with(|opened| now != opened))
+    };
+    // A templated card's text is rendered from its fields, so its fields are what Save writes.
+    let emit_save = move || {
+        if templated {
+            let fields = fields
+                .get_untracked()
+                .into_iter()
+                .map(|(name, value)| TemplateField::new(name, value))
+                .collect();
+            cx.emit(EditorEvent::SaveFields(FieldValues { fields }));
+        } else {
+            let text = draft.get_untracked();
+            cx.emit(EditorEvent::Save(CardText { text }));
+        }
+    };
     if let Some(key) = keystroke_of(Surface::Editor, Command::Leave) {
         on_key(&key, move |_| {
             if dirty() {
@@ -328,9 +355,8 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
         });
     }
     let state_badge = dynamic(move || {
-        let dirty = draft.with(|d| saved.with(|s| d != s));
         badge()
-            .label(if dirty { "Unsaved" } else { "Saved" })
+            .label(if dirty() { "Unsaved" } else { "Saved" })
             .into_element()
     });
     view()
@@ -347,14 +373,12 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                 .child({
                     // The way back, reachable without a key: it asks what the key asks.
                     let asking_again = asking;
-                    let saved_now = saved;
-                    let draft_now = draft;
                     button()
                         .variant(Variant::Ghost)
                         .label("Back")
                         .disabled(|| false)
                         .on_press(move || {
-                            if draft_now.with(|d| saved_now.with(|s| d != s)) {
+                            if dirty() {
                                 asking_again.set(true);
                                 return;
                             }
@@ -395,10 +419,7 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                 .variant(Variant::Primary)
                                 .label("Save")
                                 .disabled(move || draft.with(|d| !has_content(d)))
-                                .on_press(move || {
-                                    let text = draft.get_untracked();
-                                    cx.emit(EditorEvent::Save(CardText { text }));
-                                }),
+                                .on_press(emit_save),
                         )
                         .child(dynamic({
                             let drawn_root = root.clone();
@@ -543,9 +564,8 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
         )
         .child(leave_decision(asking, move |answer| match answer {
             Answer::Save => {
-                let text = draft.get_untracked();
-                if has_content(&text) {
-                    cx.emit(EditorEvent::Save(CardText { text }));
+                if has_content(&draft.get_untracked()) {
+                    emit_save();
                 }
                 cx.emit(EditorEvent::Leave);
             }

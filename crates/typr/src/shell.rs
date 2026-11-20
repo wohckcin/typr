@@ -750,6 +750,13 @@ pub fn shell_over(
                     // A refused save keeps the editor open: leaving after it would drop the text the
                     // store did not take. Typing again clears the refusal.
                     let save_error = signal(None::<SharedString>);
+                    let refuse = move |result: Option<Result<Outcome, StoreError>>| {
+                        if let Some(Err(error)) = result {
+                            save_error.set(Some(
+                                format!("Not saved: {}", crate::logging::describe(&error)).into(),
+                            ));
+                        }
+                    };
                     editor::editor()
                         .saved(card.markdown.clone())
                         .draft(draft.map(SharedString::from))
@@ -757,17 +764,26 @@ pub fn shell_over(
                         .diagram(diagram)
                         .attachments(attachments.to_string_lossy().to_string())
                         .save_error(move || save_error.get())
-                        .on_save(move |saved: &editor::CardText| {
-                            let command = Command::SaveCard {
-                                id,
-                                markdown: saved.text.clone(),
-                            };
-                            if let Some(Err(error)) = write_save(command, true) {
-                                save_error.set(Some(
-                                    format!("Not saved: {}", crate::logging::describe(&error))
-                                        .into(),
-                                ));
+                        .on_save({
+                            let write_save = write_save.clone();
+                            move |saved: &editor::CardText| {
+                                let command = Command::SaveCard {
+                                    id,
+                                    markdown: saved.text.clone(),
+                                };
+                                refuse(write_save(command, true));
                             }
+                        })
+                        .on_save_fields(move |saved: &editor::FieldValues| {
+                            let command = Command::SetFields {
+                                card: id,
+                                fields: saved
+                                    .fields
+                                    .iter()
+                                    .map(|field| (field.name.clone(), field.value.clone()))
+                                    .collect(),
+                            };
+                            refuse(write_save(command, true));
                         })
                         .on_draft(move |draft: &editor::CardText| {
                             save_error.set(None);
