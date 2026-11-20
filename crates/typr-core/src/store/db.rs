@@ -1814,21 +1814,24 @@ impl Db {
         Ok(ordered)
     }
 
-    /// Prompts that graduated on one study day, counted across every deck.
+    /// Cards with a prompt that graduated on one study day, counted across every deck.
     ///
-    /// A grade before the prompt ever left the new queue does not count: the cap is on prompts
-    /// *learned*, not on how many times a new prompt was answered today.
+    /// A grade before the prompt ever left the new queue does not count: the cap is on cards
+    /// *learned*, not on how many times a new card was answered today. A prompt added to an older
+    /// card counts that card on the day the prompt is first learned.
     pub fn learned_on(&self, day: i64, offset_ms: i64) -> Result<u32, StoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT MIN(at) FROM review_log WHERE phase <> 'learn' GROUP BY card_id, key",
+            "SELECT card_id, MIN(at) FROM review_log WHERE phase <> 'learn' GROUP BY card_id, key",
         )?;
         let firsts = stmt
-            .query_map([], |row| row.get::<_, i64>(0))?
+            .query_map([], |row| Ok((row.get::<_, Id>(0)?, row.get::<_, i64>(1)?)))?
             .collect::<Result<Vec<_>, _>>()?;
         let count = firsts
             .into_iter()
-            .filter(|at| crate::day::study_day(*at, offset_ms) == day)
-            .count();
+            .filter(|(_, at)| crate::day::study_day(*at, offset_ms) == day)
+            .map(|(card, _)| card)
+            .collect::<std::collections::HashSet<_>>()
+            .len();
         Ok(u32::try_from(count).unwrap_or(u32::MAX))
     }
 
