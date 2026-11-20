@@ -1103,3 +1103,50 @@ fn an_oversized_archive_picture_is_refused() {
     );
     assert!(!attachments.join("big.png").exists());
 }
+
+#[test]
+fn an_archive_import_that_fails_at_commit_leaves_no_picture() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([{"id": 1, "name": "Anatomy", "parent": null}]);
+    let cards = serde_json::json!([{
+        "id": 1,
+        "deck": 1,
+        "text": "",
+        "image": "media/heart.png",
+        "caption": "Which chamber?",
+    }]);
+    let archive = write_mochi_media(
+        dir.path(),
+        "picture.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 1, "cards": 1, "images": 1}),
+        &[("media/heart.png", b"\x89PNG\r\n\x1a\nheart")],
+    );
+    let attachments = dir.path().join("attachments");
+    let path = dir.path().join("typr.sqlite3");
+    let db = open(&path);
+    // A deferred foreign key is checked only at COMMIT, so every row writes and the commit refuses.
+    rusqlite::Connection::open(&path)
+        .expect("a second connection")
+        .execute_batch(
+            "CREATE TABLE commit_gate (deck INTEGER REFERENCES deck(id) DEFERRABLE INITIALLY DEFERRED);
+             CREATE TRIGGER fail_commit AFTER INSERT ON card BEGIN INSERT INTO commit_gate VALUES (-1); END;",
+        )
+        .expect("the gate");
+
+    db.apply(
+        &Command::ImportArchive {
+            archive,
+            attachments: attachments.clone(),
+        },
+        NOW,
+    )
+    .expect_err("the commit is refused");
+
+    assert!(db.snapshot().expect("the library").cards.is_empty());
+    assert!(
+        !attachments.join("heart.png").exists(),
+        "a picture no card names was left behind"
+    );
+}
