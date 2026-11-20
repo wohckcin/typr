@@ -259,15 +259,18 @@ struct ArchiveField {
 ///
 /// Decks are placed parent-first, so nesting survives even though the archive lists a child before
 /// its parent. A record that names something the archive does not hold fails the whole import:
-/// the transaction rolls back and no deck, card or picture is left behind.
+/// the transaction rolls back and no deck, card or picture is left behind. `commit` runs last, so a
+/// refused commit removes the pictures too.
 pub(crate) fn import(
     db: &Db,
     archive: &Path,
     attachments: &Path,
     now_ms: i64,
+    commit: impl FnOnce() -> Result<(), StoreError>,
 ) -> Result<ImportReport, StoreError> {
     let mut copied = Vec::new();
-    let result = import_into(db, archive, attachments, now_ms, &mut copied);
+    let result = import_into(db, archive, attachments, now_ms, &mut copied)
+        .and_then(|report| commit().map(|()| report));
     if result.is_err() {
         // The transaction is about to roll back its rows, so the pictures copied out of the
         // archive must not outlive the cards that would have named them.
