@@ -150,7 +150,6 @@ pub fn shell_over(
     if let Some(notice) = notice {
         state.note(notice);
     }
-    let cap = snapshot_signal.with(|s| s.settings.new_per_day);
     let attachments = library.attachments.clone();
     // What the diagnostics screen states: a stoppage at any write since launch, and the commands
     // that took long enough to feel.
@@ -665,12 +664,22 @@ pub fn shell_over(
                     .into_element()
                 }
                 Screen::Settings => {
+                    let cap = snapshot_signal.get_untracked().settings.new_per_day;
                     let mut values = Values::new(cap, true);
                     values.theme = theme;
+                    let write_cap = write.clone();
                     settings(
                         values,
                         library.clone(),
-                        |_| {},
+                        move |cap| {
+                            write_cap(
+                                Command::SetSetting {
+                                    key: SettingKey::NewPerDay,
+                                    value: SettingValue::Number(cap),
+                                },
+                                true,
+                            );
+                        },
                         import.clone(),
                         export.clone(),
                         move || screen.set(Screen::Diagnostics),
