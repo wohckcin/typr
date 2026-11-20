@@ -153,6 +153,8 @@ fn tile_cell(
     let schedule = move || {
         tile.with(|t| match t.as_ref().map(|t| t.schedule) {
             Some(Schedule::New) | None => "New".to_owned(),
+            Some(Schedule::Interval(0)) => "Under a day".to_owned(),
+            Some(Schedule::Interval(1)) => "1 day".to_owned(),
             Some(Schedule::Interval(days)) => format!("{days} days"),
             Some(Schedule::Due) => "Due".to_owned(),
         })
