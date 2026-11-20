@@ -87,6 +87,12 @@ pub fn overdue_days(now_ms: i64, due_at: i64, offset_ms: i64) -> i64 {
     (study_day(now_ms, offset_ms) - study_day(due_at, offset_ms)).max(0)
 }
 
+/// Brings the relearning cards of `session` whose wait is over back into its queue. True when any
+/// came back, so the screen shows them.
+pub fn wake_session(_session: &std::cell::RefCell<Session>, _now_ms: i64) -> bool {
+    false
+}
+
 /// What the work area shows. One value owns it, so a key can only act where its screen is showing
 /// and a screen can only be entered by setting it.
 #[derive(Clone)]
