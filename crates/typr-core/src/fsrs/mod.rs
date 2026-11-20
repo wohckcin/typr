@@ -145,10 +145,11 @@ pub fn update(memory: Memory, grade: Grade, elapsed_days: f64, weights: &[f64]) 
         }
         // `w15` and `w16` scale a `hard` and an `easy` hit; the two grades here are neither.
         Grade::Forgot => {
-            weights[11]
+            let lapsed = weights[11]
                 * memory.difficulty.powf(-weights[12])
                 * ((stability + 1.0).powf(weights[13]) - 1.0)
-                * (weights[14] * (1.0 - retrieval)).exp()
+                * (weights[14] * (1.0 - retrieval)).exp();
+            lapsed.min(stability)
         }
     };
     let drifted = memory.difficulty - weights[6] * (rating(grade) - 3.0);
