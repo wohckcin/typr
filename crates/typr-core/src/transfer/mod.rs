@@ -83,20 +83,43 @@ pub fn export_library(db_path: &Path, target: &Path) -> Result<(), StoreError> {
             source: error,
         });
     }
-    let published = match std::fs::hard_link(&temp, target) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            Err(StoreError::Exists {
-                path: target.to_path_buf(),
-            })
+    // FAT and exFAT have no hard links, so any other failure falls back to a copy that is still
+    // refused when the name is taken.
+    let linked = std::fs::hard_link(&temp, target).or_else(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            Err(error)
+        } else {
+            copy_new(&temp, target)
         }
-        Err(error) => Err(StoreError::Write {
-            path: target.to_path_buf(),
-            source: error,
-        }),
-    };
+    });
     let _ = std::fs::remove_file(&temp);
-    published
+    linked.map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            StoreError::Exists {
+                path: target.to_path_buf(),
+            }
+        } else {
+            StoreError::Write {
+                path: target.to_path_buf(),
+                source: error,
+            }
+        }
+    })
+}
+
+/// Copy `from` to a `target` that must not exist yet. `create_new` makes the check and the create
+/// one step, so a racing export still cannot take the same name.
+fn copy_new(from: &Path, target: &Path) -> std::io::Result<()> {
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)?;
+    let copied =
+        std::fs::File::open(from).and_then(|mut source| std::io::copy(&mut source, &mut out));
+    if copied.is_err() {
+        let _ = std::fs::remove_file(target);
+    }
+    copied.map(drop)
 }
 
 /// Copy `source` into `root` under a name that is not taken, and answer the reference to write into
@@ -146,4 +169,25 @@ fn write_attachment(root: &Path, name: &str, bytes: &[u8]) -> std::io::Result<St
     }
     std::fs::write(root.join(&candidate), bytes)?;
     Ok(candidate)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_copy_fallback_never_overwrites_a_target() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let temp = dir.path().join("temp");
+        std::fs::write(&temp, "new").expect("a temp export");
+        let free = dir.path().join("free");
+        copy_new(&temp, &free).expect("a free name is taken");
+        assert_eq!(std::fs::read_to_string(&free).expect("the copy"), "new");
+
+        let taken = dir.path().join("taken");
+        std::fs::write(&taken, "old").expect("an earlier export");
+        let error = copy_new(&temp, &taken).expect_err("a taken name is refused");
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read_to_string(&taken).expect("untouched"), "old");
+    }
 }
