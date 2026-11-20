@@ -857,3 +857,27 @@ fn a_prompts_overdue_is_counted_in_study_days() {
     // Not due yet is not overdue.
     assert_eq!(overdue_days(noon, noon + HOUR, 0), 0);
 }
+
+#[test]
+fn a_forgotten_cards_relearning_step_comes_back_when_the_shell_wakes_the_session() {
+    use typr::shell::wake_session;
+    use typr_core::clock::LEARNING_STEP_MS;
+    use typr_core::screen::Queue;
+    use typr_core::session::{Entry, Session};
+    use typr_core::store::Grade;
+    let noon = 1_768_132_800_000;
+    let mut session = Session::new(Queue::Due, vec![Entry::sides(1, ["front", "back"], 0)]);
+    while session.hidden() > 0 {
+        session.reveal();
+    }
+    session.grade(Grade::Forgot).expect("the grade is offered");
+    session.sent(1);
+    session.acknowledge(1, noon);
+    assert!(session.current().is_none(), "the only card is waiting");
+    assert!(!session.finished(), "a waiting card keeps the session open");
+
+    let session = std::cell::RefCell::new(session);
+    assert!(!wake_session(&session, noon + LEARNING_STEP_MS - 1));
+    assert!(wake_session(&session, noon + LEARNING_STEP_MS));
+    assert_eq!(session.borrow().current().map(|entry| entry.card), Some(1));
+}
