@@ -54,7 +54,7 @@ jobs:
       # The registry and the workspace's own artifacts, pruned to what a fresh build needs: the
       # action drops incremental state, old dependency builds and the app's own stale output. Only
       # `main` writes a cache, so a branch restores main's and adds no entries of its own. A failed
-      # job saves nothing: its key is derived from the lockfile and rustc, so a stub saved there
+      # job saves nothing: its key is derived from the lockfile and the toolchain pin, so a stub saved there
       # would be restored by every later run until one of them changed.
       - name: Cache the build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -63,6 +63,9 @@ jobs:
           # with a build it never made.
           shared-key: linux-checks
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # The hash covers every rustc on the runner, so a new runner image with another stable
+          # preinstalled orphans the cache. The pin in rust-toolchain.toml is in the lockfile hash.
+          add-rust-environment-hash-key: false
 
       - name: Format
         run: cargo fmt --all --check
@@ -120,6 +123,7 @@ jobs:
         with:
           shared-key: linux-app
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          add-rust-environment-hash-key: false
 
       # `desktop.test.tsx` opens the app and reads its screens; headless it needs no display. The
       # file is named on purpose: `nsh test` with no argument also runs the crate's Rust tests,
