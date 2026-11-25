@@ -3,4 +3,4 @@
 # what CI installs.
 [tools]
 rust = { version = "1.100.0", components = "rustfmt,clippy,rust-analyzer" }
-"github:longbridge/nsh" = "0.7.0"
+"github:longbridge/nsh" = "0.7.1"
