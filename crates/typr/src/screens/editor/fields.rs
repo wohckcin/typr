@@ -69,9 +69,9 @@ pub fn field_table(
                         field()
                             .placeholder("Value")
                             .value(move || SharedString::from(value.get()))
-                            .on_change(move |text: &String| {
-                                value.set(text.clone());
-                                edit(&edited, text);
+                            .on_change(move |ev: &crate::ui::input::FieldInput| {
+                                value.set(ev.text.clone());
+                                edit(&edited, &ev.text);
                             }),
                     ),
             );

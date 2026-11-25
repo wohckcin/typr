@@ -1,6 +1,7 @@
 //! The command list: the base `Command` element, with the app's row look and its own events.
 
-use nsh_base::{CommandEntry, CommandItem, command as base_command};
+pub use nsh_base::CommandItem;
+use nsh_base::{CommandEntry, command as base_command};
 use nsh_core::element::StyleRefinement;
 use nsh_core::prelude::*;
 

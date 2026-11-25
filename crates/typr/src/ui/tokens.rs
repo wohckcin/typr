@@ -5,7 +5,7 @@
 //! theme's `AdaptiveColor`, which resolves per commit.
 
 use nsh_base::{theme, tokens_of};
-use nsh_core::prelude::{AdaptiveColor, Points, px};
+use nsh_core::prelude::{AdaptiveColor, Points, Styled, px};
 
 /// The app's theme file: the default theme with the roles this app adds.
 pub const THEME: &str = include_str!("../../theme.json");
@@ -66,9 +66,19 @@ pub fn selection_foreground() -> AdaptiveColor {
     theme().primary_foreground
 }
 
+/// A measured layout length in points, for runtime geometry such as diagram mask overlays.
+pub fn points(value: f32) -> Points {
+    px(value)
+}
+
 /// A focused surface's ring.
 pub fn ring() -> AdaptiveColor {
     theme().ring
+}
+
+/// The keyboard focus outline shared across every interactive control.
+pub fn focus_ring<S: Styled>(style: S) -> S {
+    style.outline(px(2.0)).outline_color(ring)
 }
 
 /// A destructive action and its text.

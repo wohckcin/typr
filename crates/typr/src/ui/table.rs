@@ -8,6 +8,7 @@ use super::tokens;
 
 /// A table's props: its columns, its rows and what a screen reader calls it.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct TableProps {
     /// One heading per column.
     pub headers: Prop<Vec<SharedString>>,

@@ -1,0 +1,473 @@
+//! The NSH app's root and its shell: the sidebar beside the work area. Pages and screens join the
+//! shell as they are ported.
+//!
+//! The sidebar's Settings row opens the settings screen in the work area; Escape returns to the
+//! library. Anything else keeps the work area empty until its screen is wired.
+
+mod editor;
+mod navigation;
+mod store_bridge;
+mod study;
+
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::sync::Arc;
+
+use nsh_core::prelude::*;
+use typr_core::clock::{Clock, SystemClock};
+use typr_core::keymap::{Command as Key, Surface, bindings_of};
+use typr_core::session::Session;
+use typr_core::store::{
+    Command, Handle, Id, Outcome, SettingKey, SettingValue, Snapshot, Store, Theme,
+};
+
+use crate::screens::diagnostics::{SlowCommand, diagnostics};
+use crate::screens::grid::grid;
+use crate::screens::library::{cards_in, tiles_for};
+use crate::screens::settings::{LibraryInfo, Values, settings};
+use crate::screens::sidebar::{
+    NEW_DECK_PREFIX, SEARCH_KEY, Sidebar, due_counts, items_from, search_chord, sidebar,
+};
+use crate::ui::{
+    input::field_reachable,
+    overlay::{self, Toasts},
+    tokens,
+};
+
+pub use store_bridge::{WakeSignal, export_to, import_from};
+pub use study::{overdue_days, wake_session};
+
+use self::editor::EditorController;
+use self::navigation::LibraryNav;
+use self::store_bridge::StoreBridge;
+use self::study::StudyController;
+
+/// What the work area shows. One value owns it, so a key can only act where its screen is showing
+/// and a screen can only be entered by setting it.
+#[derive(Clone)]
+pub(super) enum Screen {
+    /// The grid, filtered by the sidebar's row in force.
+    Library,
+    /// One card's editor.
+    Editor(Id),
+    /// The library's paths and defaults.
+    Settings,
+    /// What the store and the slow commands have done since launch.
+    Diagnostics,
+    /// The cards that were deleted and can still be restored.
+    Trash,
+    /// A session, shared rather than taken, so a rebuild keeps the session it is showing.
+    Study(Rc<RefCell<Session>>),
+}
+
+impl PartialEq for Screen {
+    /// Two screens are the same when they show the same thing; a session is the same session while
+    /// its handle matches, so a rebuild of the work area is not a new screen.
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Screen::Library, Screen::Library)
+            | (Screen::Settings, Screen::Settings)
+            | (Screen::Diagnostics, Screen::Diagnostics)
+            | (Screen::Trash, Screen::Trash) => true,
+            (Screen::Editor(one), Screen::Editor(two)) => one == two,
+            (Screen::Study(one), Screen::Study(two)) => Rc::ptr_eq(one, two),
+            _ => false,
+        }
+    }
+}
+
+/// The screen a sidebar row opens: Settings and Trash are screens, every other row filters the grid.
+fn screen_for(key: &SharedString) -> Screen {
+    match key.as_ref() {
+        "settings" => Screen::Settings,
+        "trash" => Screen::Trash,
+        _ => Screen::Library,
+    }
+}
+
+/// The shell over `snapshot`: `library_open` says whether the store opened, which the sidebar
+/// states. Tests drive this with a fixture; the app drives the same function with its store worker.
+pub fn shell(snapshot: Snapshot, library_open: bool) -> impl IntoElement {
+    shell_over(None, snapshot, library_open, LibraryInfo::default(), None)
+}
+
+/// The one shell: the library when it opens and when it does not. `store` is the background worker
+/// handle the screens write through, absent when the library could not be opened — `notice` then
+/// says why, and the sidebar states it instead of a bare "Library closed".
+pub fn shell_over(
+    store: Option<(Rc<Handle>, Arc<WakeSignal>)>,
+    snapshot: Snapshot,
+    library_open: bool,
+    library: LibraryInfo,
+    notice: Option<SharedString>,
+) -> impl IntoElement {
+    let snapshot_signal = signal(snapshot);
+    let screen = signal(Screen::Library);
+    let stopped = signal(!library_open);
+    let slow = signal(Vec::<SlowCommand>::new());
+    let results = Toasts::new();
+
+    // Keep ownership of the worker handle and wake guard inside the reactive owner so unmounting
+    // the shell closes the wake loop and joins the store worker thread.
+    let (bridge, owner) = StoreBridge::new(store, snapshot_signal, stopped, slow);
+    let _owner = stored(owner);
+
+    let now = SystemClock.now_ms();
+    let due = due_counts(&snapshot_signal.get_untracked(), now);
+    let state = Sidebar::new(
+        items_from(&snapshot_signal.get_untracked(), &due, now),
+        library_open,
+        search_chord(),
+    );
+    effect(move || {
+        let snapshot = snapshot_signal.get();
+        let now = SystemClock.now_ms();
+        state.refresh(items_from(&snapshot, &due_counts(&snapshot, now), now));
+    });
+    if let Some(notice) = notice {
+        state.note(notice);
+    }
+
+    let query = signal(String::new());
+    let search_handle = element_ref();
+    let selection = signal(None::<Id>);
+
+    let nav = LibraryNav::new(
+        snapshot_signal,
+        state,
+        query,
+        selection,
+        screen,
+        search_handle,
+        bridge.clone(),
+    );
+    let editor_ctl = EditorController::new(
+        bridge.clone(),
+        snapshot_signal,
+        screen,
+        library.attachments.clone(),
+    );
+    let study_ctl = StudyController::new(bridge.clone(), snapshot_signal, screen);
+
+    let tiles = computed(move || {
+        let snapshot = snapshot_signal.get();
+        let now = SystemClock.now_ms();
+        let cards = cards_in(&snapshot, state.selected_key().as_deref(), now);
+        tiles_for(&cards, &query.get(), now)
+    });
+
+    // The appearance the window follows is the library's `theme`, not `nsh.json`'s. One effect
+    // stores a change and then applies it, so the setting is in the library before the frame that
+    // draws it; at mount it only applies, which puts the stored theme on the first frame.
+    let theme = signal(snapshot_signal.with(|s| s.settings.theme));
+    bind_theme(theme, bridge.clone());
+
+    let export = {
+        let bridge = bridge.clone();
+        move || bridge.spawn_export(results)
+    };
+    let import = {
+        let bridge = bridge.clone();
+        let attachments = library.attachments.clone();
+        move || bridge.spawn_import(attachments.clone(), results)
+    };
+
+    // The command list: one element for the palette and the shortcut panel. Each opens on its
+    // chord and closes on the same chord or Escape.
+    let palette_open = signal(false);
+    let panel_open = signal(false);
+    let close = Rc::new(move || {
+        palette_open.set(false);
+        panel_open.set(false);
+    });
+
+    let run = command_runner(
+        nav.clone(),
+        editor_ctl.clone(),
+        study_ctl.clone(),
+        state,
+        selection,
+        screen,
+        palette_open,
+        panel_open,
+    );
+    bind_library_keys(screen, run.clone());
+
+    let pick = sidebar_picker(bridge.clone(), nav.clone(), state, screen, import.clone());
+
+    let library_view = {
+        let editor_new = editor_ctl.clone();
+        let editor_open = editor_ctl.clone();
+        move || {
+            let editor_new = editor_new.clone();
+            let editor_open = editor_open.clone();
+            view()
+                .flex_1()
+                .p_4()
+                .gap_3()
+                .child(field_reachable("Search cards", query, &search_handle))
+                .child(grid(
+                    tiles,
+                    selection,
+                    move || editor_new.new_card(state),
+                    move |id: Id| editor_open.open(id),
+                ))
+                .into_element()
+        }
+    };
+
+    // The system title bar is hidden (nsh.json): the shell starts below the window buttons, and a
+    // strip over that space moves the window.
+    let bar = move || nsh_core::element::desktop::title_bar().top;
+    view()
+        .flex_1()
+        .flex_row()
+        .pt(bar)
+        .bg(tokens::background)
+        .child(
+            view()
+                .absolute()
+                .top_0()
+                .left_0()
+                .right_0()
+                .h(bar)
+                .window_drag(true),
+        )
+        .child(sidebar(state, pick))
+        .child(view().flex_1().child(dynamic(move || {
+            match screen.get() {
+                Screen::Study(session) => study_ctl.render(session).into_element(),
+                Screen::Settings => {
+                    let cap = snapshot_signal.get_untracked().settings.new_per_day;
+                    let mut values = Values::new(cap);
+                    values.theme = theme;
+                    let bridge = bridge.clone();
+                    settings(
+                        values,
+                        library.clone(),
+                        move |cap| {
+                            bridge.apply(Command::SetSetting {
+                                key: SettingKey::NewPerDay,
+                                value: SettingValue::Number(cap),
+                            });
+                        },
+                        import.clone(),
+                        export.clone(),
+                        move || screen.set(Screen::Diagnostics),
+                    )
+                    .into_element()
+                }
+                Screen::Trash => {
+                    let restore = bridge.clone();
+                    let empty = bridge.clone();
+                    crate::screens::trash::trash(
+                        snapshot_signal,
+                        move |id: Id| restore.apply(Command::RestoreCard { id }),
+                        move || empty.apply(Command::EmptyTrash),
+                    )
+                    .into_element()
+                }
+                Screen::Diagnostics => {
+                    diagnostics(stopped, slow.get(), results, import.clone(), export.clone())
+                        .into_element()
+                }
+                Screen::Editor(id) => editor_ctl.render(id, library_view.clone()),
+                Screen::Library => library_view(),
+            }
+        })))
+        .child(overlay::decision(palette_open, {
+            let run = run.clone();
+            let close = close.clone();
+            move || {
+                let run = run.clone();
+                let dismiss = close.clone();
+                let cancel = close.clone();
+                crate::screens::keymap::panel(
+                    Surface::Library,
+                    crate::ui::command::Mode::Palette,
+                    move |id: &SharedString| {
+                        if let Some(command) = crate::screens::keymap::command_of(id) {
+                            run(command);
+                        }
+                        dismiss();
+                    },
+                    move || cancel(),
+                )
+            }
+        }))
+        .child(overlay::decision(panel_open, {
+            let close = close.clone();
+            move || {
+                let dismiss = close.clone();
+                let cancel = close.clone();
+                crate::screens::keymap::panel(
+                    Surface::Library,
+                    crate::ui::command::Mode::Panel,
+                    move |_: &SharedString| dismiss(),
+                    move || cancel(),
+                )
+            }
+        }))
+}
+
+fn bind_theme(theme: Signal<Theme>, bridge: StoreBridge) {
+    let stored_theme = Cell::new(theme.get_untracked());
+    effect(move || {
+        let chosen = theme.get();
+        if chosen != stored_theme.get() {
+            stored_theme.set(chosen);
+            bridge.apply(Command::SetSetting {
+                key: SettingKey::Theme,
+                value: SettingValue::Theme(chosen),
+            });
+        }
+        set_color_scheme(match chosen {
+            Theme::System => Appearance::System,
+            Theme::Light => Appearance::Light,
+            Theme::Dark => Appearance::Dark,
+        });
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn command_runner(
+    nav: LibraryNav,
+    editor: EditorController,
+    study: StudyController,
+    state: Sidebar,
+    selection: Signal<Option<Id>>,
+    screen: Signal<Screen>,
+    palette_open: Signal<bool>,
+    panel_open: Signal<bool>,
+) -> Rc<dyn Fn(Key)> {
+    Rc::new(move |command: Key| match command {
+        Key::StartDueSession => study.start(typr_core::screen::Queue::Due),
+        Key::StartNewSession => study.start(typr_core::screen::Queue::New),
+        Key::NewCard => editor.new_card(state),
+        Key::DeleteCard => nav.delete_card(),
+        Key::EditCard => {
+            if let Some(id) = selection.get_untracked() {
+                editor.open(id);
+            }
+        }
+        Key::FocusSearch => nav.focus_search(),
+        Key::SelectionNext => nav.step(1),
+        Key::SelectionPrevious => nav.step(-1),
+        Key::SelectionFirst => nav.select_end(true),
+        Key::SelectionLast => nav.select_end(false),
+        Key::Settings => {
+            state.select(&"settings".into());
+            screen.set(Screen::Settings);
+        }
+        Key::ShowPalette => palette_open.update(|open| *open = !*open),
+        Key::ShowShortcuts => panel_open.update(|open| *open = !*open),
+        _ => {}
+    })
+}
+
+fn bind_library_keys(screen: Signal<Screen>, run: Rc<dyn Fn(Key)>) {
+    for binding in bindings_of(Surface::Library) {
+        let Some(stroke) = crate::screens::keymap::keystroke_of_chord(binding.chord) else {
+            continue;
+        };
+        let run = run.clone();
+        let command = binding.command;
+        on_key(&stroke, move |_| {
+            if matches!(screen.get(), Screen::Library) {
+                run(command);
+            }
+        });
+    }
+}
+
+fn sidebar_picker(
+    bridge: StoreBridge,
+    nav: LibraryNav,
+    state: Sidebar,
+    screen: Signal<Screen>,
+    import: impl Fn() + Clone + 'static,
+) -> impl Fn(&SharedString) + Clone + 'static {
+    move |key: &SharedString| {
+        if key.as_ref() == "import" {
+            import();
+        } else if key.as_ref() == SEARCH_KEY {
+            let shown = matches!(screen.get_untracked(), Screen::Library);
+            screen.set(Screen::Library);
+            if shown {
+                nav.focus_search();
+            } else {
+                // The field is drawn again by the screen change; focus it once it exists.
+                let nav = nav.clone();
+                spawn(async move { nav.focus_search() });
+            }
+        } else if let Some(name) = key.strip_prefix(NEW_DECK_PREFIX) {
+            bridge.submit(
+                Command::CreateDeck {
+                    parent: None,
+                    name: name.to_owned(),
+                },
+                true,
+                Some(Box::new(move |result| {
+                    if let Ok(Outcome::Deck(id)) = result {
+                        state.select(&format!("deck:{id}").into());
+                        screen.set(Screen::Library);
+                    }
+                })),
+            );
+        } else {
+            state.select(key);
+            screen.set(screen_for(key));
+        }
+    }
+}
+
+/// The app's root: the real library when it opens, and an empty, closed one when it does not, so
+/// the sidebar says so rather than hiding it.
+#[component]
+pub fn App() -> impl IntoElement {
+    crate::ui::tokens::install();
+    // Resolve the local study-day offset on the main thread before spawning the store worker.
+    let _ = crate::day_offset::local_offset_ms();
+    // The data folder is the engine's, so it is read here, inside the mount, and the log lands in
+    // it before anything else can fail.
+    if let Ok(root) = crate::paths::data_root() {
+        match crate::logging::install(
+            &crate::paths::logs_root(&root),
+            crate::logging::level_from_env(),
+        ) {
+            Ok(path) => log::info!("typr starts; log at {}", path.display()),
+            Err(error) => log::error!("the log could not be installed: {error}"),
+        }
+    }
+    match crate::paths::open_from_environment() {
+        Ok(db) => {
+            let library = LibraryInfo::of(&db);
+            let wake = Arc::new(WakeSignal::new());
+            match Handle::spawn(db, Box::new(SystemClock), wake.waker()) {
+                Ok(handle) => {
+                    let snapshot = (*handle.snapshot()).clone();
+                    shell_over(Some((Rc::new(handle), wake)), snapshot, true, library, None)
+                        .into_element()
+                }
+                Err(error) => {
+                    let why = crate::logging::describe(&error);
+                    log::error!("store worker failed to start: {why}");
+                    shell_over(None, Snapshot::default(), false, library, Some(why.into()))
+                        .into_element()
+                }
+            }
+        }
+        Err(error) => {
+            let why = crate::logging::describe(&error);
+            log::error!("library did not open: {why}");
+            shell_over(
+                None,
+                Snapshot::default(),
+                false,
+                LibraryInfo::default(),
+                Some(why.into()),
+            )
+            .into_element()
+        }
+    }
+}

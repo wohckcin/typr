@@ -3,7 +3,7 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr::ui::toggle::{check, toggle};
+use typr::ui::toggle::{CheckChange, ToggleChange, check, toggle};
 
 #[component]
 fn Probe() -> impl IntoElement {
@@ -16,13 +16,13 @@ fn Probe() -> impl IntoElement {
             check()
                 .label("Remember")
                 .checked(move || box_on.get())
-                .on_change(move |next: &bool| box_on.set(*next)),
+                .on_change(move |next: &CheckChange| box_on.set(next.checked)),
         )
         .child(
             toggle()
                 .label("Sound")
                 .on(move || switch_on.get())
-                .on_change(move |next: &bool| switch_on.set(*next)),
+                .on_change(move |next: &ToggleChange| switch_on.set(next.on)),
         )
         .child(text(move || {
             format!("box={} switch={}", box_on.get(), switch_on.get())

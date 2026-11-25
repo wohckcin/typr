@@ -13,12 +13,14 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
 use crate::clock::Clock;
+use crate::command::{Command, Event, Outcome, Store};
+use crate::error::StoreError;
 use crate::library_view::ViewMode;
-
-use super::{
-    Command, Db, Event, Grade, Id, MaskRect, Outcome, SchedulerKind, SettingKey, SettingValue,
-    Snapshot, Store, StoreError, ViewSpec,
+use crate::model::{
+    Grade, Id, MaskRect, SchedulerKind, SettingKey, SettingValue, Snapshot, ViewSpec,
 };
+
+use super::db::Db;
 
 /// What the worker calls once its answer is published and readable.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
@@ -121,7 +123,7 @@ impl Handle {
     ///
     /// A closed worker means a quit is in progress: the command cannot land, so the caller is told
     /// rather than left waiting for an answer that will never come.
-    fn submit(&self, command: Command) -> Result<u64, StoreError> {
+    pub fn submit(&self, command: Command) -> Result<u64, StoreError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let sender = lock(&self.tx);
         let tx = sender.as_ref().ok_or(StoreError::Closed)?;
@@ -366,6 +368,14 @@ impl Store for Handle {
 
     fn remove_mask(&self, card: Id, rect: MaskRect) -> Result<u64, StoreError> {
         self.submit(Command::RemoveMask { card, rect })
+    }
+
+    fn remove_mask_group(&self, card: Id, group: u32) -> Result<u64, StoreError> {
+        self.submit(Command::RemoveMaskGroup { card, group })
+    }
+
+    fn clear_diagram(&self, card: Id) -> Result<u64, StoreError> {
+        self.submit(Command::ClearDiagram { card })
     }
 
     fn merge_masks(&self, card: Id, rects: &[MaskRect], group: u32) -> Result<u64, StoreError> {

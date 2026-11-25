@@ -6,20 +6,10 @@
 
 use nsh_core::prelude::*;
 
+pub use typr_core::schedule::{Schedule, schedule_of};
 use typr_core::store::Id;
 
 use crate::ui::{prose::prose, status::badge, surface, tokens};
-
-/// How a card's schedule reads on its tile.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Schedule {
-    /// Never graded: the tile says it is new.
-    New,
-    /// Graded and due later: the days until it comes back.
-    Interval(u32),
-    /// Graded and due now.
-    Due,
-}
 
 /// The width a tile is given: the window less the page's padding, shared across its columns.
 /// The width the grid has to work with: the window less the sidebar and the page's padding. The
@@ -35,7 +25,8 @@ fn tile_width() -> f32 {
 }
 
 /// One card's tile: what it shows, read from the snapshot.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct Tile {
     /// Identifies the card; the list keys its rows on it.
     pub id: i64,
@@ -51,15 +42,14 @@ pub struct Tile {
     pub pinned: bool,
 }
 
-const DAY_MS: i64 = 86_400_000;
-
-/// The schedule state of a card at `now_ms`.
-pub fn schedule_of(reviews: u32, due_at: Option<i64>, now_ms: i64) -> Schedule {
-    match due_at {
-        _ if reviews == 0 || due_at.is_none() => Schedule::New,
-        Some(due) if due <= now_ms => Schedule::Due,
-        Some(due) => Schedule::Interval(u32::try_from((due - now_ms) / DAY_MS).unwrap_or(u32::MAX)),
-        None => Schedule::New,
+impl Tile {
+    /// A new tile for `id` showing `preview`, with no hidden sides, tags, or pin.
+    pub fn new(id: i64, preview: impl Into<SharedString>) -> Self {
+        Self {
+            id,
+            preview: preview.into(),
+            ..Self::default()
+        }
     }
 }
 

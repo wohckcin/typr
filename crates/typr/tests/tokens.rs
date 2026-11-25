@@ -84,6 +84,26 @@ fn the_theme_import_is_allowed() {
 }
 
 #[test]
+fn a_variable_pixel_call_is_refused() {
+    let (_dir, file) = planted("fn view(left: f32) {\n    view().left(px(left));\n}\n");
+    let result = check(&[&file]);
+    assert!(!result.ok, "the check let a variable px() call through");
+    assert!(result.report.contains("px(left)"), "{}", result.report);
+}
+
+#[test]
+fn a_qualified_base_type_is_refused() {
+    let (_dir, file) = planted("fn items() -> Vec<nsh_base::TreeItem> { Vec::new() }\n");
+    let result = check(&[&file]);
+    assert!(!result.ok, "the check let nsh_base::TreeItem through");
+    assert!(
+        result.report.contains("nsh_base::TreeItem"),
+        "{}",
+        result.report
+    );
+}
+
+#[test]
 fn a_missing_screen_is_reported_rather_than_skipped() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let file = dir.path().join("gone.rs");

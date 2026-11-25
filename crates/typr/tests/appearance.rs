@@ -135,14 +135,9 @@ fn GridScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     grid(
         computed(|| {
-            vec![Tile {
-                id: 1,
-                preview: "Front".into(),
-                hidden_sides: 1,
-                tags: Vec::new(),
-                schedule: typr::screens::grid::Schedule::New,
-                pinned: false,
-            }]
+            let mut tile = Tile::new(1, "Front");
+            tile.hidden_sides = 1;
+            vec![tile]
         }),
         signal(None),
         || {},
@@ -173,12 +168,7 @@ fn StudyScreen() -> impl IntoElement {
 #[component]
 fn HistoryScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    history(vec![Record {
-        phase: "review".into(),
-        grade: "good".into(),
-        at: "09:00".into(),
-        due: "tomorrow".into(),
-    }])
+    history(vec![Record::new("review", "good", "09:00", "tomorrow")])
 }
 
 #[component]
@@ -214,10 +204,7 @@ fn DiagnosticsScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     diagnostics(
         signal(false),
-        vec![SlowCommand {
-            name: "load deck".into(),
-            millis: 740,
-        }],
+        vec![SlowCommand::new("load deck", 740)],
         Toasts::new(),
         || {},
         || {},
@@ -304,15 +291,12 @@ check!(
 #[component]
 fn TrashScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    let snapshot = typr_core::store::Snapshot {
-        cards: vec![typr_core::store::CardSummary {
-            id: 1,
-            preview: "Front".into(),
-            trashed_at: Some(1),
-            ..typr_core::store::CardSummary::default()
-        }],
-        ..typr_core::store::Snapshot::default()
-    };
+    let mut card = typr_core::store::CardSummary::default();
+    card.id = 1;
+    card.preview = "Front".into();
+    card.trashed_at = Some(1);
+    let mut snapshot = typr_core::store::Snapshot::default();
+    snapshot.cards = vec![card];
     typr::screens::trash::trash(signal(snapshot), |_| {}, || {})
 }
 

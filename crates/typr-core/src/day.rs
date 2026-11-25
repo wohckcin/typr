@@ -5,6 +5,9 @@
 //! that runs past midnight inside the same day, which is what a user expects and what Mochi does
 //! with its tomorrow/next-due split.
 
+/// One minute in milliseconds.
+pub const MINUTE_MS: i64 = 60_000;
+
 /// One day in milliseconds.
 pub const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 

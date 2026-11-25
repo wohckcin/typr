@@ -95,6 +95,7 @@ impl Variant {
 
 /// A button's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct ButtonProps {
     /// What it is for: the variant sets its colours.
     #[prop(default)]
@@ -152,7 +153,7 @@ pub fn Button(props: ButtonProps, cx: Scope<ButtonEvent>) -> impl IntoElement {
                     .scale(PRESS_SCALE)
             }
         })
-        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
+        .focus_visible(tokens::focus_ring)
         .disabled_style(|style| style.opacity(0.5))
         .child(sized.text(props.label).text_color(move || text_color))
 }
@@ -160,6 +161,7 @@ pub fn Button(props: ButtonProps, cx: Scope<ButtonEvent>) -> impl IntoElement {
 /// A press target drawn as its own children, for a card that is more than a label: a grid tile
 /// opens its card, and its name is what a screen reader says instead of its whole content.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct TileProps {
     /// What a screen reader says for it.
     pub label: Prop<SharedString>,
@@ -195,7 +197,7 @@ pub fn Tile(props: TileProps, cx: Scope<TileEvent>) -> impl IntoElement {
                 style.bg(tokens::hover().opacity(0.9)).scale(PRESS_SCALE)
             }
         })
-        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
+        .focus_visible(tokens::focus_ring)
         .child(props.children)
 }
 

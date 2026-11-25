@@ -87,10 +87,21 @@ impl Cover {
 
 /// A diagram card's picture, its caption, and the rectangles drawn on it.
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct Diagram {
     pub image: String,
     pub caption: String,
     pub rows: Vec<Cover>,
+}
+
+impl Diagram {
+    /// A diagram showing `image`, with an empty caption and no masks yet.
+    pub fn new(image: impl Into<String>) -> Self {
+        Self {
+            image: image.into(),
+            ..Self::default()
+        }
+    }
 }
 
 /// The diagram pane: the picture, a cover per rectangle labelled with its group, a drag across it
@@ -209,10 +220,10 @@ pub fn diagram_pane(diagram: Diagram, cx: Scope<EditorEvent>) -> impl IntoElemen
                         layer = layer.child(
                             view()
                                 .absolute()
-                                .left(px(left))
-                                .top(px(top))
-                                .w(px(width))
-                                .h(px(height))
+                                .left(tokens::points(left))
+                                .top(tokens::points(top))
+                                .w(tokens::points(width))
+                                .h(tokens::points(height))
                                 .bg(fill)
                                 .border_1()
                                 .border_color(tokens::selection)

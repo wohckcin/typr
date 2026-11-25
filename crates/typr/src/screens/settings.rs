@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use nsh_core::prelude::*;
-use typr_core::store::{Db, MAX_NEW_PER_DAY, Theme};
+pub use typr_core::store::check_new_card_cap;
+use typr_core::store::{Db, Theme};
 
 use crate::ui::{
     button::{Variant, button},
@@ -21,19 +22,6 @@ use crate::ui::{
     status::badge,
     tokens,
 };
-
-/// Checks a new-card cap typed by the user against the limit the store keeps. The error names the
-/// limit so the user knows what is allowed.
-pub fn check_new_card_cap(text: &str) -> Result<u32, String> {
-    let value: u32 = text
-        .trim()
-        .parse()
-        .map_err(|_| format!("New cards a day must be a whole number up to {MAX_NEW_PER_DAY}"))?;
-    if value > MAX_NEW_PER_DAY {
-        return Err(format!("New cards a day must be {MAX_NEW_PER_DAY} or less"));
-    }
-    Ok(value)
-}
 
 /// The values the screen edits. Each is a signal the caller owns.
 ///
@@ -155,7 +143,9 @@ fn header(values: Values) -> impl IntoElement {
                     .size(Size::Sm)
                     .placeholder("Find a setting")
                     .value(move || SharedString::from(values.query.get()))
-                    .on_change(move |text: &String| values.query.set(text.to_string())),
+                    .on_change(move |ev: &crate::ui::input::FieldInput| {
+                        values.query.set(ev.text.clone())
+                    }),
             ),
         )
 }
@@ -176,7 +166,9 @@ fn cap_control(values: Values, accept: impl Fn() + 'static) -> impl IntoElement 
                             .size(Size::Sm)
                             .placeholder("20")
                             .value(move || SharedString::from(values.cap_text.get()))
-                            .on_change(move |text: &String| values.cap_text.set(text.to_string())),
+                            .on_change(move |ev: &crate::ui::input::FieldInput| {
+                                values.cap_text.set(ev.text.clone())
+                            }),
                     ),
                 )
                 .child(

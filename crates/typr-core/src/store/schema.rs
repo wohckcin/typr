@@ -4,10 +4,11 @@ use std::collections::HashMap;
 
 use rusqlite::{Connection, params};
 
-use super::StoreError;
+use crate::error::StoreError;
 
 /// What a library recorded about its schema before it was opened, and what it records now.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SchemaFacts {
     /// The `user_version` the file held before migration.
     pub found: i64,

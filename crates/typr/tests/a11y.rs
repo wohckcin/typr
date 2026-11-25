@@ -30,26 +30,16 @@ fn library_info() -> LibraryInfo {
 }
 
 fn snapshot() -> Snapshot {
-    Snapshot {
-        decks: vec![Deck {
-            id: 1,
-            parent: None,
-            name: "Spanish".to_owned(),
-            archived: false,
-            reverse: None,
-            template: None,
-            view: Default::default(),
-        }],
-        cards: vec![CardSummary {
-            id: 10,
-            deck: 1,
-            markdown: "gato\n---\ncat".to_owned(),
-            preview: "gato".to_owned(),
-            sides: 2,
-            ..CardSummary::default()
-        }],
-        ..Snapshot::default()
-    }
+    let mut card = CardSummary::default();
+    card.id = 10;
+    card.deck = 1;
+    card.markdown = "gato\n---\ncat".to_owned();
+    card.preview = "gato".to_owned();
+    card.sides = 2;
+    let mut snapshot = Snapshot::default();
+    snapshot.decks = vec![Deck::new(1, "Spanish")];
+    snapshot.cards = vec![card];
+    snapshot
 }
 
 #[component]
@@ -83,12 +73,7 @@ fn StudyScreen() -> impl IntoElement {
 #[component]
 fn HistoryScreen() -> impl IntoElement {
     typr::ui::tokens::install();
-    history(vec![Record {
-        phase: "review".into(),
-        grade: "good".into(),
-        at: "10:00".into(),
-        due: "tomorrow".into(),
-    }])
+    history(vec![Record::new("review", "good", "10:00", "tomorrow")])
 }
 
 #[component]
@@ -102,10 +87,7 @@ fn DiagnosticsScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     diagnostics(
         signal(false),
-        vec![SlowCommand {
-            name: "SaveCard".into(),
-            millis: 240,
-        }],
+        vec![SlowCommand::new("SaveCard", 240)],
         Toasts::new(),
         || {},
         || {},

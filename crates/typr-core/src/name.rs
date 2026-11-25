@@ -4,7 +4,7 @@
 //! card has one. It is stored rather than derived on read so `[[name]]` resolves with one index
 //! lookup and so the name a reference points at does not move when the card's fields change.
 
-use crate::store::folded;
+use crate::model::folded;
 use crate::template::{self, Context, Fields};
 
 /// The longest a name may be, in characters.

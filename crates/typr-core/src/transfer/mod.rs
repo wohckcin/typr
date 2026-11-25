@@ -13,7 +13,25 @@ use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
 
-use crate::store::StoreError;
+use crate::command::{Command, Outcome};
+use crate::error::StoreError;
+pub use crate::model::ImportReport;
+use crate::model::{Grade, Id, Snapshot};
+
+/// Minimal storage operations needed by the transfer importers and exporters so `transfer` stays
+/// decoupled from `store::Db`.
+pub trait TransferTarget {
+    fn snapshot(&self) -> Result<Snapshot, StoreError>;
+    fn staged(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError>;
+    fn record_review(
+        &self,
+        card: Id,
+        key: &str,
+        grade: Grade,
+        duration_ms: Option<i64>,
+        at_ms: i64,
+    ) -> Result<Outcome, StoreError>;
+}
 
 /// Distinguishes the temporary names of exports racing in one process.
 static NEXT_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -24,16 +42,6 @@ pub mod mochi;
 
 pub use csv::{export as export_csv, import as import_csv};
 pub use markdown::{export as export_markdown, import as import_markdown};
-
-/// What an import wrote, in the units the archive itself counts.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ImportReport {
-    pub decks: usize,
-    pub cards: usize,
-    pub reviews: usize,
-    pub images: usize,
-    pub masks: usize,
-}
 
 /// Copy the library at `db_path` into `target` without opening it for writing.
 ///

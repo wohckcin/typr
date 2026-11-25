@@ -1,13 +1,14 @@
 //! The app's single-line text field: one border, one focus ring, the same padding as its label.
 
 use nsh_base::{Input, input};
-use nsh_core::element::Prop;
+use nsh_core::element::{JsObject, Prop};
 use nsh_core::prelude::*;
 
 use super::{size::Size, tokens};
 
 /// A text field's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct FieldProps {
     /// The words shown while it is empty.
     pub placeholder: Prop<SharedString>,
@@ -22,11 +23,19 @@ pub struct FieldProps {
     pub size: Prop<Size>,
 }
 
+/// The text a user typed into a field.
+#[derive(Clone, Debug, Default, PartialEq, Eq, JsObject)]
+#[non_exhaustive]
+pub struct FieldInput {
+    /// The whole text after the edit.
+    pub text: String,
+}
+
 /// What a field reports.
 #[derive(Event)]
 pub enum FieldEvent {
     /// The whole text, after an edit.
-    Change(String),
+    Change(FieldInput),
 }
 
 /// A text field bound to `value`; typing reports the whole text once per edit.
@@ -36,7 +45,11 @@ pub fn Field(props: FieldProps, cx: Scope<FieldEvent>) -> impl IntoElement {
     let control = styled(
         input()
             .value(move || props.value.get().to_string())
-            .on_change(move |text: &str| cx.emit(FieldEvent::Change(text.to_owned())))
+            .on_change(move |text: &str| {
+                cx.emit(FieldEvent::Change(FieldInput {
+                    text: text.to_owned(),
+                }))
+            })
             .placeholder(move || props.placeholder.get().to_string()),
         sized,
     );
@@ -83,7 +96,7 @@ fn styled(control: Input, size: Size) -> Input {
         .border_1()
         .border_color(tokens::border)
         .focus(|style| style.border_color(tokens::ring))
-        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
+        .focus_visible(tokens::focus_ring)
 }
 
 /// A field that takes the caret when it appears and reports the text on Enter: for naming a thing

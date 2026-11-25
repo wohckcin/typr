@@ -11,9 +11,14 @@
 set -uo pipefail
 
 screens=(
-  crates/typr/src/shell.rs
+  crates/typr/src/shell/mod.rs
+  crates/typr/src/shell/store_bridge.rs
+  crates/typr/src/shell/navigation.rs
+  crates/typr/src/shell/study.rs
+  crates/typr/src/shell/editor.rs
   crates/typr/src/screens/sidebar.rs
   crates/typr/src/screens/grid.rs
+  crates/typr/src/screens/library.rs
   crates/typr/src/screens/editor/mod.rs
   crates/typr/src/screens/editor/diagram.rs
   crates/typr/src/screens/editor/dialogs.rs
@@ -24,16 +29,17 @@ screens=(
   crates/typr/src/screens/keymap.rs
   crates/typr/src/screens/settings.rs
   crates/typr/src/screens/study.rs
+  crates/typr/src/screens/trash.rs
 )
 
 if [ "$#" -gt 0 ]; then
   screens=("$@")
 fi
 
-# A pixel length or a colour written as a value: `px(24.0)`, `rgb(0x1e1e1e)`, `hsla(..)`.
-literal='\b(px|rgb|rgba|hsl|hsla)\([0-9]|\b(rgb|rgba|hsl|hsla)\(0x'
-# Any `nsh_base` import other than the theme, and any call to a base control by name.
-base='use nsh_base::|nsh_base::(button|input|checkbox|switch|select|tab|tabs|menu|popover|tooltip|dialog|alert_dialog|sheet|toast|toast_stack|radio_group|text_view|editor)\b'
+# Any pixel length or colour constructor written directly in a screen (`px(..)`, `rgb(..)`, `hsla(..)`).
+literal='\b(px|rgb|rgba|hsl|hsla)\('
+# Any `nsh_base` import or qualified reference other than `use nsh_base::(theme|tokens_of)`.
+base='use nsh_base::|nsh_base::'
 
 status=0
 for file in "${screens[@]}"; do

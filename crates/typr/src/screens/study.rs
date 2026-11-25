@@ -5,8 +5,9 @@
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Command, Surface};
-use typr_core::session::{Entry, Session};
-use typr_core::store::{CardSummary, Grade, Id};
+use typr_core::session::Session;
+pub use typr_core::session::{entries_for, entry_for};
+use typr_core::store::{Grade, Id};
 
 use crate::screens::keymap::keystroke_of;
 use crate::ui::{
@@ -31,71 +32,74 @@ pub struct GradeRefused;
 /// The study screen over `session`, which the caller builds for the queue it wants (due, new,
 /// reverse or cram). `on_grade` writes each grade for its card; a refusal leaves the card answerable
 /// and says so in its error.
-/// The entry one prompt walks: a hidden-text group masked until revealed, a diagram group covered
-/// until uncovered, or the sides of a card asked forwards or backwards. `None` for a key the card
-/// no longer holds (a prompt retired after an edit).
-pub fn entry_for(card: &CardSummary, key: &str, overdue: i64) -> Option<Entry> {
-    if let Some(group) = key.strip_prefix("mask:") {
-        let group: u32 = group.parse().ok()?;
-        let masks: Vec<typr_core::store::MaskRect> = card
-            .masks
-            .iter()
-            .filter(|row| row.group == group)
-            .map(|row| row.rect)
-            .collect();
-        if masks.is_empty() {
-            return None;
-        }
-        return Some(Entry::mask_group(
-            card.id,
-            key,
-            card.image.clone().unwrap_or_default(),
-            card.caption.clone(),
-            masks,
-            overdue,
-        ));
-    }
-    let shape = typr_core::hidden::shape(&card.markdown);
-    match key {
-        "fwd" => {
-            let sides = typr_core::sides::split(&card.markdown);
-            (sides.len() >= 2).then(|| Entry::sides(card.id, sides, overdue))
-        }
-        "rev" => {
-            let sides = typr_core::sides::split(&card.markdown);
-            (sides.len() >= 2).then(|| Entry::reverse(card.id, sides, overdue))
-        }
-        other if typr_core::hidden::group_of(other).is_some() => {
-            let hidden = typr_core::hidden::masked(&card.markdown, &shape, other);
-            let shown = typr_core::hidden::shown(&card.markdown, &shape);
-            (hidden != shown).then(|| Entry::masked(card.id, other, hidden, shown, overdue))
-        }
-        _ => None,
-    }
-}
-
-/// The entries a session walks, from the prompts the store served and the cards it holds. A prompt
-/// whose card was edited away is left out rather than asked with nothing on it.
-pub fn entries_for(cards: &[CardSummary], prompts: &[(Id, String, i64)]) -> Vec<Entry> {
-    prompts
-        .iter()
-        .filter_map(|(card, key, overdue)| {
-            let card = cards.iter().find(|row| row.id == *card)?;
-            entry_for(card, key, *overdue)
-        })
-        .collect()
-}
-
 pub fn study(
     session: std::rc::Rc<std::cell::RefCell<Session>>,
     on_grade: impl Fn(Id, String, Grade) -> Result<(), GradeRefused> + Clone + 'static,
     on_leave: impl Fn() + Clone + 'static,
     on_settings: impl Fn() + Clone + 'static,
 ) -> impl IntoElement {
-    let session = stored(session);
     let version = signal(0_u32);
     let refused = signal(false);
-    let grade_out = on_grade.clone();
+    study_view(
+        session,
+        version,
+        refused,
+        move |session_ref, id, key, grade| {
+            let taken = on_grade(id, key, grade).is_ok();
+            refused.set(!taken);
+            if taken {
+                session_ref.borrow_mut().sent(id as u64);
+                session_ref
+                    .borrow_mut()
+                    .acknowledge(id as u64, SystemClock.now_ms());
+            } else {
+                session_ref.borrow_mut().refuse(id as u64);
+            }
+        },
+        on_leave,
+        on_settings,
+    )
+}
+
+/// The study screen driven by an asynchronous store worker: `on_grade` submits the grade and
+/// returns the command id (`None` if the worker is closed), and the caller acknowledges or refuses
+/// that id on `session` when the worker answers and bumps `version`.
+pub fn study_async(
+    session: std::rc::Rc<std::cell::RefCell<Session>>,
+    version: Signal<u32>,
+    refused: Signal<bool>,
+    on_grade: impl Fn(Id, String, Grade) -> Option<u64> + Clone + 'static,
+    on_leave: impl Fn() + Clone + 'static,
+    on_settings: impl Fn() + Clone + 'static,
+) -> impl IntoElement {
+    study_view(
+        session,
+        version,
+        refused,
+        move |session_ref, id, key, grade| match on_grade(id, key, grade) {
+            Some(command_id) => {
+                refused.set(false);
+                session_ref.borrow_mut().sent(command_id);
+            }
+            None => {
+                refused.set(true);
+                session_ref.borrow_mut().refuse(0);
+            }
+        },
+        on_leave,
+        on_settings,
+    )
+}
+
+fn study_view(
+    session: std::rc::Rc<std::cell::RefCell<Session>>,
+    version: Signal<u32>,
+    refused: Signal<bool>,
+    dispatch_grade: impl Fn(&std::cell::RefCell<Session>, Id, String, Grade) + Clone + 'static,
+    on_leave: impl Fn() + Clone + 'static,
+    on_settings: impl Fn() + Clone + 'static,
+) -> impl IntoElement {
+    let session = stored(session);
     let reveal = move || {
         session.with(|s| {
             s.borrow_mut().reveal();
@@ -105,18 +109,9 @@ pub fn study(
     let grade = move |g: Grade| {
         let sent = session.with(|s| s.borrow_mut().grade(g));
         if let Some((id, key, grade)) = sent {
-            let taken = grade_out(id, key, grade).is_ok();
-            refused.set(!taken);
-            session.with(|s| {
-                if taken {
-                    s.borrow_mut().sent(id as u64);
-                    s.borrow_mut().acknowledge(id as u64, SystemClock.now_ms());
-                } else {
-                    s.borrow_mut().refuse(id as u64);
-                }
-            });
+            session.with(|s| dispatch_grade(s, id, key, grade));
+            version.update(|v| *v += 1);
         }
-        version.update(|v| *v += 1);
     };
     let grade_forgot = grade.clone();
     let grade_remembered = grade;

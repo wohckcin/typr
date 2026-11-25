@@ -18,25 +18,13 @@
 //! Implementing it here rather than depending on the `fsrs` crate keeps the backend's dependency
 //! graph what it is: arithmetic, no `chrono`, no `serde`, no `ndarray`.
 
-use crate::store::{Grade, StoreError};
+use crate::error::StoreError;
+use crate::model::Grade;
+pub use crate::model::{DEFAULT_RETENTION, DEFAULT_WEIGHTS, WEIGHT_COUNT};
 
 /// The forgetting curve's shape. `R = 0.9` at `t = S` only for this pair, so they travel together.
 const DECAY: f64 = -0.5;
 const FACTOR: f64 = 19.0 / 81.0;
-
-/// FSRS-5's published defaults, one per weight the optimiser trains.
-///
-/// `w17` and `w18` belong to the same-day update, which this build does not run: its learning step
-/// is the fixed scheduler's ten minutes and the change that added FSRS leaves short-term scheduling
-/// out. They stay in the list because an optimiser emits all nineteen, and a list of another length
-/// is refused rather than reinterpreted.
-pub const DEFAULT_WEIGHTS: [f64; 19] = [
-    0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192, 1.01925,
-    1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621,
-];
-
-/// How many numbers a weight list holds.
-pub const WEIGHT_COUNT: usize = DEFAULT_WEIGHTS.len();
 
 /// Stability never reaches zero: a card just forgotten is still worth something later than now.
 const MIN_STABILITY: f64 = 0.1;
@@ -48,11 +36,9 @@ const MAX_DIFFICULTY: f64 = 10.0;
 /// FSRS's fourth rating, "easy", which this build never sends but its mean reversion is anchored to.
 const EASY: f64 = 4.0;
 
-/// The retention a library gets before anyone sets one.
-pub const DEFAULT_RETENTION: f64 = 0.9;
-
 /// What FSRS remembers about a prompt between reviews.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct Memory {
     /// Days at which recall is 90% likely.
     pub stability: f64,

@@ -210,29 +210,19 @@ fn an_open_library_has_a_success_dot_and_a_closed_one_a_different_dot() -> Resul
 
 // ---- the reference layout, driven from a real snapshot ----
 
-use typr_core::library_view::ViewMode;
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 const NOW: i64 = 1_000_000;
 
 fn deck(id: i64, name: &str) -> Deck {
-    Deck {
-        id,
-        parent: None,
-        name: name.to_owned(),
-        archived: false,
-        reverse: None,
-        template: None,
-        view: ViewMode::default(),
-    }
+    Deck::new(id, name)
 }
 
 fn snapshot_with(cards: Vec<CardSummary>) -> Snapshot {
-    Snapshot {
-        decks: vec![deck(1, "Flashcards"), deck(2, "Notes")],
-        cards,
-        ..Snapshot::default()
-    }
+    let mut snapshot = Snapshot::default();
+    snapshot.decks = vec![deck(1, "Flashcards"), deck(2, "Notes")];
+    snapshot.cards = cards;
+    snapshot
 }
 
 fn labels(items: &[Item]) -> Vec<String> {
@@ -267,13 +257,14 @@ fn a_new_library_reads_as_the_reference_layout() {
 
 #[test]
 fn the_inbox_rows_count_their_cards() {
-    let card = |id, due_at, unscheduled| CardSummary {
-        id,
-        deck: 1,
-        prompts: 1,
-        unscheduled,
-        due_at,
-        ..CardSummary::default()
+    let card = |id, due_at, unscheduled| {
+        let mut card = CardSummary::default();
+        card.id = id;
+        card.deck = 1;
+        card.prompts = 1;
+        card.unscheduled = unscheduled;
+        card.due_at = due_at;
+        card
     };
     // Two due, three new, none both.
     let snapshot = snapshot_with(vec![
@@ -304,13 +295,12 @@ fn the_inbox_rows_count_their_cards() {
 #[component]
 fn Layout() -> impl IntoElement {
     typr::ui::tokens::install();
-    let snapshot = snapshot_with(vec![CardSummary {
-        id: 1,
-        deck: 1,
-        prompts: 1,
-        unscheduled: 1,
-        ..CardSummary::default()
-    }]);
+    let mut card = CardSummary::default();
+    card.id = 1;
+    card.deck = 1;
+    card.prompts = 1;
+    card.unscheduled = 1;
+    let snapshot = snapshot_with(vec![card]);
     let due = typr::screens::sidebar::due_counts(&snapshot, NOW);
     let items = typr::screens::sidebar::items_from(&snapshot, &due, NOW);
     let state = Sidebar::new(items, true, typr::screens::sidebar::search_chord());

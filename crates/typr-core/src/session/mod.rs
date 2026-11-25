@@ -3,8 +3,10 @@
 use std::collections::HashSet;
 
 use crate::clock::LEARNING_STEP_MS;
+use crate::hidden;
+use crate::model::{CardSummary, Grade, Id, MaskRect};
 use crate::screen::Queue;
-use crate::store::{Grade, Id, MaskRect};
+use crate::sides;
 
 /// One face of a card: what is on screen before it is unmasked, and what it reads as afterwards.
 ///
@@ -82,6 +84,7 @@ impl Face {
 
 /// A card waiting its turn, with the faces its prompt asks.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Entry {
     pub card: Id,
     /// The prompt this entry reviews, such as `fwd` or `cloze:1`.
@@ -162,6 +165,112 @@ impl Entry {
     }
 }
 
+/// The entry one prompt walks: a hidden-text group masked until revealed, a diagram group covered
+/// until uncovered, or the sides of a card asked forwards or backwards. `None` for a key the card
+/// no longer holds (a prompt retired after an edit).
+pub fn entry_for(card: &CardSummary, key: &str, overdue: i64) -> Option<Entry> {
+    if let Some(group) = key.strip_prefix("mask:") {
+        let group: u32 = group.parse().ok()?;
+        let masks: Vec<MaskRect> = card
+            .masks
+            .iter()
+            .filter(|row| row.group == group)
+            .map(|row| row.rect)
+            .collect();
+        if masks.is_empty() {
+            return None;
+        }
+        return Some(Entry::mask_group(
+            card.id,
+            key,
+            card.image.clone().unwrap_or_default(),
+            card.caption.clone(),
+            masks,
+            overdue,
+        ));
+    }
+    let shape = hidden::shape(&card.markdown);
+    match key {
+        "fwd" => {
+            let sides = sides::split(&card.markdown);
+            (sides.len() >= 2).then(|| Entry::sides(card.id, sides, overdue))
+        }
+        "rev" => {
+            let sides = sides::split(&card.markdown);
+            (sides.len() >= 2).then(|| Entry::reverse(card.id, sides, overdue))
+        }
+        other if hidden::group_of(other).is_some() => {
+            let hidden = hidden::masked(&card.markdown, &shape, other);
+            let shown = hidden::shown(&card.markdown, &shape);
+            (hidden != shown).then(|| Entry::masked(card.id, other, hidden, shown, overdue))
+        }
+        _ => None,
+    }
+}
+
+/// The entries a session walks, from the prompts the store served and the cards it holds. A prompt
+/// whose card was edited away is left out rather than asked with nothing on it.
+pub fn entries_for(cards: &[CardSummary], prompts: &[(Id, String, i64)]) -> Vec<Entry> {
+    prompts
+        .iter()
+        .filter_map(|(card, key, overdue)| {
+            let card = cards.iter().find(|row| row.id == *card)?;
+            entry_for(card, key, *overdue)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod entry_tests {
+    use super::*;
+    use crate::model::MaskRow;
+
+    #[test]
+    fn builds_entries_for_sides_reverse_cloze_and_masks() {
+        let sided = CardSummary {
+            id: 1,
+            markdown: "front\n---\nback".into(),
+            ..CardSummary::default()
+        };
+        let fwd = entry_for(&sided, "fwd", 2).expect("fwd");
+        assert_eq!(fwd.prompt, "fwd");
+        assert_eq!(fwd.faces[0].text(), Some(("front\n", "front\n")));
+        let rev = entry_for(&sided, "rev", 2).expect("rev");
+        assert_eq!(rev.prompt, "rev");
+        assert_eq!(rev.faces[0].text(), Some(("back", "back")));
+
+        let cloze = CardSummary {
+            id: 2,
+            markdown: "The {{answer}} hides.".into(),
+            ..CardSummary::default()
+        };
+        assert!(entry_for(&cloze, "cloze:0", 0).is_some());
+        assert!(entry_for(&cloze, "cloze:9", 0).is_none());
+
+        let diagram = CardSummary {
+            id: 3,
+            image: Some("cell.png".into()),
+            masks: vec![MaskRow {
+                group: 1,
+                rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
+            }],
+            ..CardSummary::default()
+        };
+        assert!(entry_for(&diagram, "mask:1", 1).is_some());
+        assert!(entry_for(&diagram, "mask:2", 1).is_none());
+
+        let entries = entries_for(
+            &[sided, cloze, diagram],
+            &[
+                (1, "fwd".into(), 0),
+                (99, "fwd".into(), 0),
+                (3, "mask:1".into(), 1),
+            ],
+        );
+        assert_eq!(entries.len(), 2);
+    }
+}
+
 /// What a session walks: the two queues the scheduler serves, or a cram run over a filter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -184,6 +293,7 @@ impl Entry {
 
 /// The cards this session is walking, in order.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Session {
     pub queue: Queue,
     mode: Mode,

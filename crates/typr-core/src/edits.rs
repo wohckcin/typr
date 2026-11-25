@@ -1,7 +1,7 @@
 //! The rules behind card and deck edits, as plain functions, so any front end gets the same
 //! answers and they test without a database or a toolkit.
 
-use crate::store::{Id, Snapshot};
+use crate::model::{Deck, Id, Snapshot};
 
 /// Whether the text holds anything once trimmed; an empty card is not saved.
 pub fn has_content(markdown: &str) -> bool {
@@ -16,7 +16,7 @@ pub fn deck_of_key(key: &str) -> Option<Id> {
 /// The deck a new card goes to: the selected deck when it is open, otherwise the first deck that is
 /// not archived. `None` when every deck is archived.
 pub fn deck_for_new_card(snapshot: &Snapshot, selected_key: Option<&str>) -> Option<Id> {
-    let open = |deck: &&crate::store::Deck| !deck.archived;
+    let open = |deck: &&Deck| !deck.archived;
     selected_key
         .and_then(deck_of_key)
         .and_then(|id| snapshot.decks.iter().find(|deck| deck.id == id))
@@ -41,7 +41,7 @@ pub fn deck_name(raw: &str) -> Option<&str> {
 mod tests {
     use super::*;
     use crate::library_view::ViewMode;
-    use crate::store::Deck;
+    use crate::model::Deck;
 
     fn deck(id: Id, archived: bool) -> Deck {
         Deck {

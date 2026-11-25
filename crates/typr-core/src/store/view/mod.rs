@@ -1,25 +1,10 @@
 //! Saved filters and the orders a list can be shown in.
 //!
 //! One type, [`ViewSpec`], is what the sidebar, a saved view and a test all build: a deck scope, a
-//! search text, a set of tags, a mode, a pinned-only flag and an order. The list filters and sorts a
-//! [`Snapshot`](super::Snapshot) through it, so adding a filter means adding a field here rather
-//! than a parameter to every caller.
+//! search text, a set of tags, a mode, a pinned-only flag and an order.
 
-use super::{CardMode, CardSummary, Id, Snapshot, folded};
-
-/// How a list is ordered. Every order but the shuffle is a property of a saved view.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Sort {
-    /// The last one touched first, which is what a library shows before anything is chosen.
-    #[default]
-    LastEdited,
-    Created,
-    /// By the text of the first side, folded so case and accents do not decide the order.
-    FirstSide,
-    /// The earliest due prompt first; a card with nothing scheduled comes last either way.
-    DueDate,
-    Reviews,
-}
+use crate::model::{CardSummary, SavedView, Snapshot, Sort, SortDir, ViewSpec, folded};
+use crate::shuffle::Shuffle;
 
 impl Sort {
     /// Every order the control offers, in the order it offers them.
@@ -31,8 +16,7 @@ impl Sort {
         Sort::Reviews,
     ];
 
-    /// The direction this order runs in when it is chosen: an order of recency reads newest first,
-    /// while a name or a due date reads oldest first.
+    /// The direction this order runs in when it is chosen.
     pub fn natural(self) -> SortDir {
         match self {
             Sort::LastEdited | Sort::Created | Sort::Reviews => SortDir::Descending,
@@ -61,20 +45,13 @@ impl Sort {
         }
     }
 
-    /// `None` for a key no build of typr writes, which reads as the default rather than an error:
-    /// an order is a preference, not library data worth refusing to open for.
+    /// `None` for a key no build of typr writes.
     pub fn parse(text: &str) -> Option<Sort> {
         Sort::ALL.into_iter().find(|sort| sort.as_str() == text)
     }
 
     /// The cards in this order.
-    ///
-    /// A card with nothing scheduled comes last in both directions, because it is neither early
-    /// nor late. Otherwise the direction applies to the order's own key alone: two cards whose
-    /// keys are equal keep the order the snapshot gave them rather than flipping with the arrow.
     pub fn order<'a>(&self, cards: Vec<&'a CardSummary>, dir: SortDir) -> Vec<&'a CardSummary> {
-        // A card with nothing scheduled is not early or late: it comes last in both directions,
-        // so the sort is not of the whole list but of its dated part.
         let mut undated = Vec::new();
         let mut keyed: Vec<(Key, &'a CardSummary)> = Vec::with_capacity(cards.len());
         for card in cards {
@@ -97,7 +74,6 @@ impl Sort {
         ordered
     }
 
-    /// The value an order ranks a card by, or `None` when the card has nothing to rank.
     fn key(&self, card: &CardSummary) -> Option<Key> {
         match self {
             Sort::LastEdited => Some(Key::Int(card.updated_at)),
@@ -109,20 +85,11 @@ impl Sort {
     }
 }
 
-/// One card's place in an order.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Key {
     Int(i64),
     Count(u32),
     Text(String),
-}
-
-/// Which way an order runs.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SortDir {
-    #[default]
-    Ascending,
-    Descending,
 }
 
 impl SortDir {
@@ -150,41 +117,9 @@ impl SortDir {
 }
 
 /// A shuffle: an order for a moment, never one a view keeps.
-///
-/// Seeded so two lists built from the same seed a test apart come out the same, and so a redraw
-/// does not reorder the cards under the pointer.
-pub fn shuffled(cards: Vec<&CardSummary>, seed: u64) -> Vec<&CardSummary> {
-    let mut cards = cards;
-    // xorshift64*, which is enough for a shuffle and needs no dependency.
-    let mut state = seed | 1;
-    let mut next = || {
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        state
-    };
-    for index in (1..cards.len()).rev() {
-        // The modulus is below the card count, so the conversion cannot lose anything.
-        let swap = usize::try_from(next() % (index as u64 + 1)).unwrap_or(index);
-        cards.swap(index, swap);
-    }
+pub fn shuffled(mut cards: Vec<&CardSummary>, seed: u64) -> Vec<&CardSummary> {
+    Shuffle::new(seed).reorder(&mut cards);
     cards
-}
-
-/// Everything a list is filtered and ordered by.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ViewSpec {
-    /// `None` is the whole library. An id no deck carries is treated as `None`, so a view whose
-    /// deck was deleted shows every card rather than none.
-    pub deck: Option<Id>,
-    pub query: String,
-    /// Every tag must match; an empty set matches everything.
-    pub tags: Vec<String>,
-    pub mode: CardMode,
-    /// Only the cards the user pinned.
-    pub pinned_only: bool,
-    pub sort: Sort,
-    pub dir: SortDir,
 }
 
 impl ViewSpec {
@@ -204,8 +139,6 @@ impl ViewSpec {
             .filter(|card| scope.is_none() || subtree.contains(&card.deck))
             .filter(|card| !self.pinned_only || card.pinned)
             .filter(|card| {
-                // A tag is a path, so filtering `spanish` includes `spanish/verbs`: a parent is the
-                // heading its children sit under, not a fourth kind of tag to hunt for.
                 wanted.iter().all(|tag| {
                     card.tags.iter().any(|own| {
                         let own = folded(own);
@@ -223,17 +156,15 @@ impl ViewSpec {
     }
 }
 
-/// A view as the store holds it.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct SavedView {
-    pub id: Id,
-    pub name: String,
-    pub spec: ViewSpec,
+impl Snapshot {
+    /// The cards a library list shows for a filter: those `spec` keeps, in its order.
+    pub fn cards_matching(&self, spec: &ViewSpec) -> Vec<&CardSummary> {
+        spec.cards(self)
+    }
 }
 
 impl SavedView {
-    /// Whether the deck this view was saved on is gone, which the sidebar says out loud: the view
-    /// then shows the whole library rather than an empty list.
+    /// Whether the deck this view was saved on is gone.
     pub fn scope_missing(&self, snapshot: &Snapshot) -> bool {
         self.spec
             .deck

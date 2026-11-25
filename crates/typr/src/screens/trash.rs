@@ -10,7 +10,8 @@ use crate::ui::{
 };
 
 /// One trashed card as the screen lists it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct TrashRow {
     /// The card.
     pub id: Id,

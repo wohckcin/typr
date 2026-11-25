@@ -18,9 +18,11 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use zip::ZipArchive;
 
-use crate::store::{Command, Db, Grade, Id, MaskRect, Outcome, StoreError};
+use crate::command::{Command, Outcome};
+use crate::error::StoreError;
+use crate::model::{Grade, Id, MaskRect};
 
-use super::{ImportReport, attach_bytes};
+use super::{ImportReport, TransferTarget, attach_bytes};
 
 /// The `format` field every Mochi manifest this build reads must name.
 pub const FORMAT: &str = "mochi";
@@ -30,7 +32,8 @@ pub const VERSION: u64 = 1;
 
 const MANIFEST: &str = "manifest.json";
 /// What a manifest declares before the importer writes anything.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Manifest {
     pub version: u64,
     pub tables: Vec<String>,
@@ -39,6 +42,7 @@ pub struct Manifest {
 
 /// How many rows the archive claims, checked against what was written.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Counts {
     pub decks: usize,
     pub cards: usize,
@@ -262,7 +266,7 @@ struct ArchiveField {
 /// the transaction rolls back and no deck, card or picture is left behind. `commit` runs last, so a
 /// refused commit removes the pictures too.
 pub(crate) fn import(
-    db: &Db,
+    db: &impl TransferTarget,
     archive: &Path,
     attachments: &Path,
     now_ms: i64,
@@ -282,7 +286,7 @@ pub(crate) fn import(
 }
 
 fn import_into(
-    db: &Db,
+    db: &impl TransferTarget,
     archive: &Path,
     attachments: &Path,
     now_ms: i64,

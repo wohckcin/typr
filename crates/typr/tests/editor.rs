@@ -425,13 +425,14 @@ fn DiagramCard() -> impl IntoElement {
         .child(
             editor()
                 .saved("")
-                .diagram(Diagram {
-                    image: "cat.png".to_owned(),
-                    caption: "the cat".to_owned(),
-                    rows: vec![
+                .diagram({
+                    let mut diagram = Diagram::new("cat.png");
+                    diagram.caption = "the cat".to_owned();
+                    diagram.rows = vec![
                         Cover::new(1, typr_core::store::MaskRect::new(0.1, 0.1, 0.2, 0.2)),
                         Cover::new(2, typr_core::store::MaskRect::new(0.6, 0.6, 0.2, 0.2)),
-                    ],
+                    ];
+                    diagram
                 })
                 .on_add_mask(move |added_mask: &MaskAdded| {
                     let mask = added_mask.mask;

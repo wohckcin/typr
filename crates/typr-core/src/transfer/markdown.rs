@@ -9,12 +9,14 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::store::{Command, Db, Id, Outcome, StoreError};
+use crate::command::{Command, Outcome};
+use crate::error::StoreError;
+use crate::model::{CardKind, Id};
 
-use super::ImportReport;
+use super::{ImportReport, TransferTarget};
 
 /// Write one file per deck under `target`, and answer how many cards were written.
-pub fn export(db: &Db, deck: Id, target: &Path) -> Result<usize, StoreError> {
+pub fn export(db: &impl TransferTarget, deck: Id, target: &Path) -> Result<usize, StoreError> {
     let snapshot = db.snapshot()?;
     if !snapshot.decks.iter().any(|row| row.id == deck) {
         return Err(StoreError::Missing {
@@ -33,9 +35,7 @@ pub fn export(db: &Db, deck: Id, target: &Path) -> Result<usize, StoreError> {
             .cards
             .iter()
             .filter(|card| {
-                card.deck == row.id
-                    && card.trashed_at.is_none()
-                    && card.kind != crate::store::CardKind::Diagram
+                card.deck == row.id && card.trashed_at.is_none() && card.kind != CardKind::Diagram
             })
             .map(|card| card.markdown.as_str())
             .collect();
@@ -58,7 +58,12 @@ pub fn export(db: &Db, deck: Id, target: &Path) -> Result<usize, StoreError> {
 ///
 /// The deck heading is provenance: an import lands in the deck its caller chose, so a file can be
 /// moved between decks without editing it.
-pub fn import(db: &Db, deck: Id, source: &Path, now_ms: i64) -> Result<ImportReport, StoreError> {
+pub fn import(
+    db: &impl TransferTarget,
+    deck: Id,
+    source: &Path,
+    now_ms: i64,
+) -> Result<ImportReport, StoreError> {
     let text = std::fs::read_to_string(source).map_err(|error| StoreError::Read {
         path: source.to_path_buf(),
         source: error,

@@ -4,3 +4,6 @@
 
 # A local `nsh test --junit` report
 /test-results.xml
+
+# Archify
+.archify/

@@ -7,41 +7,30 @@ use typr::screens::trash::{trash, trash_rows};
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 fn trashed(id: i64, preview: &str, at: i64) -> CardSummary {
-    CardSummary {
-        id,
-        deck: 1,
-        preview: preview.into(),
-        trashed_at: Some(at),
-        ..CardSummary::default()
-    }
+    let mut card = CardSummary::default();
+    card.id = id;
+    card.deck = 1;
+    card.preview = preview.into();
+    card.trashed_at = Some(at);
+    card
 }
 
 fn snapshot(cards: Vec<CardSummary>) -> Snapshot {
-    Snapshot {
-        decks: vec![Deck {
-            id: 1,
-            parent: None,
-            name: "Flashcards".into(),
-            archived: false,
-            reverse: None,
-            template: None,
-            view: typr_core::library_view::ViewMode::default(),
-        }],
-        cards,
-        ..Snapshot::default()
-    }
+    let mut snapshot = Snapshot::default();
+    snapshot.decks = vec![Deck::new(1, "Flashcards")];
+    snapshot.cards = cards;
+    snapshot
 }
 
 #[test]
 fn rows_are_newest_first_and_name_their_deck() {
+    let mut live = CardSummary::default();
+    live.id = 3;
+    live.deck = 1;
     let rows = trash_rows(&snapshot(vec![
         trashed(1, "A", 10),
         trashed(2, "B", 20),
-        CardSummary {
-            id: 3,
-            deck: 1,
-            ..CardSummary::default()
-        },
+        live,
     ]));
     let previews: Vec<&str> = rows.iter().map(|r| r.preview.as_str()).collect();
     assert_eq!(previews, ["B", "A"], "a live card is not in the trash");

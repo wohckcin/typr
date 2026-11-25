@@ -131,6 +131,8 @@ fn the_theme_control_writes_the_stored_theme() -> Result<(), String> {
     app.wait_for("role:button[Light]")?;
     app.press("role:button[Light]")?;
     app.settle();
+    // Dropping the app joins the store worker so the queued write has landed before reopening.
+    drop(app);
     let stored = typr_core::store::Db::open(&root.join("typr.sqlite3"))
         .unwrap()
         .settings()

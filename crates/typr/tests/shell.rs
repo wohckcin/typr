@@ -4,36 +4,26 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr_core::library_view::ViewMode;
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 fn deck(id: i64, parent: Option<i64>, name: &str) -> Deck {
-    Deck {
-        id,
-        parent,
-        name: name.to_owned(),
-        archived: false,
-        reverse: None,
-        template: None,
-        view: ViewMode::default(),
-    }
+    let mut deck = Deck::new(id, name);
+    deck.parent = parent;
+    deck
 }
 
 fn fixture() -> Snapshot {
     let spanish = deck(1, None, "Spanish");
     let verbs = deck(2, Some(1), "Verbs");
     let biology = deck(3, None, "Biology");
-    let due_card = CardSummary {
-        id: 10,
-        deck: 2,
-        due_at: Some(100),
-        ..CardSummary::default()
-    };
-    Snapshot {
-        decks: vec![spanish, verbs, biology],
-        cards: vec![due_card],
-        ..Snapshot::default()
-    }
+    let mut due_card = CardSummary::default();
+    due_card.id = 10;
+    due_card.deck = 2;
+    due_card.due_at = Some(100);
+    let mut snapshot = Snapshot::default();
+    snapshot.decks = vec![spanish, verbs, biology];
+    snapshot.cards = vec![due_card];
+    snapshot
 }
 
 #[component]
@@ -64,12 +54,11 @@ fn a_parent_deck_counts_the_cards_due_under_it() -> Result<(), String> {
     fn TwoDue() -> impl IntoElement {
         typr::ui::tokens::install();
         let mut snapshot = fixture();
-        snapshot.cards.push(CardSummary {
-            id: 11,
-            deck: 2,
-            due_at: Some(100),
-            ..CardSummary::default()
-        });
+        let mut second = CardSummary::default();
+        second.id = 11;
+        second.deck = 2;
+        second.due_at = Some(100);
+        snapshot.cards.push(second);
         typr::shell::shell(snapshot, true)
     }
     let mut app = Headless::start(EngineConfig::new(Root::of::<TwoDue>())).unwrap();
@@ -96,14 +85,11 @@ fn a_tag_draws_no_sidebar_row() -> Result<(), String> {
     #[component]
     fn Tagged() -> impl IntoElement {
         typr::ui::tokens::install();
-        let snapshot = Snapshot {
-            cards: vec![CardSummary {
-                id: 1,
-                tags: vec!["spanish/verbs".to_owned()],
-                ..CardSummary::default()
-            }],
-            ..Snapshot::default()
-        };
+        let mut tagged = CardSummary::default();
+        tagged.id = 1;
+        tagged.tags = vec!["spanish/verbs".to_owned()];
+        let mut snapshot = Snapshot::default();
+        snapshot.cards = vec![tagged];
         typr::shell::shell(snapshot, true)
     }
     let mut app = Headless::start(EngineConfig::new(Root::of::<Tagged>())).unwrap();

@@ -2,11 +2,13 @@
 //! time and due date, newest first. The records are passed in; the screen reads no database.
 
 use nsh_core::prelude::*;
+use typr_core::store::Phase;
 
 use crate::ui::{status::badge, table::table, tokens};
 
 /// One review record as the screen shows it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Record {
     /// `learn` or `review`.
     pub phase: SharedString,
@@ -18,11 +20,28 @@ pub struct Record {
     pub due: SharedString,
 }
 
+impl Record {
+    /// A formatted history row built from its four display columns.
+    pub fn new(
+        phase: impl Into<SharedString>,
+        grade: impl Into<SharedString>,
+        at: impl Into<SharedString>,
+        due: impl Into<SharedString>,
+    ) -> Self {
+        Self {
+            phase: phase.into(),
+            grade: grade.into(),
+            at: at.into(),
+            due: due.into(),
+        }
+    }
+}
+
 /// The number of reviews a card has had: every record except the learning-phase ones.
 pub fn review_count(records: &[Record]) -> usize {
     records
         .iter()
-        .filter(|r| r.phase.as_ref() != "learn")
+        .filter(|r| r.phase.as_ref() != Phase::Learn.as_str())
         .count()
 }
 

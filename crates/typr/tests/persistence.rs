@@ -34,6 +34,8 @@ fn an_applied_new_card_cap_is_stored() -> Result<(), String> {
     app.type_text("text: >> nth=1", "35")?;
     app.press("role:button[Apply]")?;
     app.settle();
+    // Dropping the app joins the store worker so the queued write has landed before reopening.
+    drop(app);
     let stored = Db::open(&root.join("typr.sqlite3"))
         .unwrap()
         .settings()

@@ -8,17 +8,13 @@ use typr::screens::grid::{Tile, grid};
 
 fn tiles(count: i64) -> Vec<Tile> {
     (0..count)
-        .map(|id| Tile {
-            id,
-            preview: format!("card {id}").into(),
-            hidden_sides: if id == 0 { 2 } else { 0 },
-            tags: if id == 0 {
-                vec!["verbs".into(), "a".into(), "b".into(), "c".into()]
-            } else {
-                Vec::new()
-            },
-            schedule: typr::screens::grid::Schedule::New,
-            pinned: false,
+        .map(|id| {
+            let mut tile = Tile::new(id, format!("card {id}"));
+            if id == 0 {
+                tile.hidden_sides = 2;
+                tile.tags = vec!["verbs".into(), "a".into(), "b".into(), "c".into()];
+            }
+            tile
         })
         .collect()
 }

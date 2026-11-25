@@ -7,6 +7,7 @@ use super::tokens;
 
 /// A badge's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct BadgeProps {
     /// The short state or count.
     pub label: Prop<SharedString>,
@@ -20,6 +21,7 @@ pub fn Badge(props: BadgeProps) -> impl IntoElement {
 
 /// An empty state's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct EmptyProps {
     /// What is missing.
     pub message: Prop<SharedString>,
@@ -40,6 +42,7 @@ pub fn Empty(props: EmptyProps) -> impl IntoElement {
 
 /// A keycap's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct KeycapProps {
     /// The chord it names.
     pub chord: Prop<SharedString>,

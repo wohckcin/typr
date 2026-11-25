@@ -336,14 +336,10 @@ fn three_nested_decks_and_forty_cards_import_whole() {
             NOW,
         )
         .expect("the import");
-    assert_eq!(
-        outcome,
-        Outcome::Imported(typr_core::transfer::ImportReport {
-            decks: 3,
-            cards: 40,
-            ..Default::default()
-        })
-    );
+    let mut expected_report = typr_core::transfer::ImportReport::default();
+    expected_report.decks = 3;
+    expected_report.cards = 40;
+    assert_eq!(outcome, Outcome::Imported(expected_report));
 
     let snapshot = db.snapshot().expect("the library");
     assert_eq!(snapshot.decks.len(), 3);
@@ -671,14 +667,8 @@ fn imported_masks_keep_their_group_and_position() {
 
     let card = &db.snapshot().expect("the library").cards[0];
     let expected = [
-        typr_core::store::MaskRow {
-            group: 0,
-            rect: typr_core::store::MaskRect::new(0.0, 0.0, 0.125, 0.125),
-        },
-        typr_core::store::MaskRow {
-            group: 1,
-            rect: typr_core::store::MaskRect::new(0.25, 0.125, 0.5, 0.25),
-        },
+        typr_core::store::MaskRow::new(0, typr_core::store::MaskRect::new(0.0, 0.0, 0.125, 0.125)),
+        typr_core::store::MaskRow::new(1, typr_core::store::MaskRect::new(0.25, 0.125, 0.5, 0.25)),
     ];
     assert_eq!(card.masks, expected, "fractions and groups survive exactly");
     assert_eq!(db.mask_groups(card.id).expect("groups"), [0, 1]);

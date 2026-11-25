@@ -170,12 +170,12 @@ impl Sidebar {
 
     /// The rows of `group` as a tree, each nested under its parent. A count rides in its label,
     /// because the base element gives a row no trailing slot, and a disabled row says so in words.
-    pub fn tree_items(&self, group: Group) -> Vec<nsh_base::TreeItem> {
+    pub fn tree_items(&self, group: Group) -> Vec<crate::ui::tree::TreeItem> {
         fn nest(
             items: &[Item],
             group: Group,
             parent: Option<&SharedString>,
-            into: &mut Vec<nsh_base::TreeItem>,
+            into: &mut Vec<crate::ui::tree::TreeItem>,
         ) {
             for item in items {
                 if item.group != group || item.parent.as_ref() != parent {
@@ -187,7 +187,7 @@ impl Sidebar {
                     crate::ui::tree::label_with_due(&item.label, item.due)
                 };
                 let mut node =
-                    nsh_base::TreeItem::new(item.key.clone(), words).disabled(item.disabled);
+                    crate::ui::tree::TreeItem::new(item.key.clone(), words).disabled(item.disabled);
                 let mut children = Vec::new();
                 nest(items, group, Some(&item.key), &mut children);
                 if !children.is_empty() {
@@ -324,11 +324,11 @@ fn group_tree(
         } else {
             "Navigation"
         })
-        .on_selected(move |id: &SharedString| {
-            chosen.select(id);
-            pick(id);
+        .on_select(move |ev: &crate::ui::tree::TreeSelect| {
+            chosen.select(&ev.id);
+            pick(&ev.id);
         })
-        .on_expanded(move |ids: &Vec<SharedString>| state.set_expanded(group, ids))
+        .on_expand(move |ev: &crate::ui::tree::TreeExpand| state.set_expanded(group, &ev.expanded))
 }
 
 /// Every group with its rows.
@@ -554,43 +554,4 @@ pub fn search_chord() -> String {
         .unwrap_or_default()
 }
 
-/// How many prompts are due in each deck's subtree at `now_ms`: a due card counts for its own deck
-/// and every deck above it. Archived decks, archived cards and trashed cards count for nothing.
-pub fn due_counts(snapshot: &Snapshot, now_ms: i64) -> HashMap<Id, u32> {
-    let parents: HashMap<Id, Option<Id>> = snapshot
-        .decks
-        .iter()
-        .map(|deck| (deck.id, deck.parent))
-        .collect();
-    let archived: HashSet<Id> = snapshot
-        .decks
-        .iter()
-        .filter(|deck| deck.archived)
-        .map(|deck| deck.id)
-        .collect();
-    let mut counts: HashMap<Id, u32> = HashMap::new();
-    for card in &snapshot.cards {
-        let Some(due_at) = card.due_at else {
-            continue;
-        };
-        if due_at > now_ms || card.archived || card.trashed_at.is_some() {
-            continue;
-        }
-        let mut current = Some(card.deck);
-        // A parent chain that loops would be walked forever; the hop limit keeps a bad snapshot
-        // from hanging the frame.
-        let mut hops = 0;
-        while let Some(id) = current {
-            if hops > 64 || archived.contains(&id) {
-                break;
-            }
-            let Some(parent) = parents.get(&id).copied() else {
-                break;
-            };
-            *counts.entry(id).or_insert(0) += 1;
-            current = parent;
-            hops += 1;
-        }
-    }
-    counts
-}
+pub use typr_core::inbox::due_counts;

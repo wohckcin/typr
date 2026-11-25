@@ -48,6 +48,7 @@ impl<'a> Fields<'a> {
 
 /// The values a card supplies itself.
 #[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct Context<'a> {
     /// The card's first side, rendered before this pass.
     pub name: Option<&'a str>,
@@ -183,65 +184,76 @@ fn write_range(text: &str, fields: &Fields<'_>, context: &Context<'_>, out: &mut
             return;
         };
         out.push_str(&text[cursor..at]);
-        match token {
-            Token::Placeholder => match text[at + 2..].find(">>") {
-                Some(end) => {
-                    let name = text[at + 2..at + 2 + end].trim();
-                    // A placeholder with no value renders as nothing, which is what makes a
-                    // template usable before every field is filled.
-                    out.push_str(value(name, fields, context).unwrap_or_default());
-                    cursor = at + 2 + end + 2;
-                }
-                // Never closed: the rest of the card is text, not a name.
-                None => {
-                    out.push_str("<<");
-                    cursor = at + 2;
-                }
-            },
-            Token::SectionOpen => match section_name(text, at + 3) {
-                Some((name, body)) => match find_close(text, body, &name) {
-                    Some((body_end, close_end)) => {
-                        let inner = &text[body..body_end];
-                        if value(&name, fields, context).is_some() {
-                            write_range(inner, fields, context, out);
-                        } else if inner.ends_with('\n') && text[close_end..].starts_with('\n') {
-                            // The block owned its own line; leaving both newlines would open a
-                            // gap where the section was.
-                            cursor = close_end + 1;
-                            continue;
-                        }
-                        cursor = close_end;
-                    }
-                    // An unclosed section is a typo, not an instruction to drop the rest of the
-                    // card, so the marker stays as text.
-                    None => {
-                        out.push_str(&text[at..body]);
-                        cursor = body;
-                    }
-                },
-                None => {
-                    out.push_str("{{#");
-                    cursor = at + 3;
-                }
-            },
+        cursor = match token {
+            Token::Placeholder => write_placeholder(text, at, fields, context, out),
+            Token::SectionOpen => write_section(text, at, fields, context, out),
             // A close marker with nothing open is text, not an error.
             Token::SectionClose => {
                 out.push_str("{{/");
-                cursor = at + 3;
+                at + 3
             }
-            Token::Other => match text[at + 2..].find("}}") {
-                Some(end) => {
-                    let end = at + 2 + end + 2;
-                    out.push_str(&text[at..end]);
-                    cursor = end;
-                }
-                None => {
-                    out.push_str("{{");
-                    cursor = at + 2;
-                }
-            },
-        }
+            Token::Other => write_other(text, at, out),
+        };
     }
+}
+
+fn write_placeholder(
+    text: &str,
+    at: usize,
+    fields: &Fields<'_>,
+    context: &Context<'_>,
+    out: &mut String,
+) -> usize {
+    let Some(end) = text[at + 2..].find(">>") else {
+        // Never closed: the rest of the card is text, not a name.
+        out.push_str("<<");
+        return at + 2;
+    };
+    let name = text[at + 2..at + 2 + end].trim();
+    // A placeholder with no value renders as nothing, which is what makes a
+    // template usable before every field is filled.
+    out.push_str(value(name, fields, context).unwrap_or_default());
+    at + 2 + end + 2
+}
+
+fn write_section(
+    text: &str,
+    at: usize,
+    fields: &Fields<'_>,
+    context: &Context<'_>,
+    out: &mut String,
+) -> usize {
+    let Some((name, body)) = section_name(text, at + 3) else {
+        out.push_str("{{#");
+        return at + 3;
+    };
+    let Some((body_end, close_end)) = find_close(text, body, &name) else {
+        // An unclosed section is a typo, not an instruction to drop the rest of the
+        // card, so the marker stays as text.
+        out.push_str(&text[at..body]);
+        return body;
+    };
+    let inner = &text[body..body_end];
+    if value(&name, fields, context).is_some() {
+        write_range(inner, fields, context, out);
+        return close_end;
+    }
+    if inner.ends_with('\n') && text[close_end..].starts_with('\n') {
+        // The block owned its own line; leaving both newlines would open a
+        // gap where the section was.
+        return close_end + 1;
+    }
+    close_end
+}
+
+fn write_other(text: &str, at: usize, out: &mut String) -> usize {
+    let Some(end) = text[at + 2..].find("}}") else {
+        out.push_str("{{");
+        return at + 2;
+    };
+    let end = at + 2 + end + 2;
+    out.push_str(&text[at..end]);
+    end
 }
 
 /// The next marker at or after `from`, and what it is.

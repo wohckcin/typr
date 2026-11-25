@@ -2,8 +2,9 @@
 //! press or the arrow keys. The base element owns the keyboard model and what a screen reader
 //! hears; this component owns the row's look and the fold mark, and reports both choices.
 
-use nsh_base::{SelectValue, TreeEntry, TreeItem};
-use nsh_core::element::Prop;
+pub use nsh_base::TreeItem;
+use nsh_base::{SelectValue, TreeEntry};
+use nsh_core::element::{JsObject, Prop};
 use nsh_core::prelude::*;
 
 use super::{
@@ -13,6 +14,7 @@ use super::{
 
 /// A tree's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct TreeProps {
     /// The rows, each with its children already nested.
     pub items: Prop<Vec<TreeItem>>,
@@ -33,13 +35,29 @@ pub struct TreeProps {
     pub glyphs: Prop<Vec<Icon>>,
 }
 
+/// The row a user chose in a tree.
+#[derive(Clone, Debug, Default, PartialEq, Eq, JsObject)]
+#[non_exhaustive]
+pub struct TreeSelect {
+    /// The chosen row's id.
+    pub id: SharedString,
+}
+
+/// The open set after a user folded or unfolded a tree node.
+#[derive(Clone, Debug, Default, PartialEq, Eq, JsObject)]
+#[non_exhaustive]
+pub struct TreeExpand {
+    /// The row ids currently expanded.
+    pub expanded: Vec<SharedString>,
+}
+
 /// What a tree reports.
 #[derive(Event)]
 pub enum TreeEvent {
     /// A row chosen: by a press, the arrows, Home or End, or typing its name.
-    Selected(SharedString),
+    Select(TreeSelect),
     /// The open set after a fold: a press on a folder, or Left/Right, Enter or Space.
-    Expanded(Vec<SharedString>),
+    Expand(TreeExpand),
 }
 
 /// A tree of its items, folding them and reporting the row chosen and the set left open.
@@ -74,9 +92,13 @@ pub fn Tree(props: TreeProps, cx: Scope<TreeEvent>) -> impl IntoElement {
             }
             row.child(text(entry.label.clone()).text_sm().text_color(tone))
         })
-        .on_selected_change(move |id: &SharedString| cx.emit(TreeEvent::Selected(id.clone())))
+        .on_selected_change(move |id: &SharedString| {
+            cx.emit(TreeEvent::Select(TreeSelect { id: id.clone() }))
+        })
         .on_expanded_change(move |ids: &Vec<SharedString>| {
-            cx.emit(TreeEvent::Expanded(ids.clone()))
+            cx.emit(TreeEvent::Expand(TreeExpand {
+                expanded: ids.clone(),
+            }))
         })
         .flex_1()
 }

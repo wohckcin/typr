@@ -10,6 +10,7 @@ use super::tokens;
 
 /// A prose block's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct ProseProps {
     /// The markdown it draws.
     pub source: Prop<SharedString>,

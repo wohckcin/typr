@@ -51,7 +51,7 @@ pub fn segmented<T: Copy + PartialEq + 'static>(
                         tokens::hover()
                     }
                 })
-                .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
+                .focus_visible(tokens::focus_ring)
                 .child(text(label).text_sm().text_color(move || {
                     if colour() == value {
                         tokens::foreground()

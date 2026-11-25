@@ -175,6 +175,7 @@ impl Template {
 
 /// What the editor opens with: the card as the store has it.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct EditorProps {
     /// The card's text as last saved.
     pub saved: Prop<SharedString>,
@@ -196,6 +197,7 @@ pub struct EditorProps {
 
 /// The card's text, as the editor reports it.
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct CardText {
     /// The whole text.
     pub text: String,
@@ -203,12 +205,14 @@ pub struct CardText {
 
 /// The fields of a templated card, as the user has them.
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct FieldValues {
     pub fields: Vec<TemplateField>,
 }
 
 /// One rectangle dragged onto the picture, and the group it joins.
 #[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct MaskAdded {
     /// The cover the drag drew.
     pub mask: Cover,
@@ -216,6 +220,7 @@ pub struct MaskAdded {
 
 /// One group's rectangles, to be replaced by the one that holds them all.
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct GroupMerge {
     /// The group the rectangles belong to.
     pub group: u32,
@@ -225,6 +230,7 @@ pub struct GroupMerge {
 
 /// One group of covers, to be let go.
 #[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct MaskGroup {
     /// The group's number.
     pub group: u32,
@@ -232,6 +238,7 @@ pub struct MaskGroup {
 
 /// The picture a card becomes a diagram of.
 #[derive(Clone, Debug, Default, PartialEq, JsObject)]
+#[non_exhaustive]
 pub struct DiagramStart {
     /// The picture's name, already copied beside the library.
     pub name: String,

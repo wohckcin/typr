@@ -12,12 +12,23 @@ use crate::ui::{
 };
 
 /// A command the app recorded as slow.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SlowCommand {
     /// The command's name.
     pub name: SharedString,
     /// How long it took, in milliseconds.
     pub millis: u32,
+}
+
+impl SlowCommand {
+    /// A recorded slow command with its name and duration in milliseconds.
+    pub fn new(name: impl Into<SharedString>, millis: u32) -> Self {
+        Self {
+            name: name.into(),
+            millis,
+        }
+    }
 }
 
 /// The line a stopped library worker sets. It names the stoppage, once, and is absent otherwise.

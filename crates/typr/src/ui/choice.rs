@@ -3,7 +3,7 @@
 
 use nsh_base::button as base_button;
 use nsh_base::{SelectItem, select, tab, tabs};
-use nsh_core::element::Prop;
+use nsh_core::element::{JsObject, Prop};
 use nsh_core::prelude::*;
 
 use super::{
@@ -13,6 +13,7 @@ use super::{
 
 /// A tab row's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct TabRowProps {
     /// The sections, in drawing order.
     pub labels: Prop<Vec<SharedString>>,
@@ -21,11 +22,19 @@ pub struct TabRowProps {
     pub selected: Prop<usize>,
 }
 
+/// Which section the user selected in a tab row.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, JsObject)]
+#[non_exhaustive]
+pub struct TabSelect {
+    /// Zero-based index of the selected tab.
+    pub index: usize,
+}
+
 /// What a tab row reports.
 #[derive(Event)]
 pub enum TabRowEvent {
     /// The section chosen.
-    Select(usize),
+    Select(TabSelect),
 }
 
 /// A row of tabs showing which section is selected; the caller shows the panel.
@@ -42,12 +51,12 @@ pub fn TabRow(props: TabRowProps, cx: Scope<TabRowEvent>) -> impl IntoElement {
         row = row.child(
             tab()
                 .selected(move || props.selected.get() == index)
-                .on_press(move |_: &()| cx.emit(TabRowEvent::Select(index)))
+                .on_press(move |_: &()| cx.emit(TabRowEvent::Select(TabSelect { index })))
                 .px_3()
                 .py_1()
                 .rounded(tokens::radius)
                 .selected_style(|s| s.bg(tokens::card))
-                .focus_visible(|s| s.outline(px(2.0)).outline_color(tokens::ring))
+                .focus_visible(tokens::focus_ring)
                 .child(text(label).text_sm().text_color(tokens::foreground)),
         );
     }
@@ -56,6 +65,7 @@ pub fn TabRow(props: TabRowProps, cx: Scope<TabRowEvent>) -> impl IntoElement {
 
 /// A chooser's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct ChooseProps {
     /// The options, each with the value it reports.
     pub options: Prop<Vec<SelectItem>>,
@@ -64,11 +74,19 @@ pub struct ChooseProps {
     pub chosen: Prop<Option<SharedString>>,
 }
 
+/// The option the user picked in a chooser.
+#[derive(Clone, Debug, Default, PartialEq, Eq, JsObject)]
+#[non_exhaustive]
+pub struct Choice {
+    /// The chosen value, or `None` when cleared.
+    pub value: Option<SharedString>,
+}
+
 /// What a chooser reports.
 #[derive(Event)]
 pub enum ChooseEvent {
     /// The value chosen.
-    Change(Option<SharedString>),
+    Change(Choice),
 }
 
 /// One value from a list; the closed control shows the chosen title.
@@ -77,7 +95,11 @@ pub fn Choose(props: ChooseProps, cx: Scope<ChooseEvent>) -> impl IntoElement {
     select()
         .items(props.options.get_untracked())
         .value(move || props.chosen.get())
-        .on_change(move |next: &Option<SharedString>| cx.emit(ChooseEvent::Change(next.clone())))
+        .on_change(move |next: &Option<SharedString>| {
+            cx.emit(ChooseEvent::Change(Choice {
+                value: next.clone(),
+            }))
+        })
         .accessibility_label("Choose")
         .trigger(
             view()
@@ -93,6 +115,7 @@ pub fn Choose(props: ChooseProps, cx: Scope<ChooseEvent>) -> impl IntoElement {
 
 /// A row's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct ListRowProps {
     /// The words on the row.
     pub title: Prop<SharedString>,
@@ -158,7 +181,7 @@ pub fn ListRow(props: ListRowProps, cx: Scope<ListRowEvent>) -> impl IntoElement
         .duration(motion::INSTANT)
         .hover(|style| style.bg(move || tokens::hover().opacity(0.6)))
         .active(|style| style.bg(move || tokens::hover().opacity(0.9)))
-        .focus_visible(|style| style.outline(px(2.0)).outline_color(tokens::ring))
+        .focus_visible(tokens::focus_ring)
         .child(dynamic(move || match props.icon.get() {
             Some(glyph) => view().text_color(tone).child(icon(glyph)).into_element(),
             None => view().into_element(),

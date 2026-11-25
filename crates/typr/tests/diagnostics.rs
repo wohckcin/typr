@@ -16,10 +16,7 @@ fn Probe() -> impl IntoElement {
     let results = Toasts::new();
     view().child(diagnostics(
         stopped,
-        vec![SlowCommand {
-            name: "load deck".into(),
-            millis: 740,
-        }],
+        vec![SlowCommand::new("load deck", 740)],
         results,
         move || results.push("Imported 3 cards".into()),
         move || results.push("Exported".into()),

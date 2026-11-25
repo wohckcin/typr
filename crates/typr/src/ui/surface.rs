@@ -6,6 +6,7 @@ use super::tokens;
 
 /// A surface's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct SurfaceProps {
     /// What it holds.
     pub children: Children,
@@ -26,6 +27,7 @@ pub fn Surface(props: SurfaceProps) -> impl IntoElement {
 
 /// A placeholder's props.
 #[derive(Clone, PartialEq, Props)]
+#[non_exhaustive]
 pub struct PlaceholderProps {
     /// What it stands in for.
     pub children: Children,

@@ -8,10 +8,12 @@
 
 use std::collections::BTreeMap;
 
+use crate::command::{Command, Outcome};
+use crate::error::StoreError;
 use crate::hidden;
-use crate::store::{Command, Db, Id, Outcome, StoreError};
+use crate::model::{CardKind, Id};
 
-use super::ImportReport;
+use super::{ImportReport, TransferTarget};
 
 /// The header every CSV must name. Order is free; a missing column is refused by name.
 pub const HEADER: [&str; 5] = ["deck", "sides", "tags", "fields", "markdown"];
@@ -21,7 +23,11 @@ pub const HEADER: [&str; 5] = ["deck", "sides", "tags", "fields", "markdown"];
 /// A diagram has no text to carry and no column to carry its picture, so it is left out rather
 /// than written as an empty row. An existing target is refused: a failed export must not have
 /// overwritten the file the user meant to keep.
-pub fn export(db: &Db, deck: Id, target: &std::path::Path) -> Result<usize, StoreError> {
+pub fn export(
+    db: &impl TransferTarget,
+    deck: Id,
+    target: &std::path::Path,
+) -> Result<usize, StoreError> {
     if target.exists() {
         return Err(StoreError::Exists {
             path: target.to_path_buf(),
@@ -46,7 +52,7 @@ pub fn export(db: &Db, deck: Id, target: &std::path::Path) -> Result<usize, Stor
     for card in &snapshot.cards {
         if !under.contains(&card.deck)
             || card.trashed_at.is_some()
-            || card.kind == crate::store::CardKind::Diagram
+            || card.kind == CardKind::Diagram
         {
             continue;
         }
@@ -98,7 +104,7 @@ pub fn export(db: &Db, deck: Id, target: &std::path::Path) -> Result<usize, Stor
 /// Every row is parsed and checked before the first card is written, so a bad row near the end
 /// cannot leave half the file imported even though the transaction would roll it back anyway.
 pub fn import(
-    db: &Db,
+    db: &impl TransferTarget,
     deck: Id,
     source: &std::path::Path,
     now_ms: i64,

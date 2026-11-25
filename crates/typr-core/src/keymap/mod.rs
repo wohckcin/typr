@@ -242,6 +242,7 @@ impl fmt::Display for Key {
 
 /// Modifier flags for a chord that needs them.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub struct Mods {
     pub cmd: bool,
     pub ctrl: bool,
@@ -334,10 +335,22 @@ impl fmt::Display for Chord {
 
 /// One row of the table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Binding {
     pub surface: Surface,
     pub command: Command,
     pub chord: Chord,
+}
+
+impl Binding {
+    /// A binding connecting `chord` to `command` on `surface`.
+    pub const fn new(surface: Surface, command: Command, chord: Chord) -> Self {
+        Self {
+            surface,
+            command,
+            chord,
+        }
+    }
 }
 
 /// The table. Every binding the app has, and nowhere else.

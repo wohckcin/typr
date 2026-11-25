@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::library_view::ViewMode;
-use crate::store::{Deck, Snapshot};
+use crate::model::{CardMode, Deck, Id, Snapshot};
 
 /// A library of `count` cards in one deck, each told apart by its preview only.
 fn library(count: i64) -> Snapshot {

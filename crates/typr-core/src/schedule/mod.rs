@@ -6,11 +6,9 @@
 
 use crate::day::DAY_MS as ONE_DAY_MS;
 use crate::fsrs::{self, Memory};
-use crate::store::{Grade, Phase, Settings};
+use crate::model::{Grade, Phase, Settings};
 
-pub use crate::day::DAY_MS;
-
-pub const MINUTE_MS: i64 = 60_000;
+pub use crate::day::{DAY_MS, MINUTE_MS};
 
 /// The step a new card's first success, and every failure, waits.
 pub const LEARNING_STEP_MS: i64 = 10 * MINUTE_MS;
@@ -25,6 +23,7 @@ pub const MAX_INTERVAL_MS: i64 = 365 * DAY_MS;
 /// The bounds a library's settings put on its schedule. The defaults are what a library that has
 /// never touched the two settings uses, so an unconfigured scheduler behaves exactly as before.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Policy {
     /// How long a learning or relearning step waits.
     pub learning_step_ms: i64,
@@ -57,6 +56,7 @@ impl Policy {
 /// prompt fell due, when it was last reviewed (elapsed time is `at_ms - last_at`), and the memory
 /// state the last grade left behind.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct PromptState {
     pub phase: Phase,
     pub interval_ms: i64,
@@ -80,12 +80,30 @@ impl PromptState {
 
 /// What a grade decided.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Outcome {
     pub phase: Phase,
     pub interval_ms: i64,
     pub due_at: Option<i64>,
     /// The memory FSRS left behind, for the store to keep; the fixed scheduler has none.
     pub memory: Option<Memory>,
+}
+
+impl Outcome {
+    /// A scheduling outcome from its computed fields.
+    pub fn new(
+        phase: Phase,
+        interval_ms: i64,
+        due_at: Option<i64>,
+        memory: Option<Memory>,
+    ) -> Self {
+        Self {
+            phase,
+            interval_ms,
+            due_at,
+            memory,
+        }
+    }
 }
 
 /// How a prompt moves when it is graded.
@@ -147,6 +165,7 @@ impl Scheduler for FixedMultiplier {
 /// from the stability it fell to. That difference is the point of switching, so it is visible in the
 /// first review rather than hidden behind a ten-minute step.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Fsrs {
     pub weights: Vec<f64>,
     /// The chance of recall each review aims at, from 0.05 to 0.99.
@@ -225,6 +244,48 @@ fn ms_from_days(days: f64, cap_ms: i64) -> i64 {
     let millis =
         std::time::Duration::from_secs_f64(bounded * (ONE_DAY_MS as f64) / 1_000.0).as_millis();
     i64::try_from(millis).unwrap_or(cap_ms)
+}
+
+/// How a card's schedule reads in the library.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Schedule {
+    /// Never graded: the card is new.
+    #[default]
+    New,
+    /// Graded and due later: the whole days until it comes back.
+    Interval(u32),
+    /// Graded and due now.
+    Due,
+}
+
+/// The schedule state of a card at `now_ms`.
+pub fn schedule_of(reviews: u32, due_at: Option<i64>, now_ms: i64) -> Schedule {
+    match due_at {
+        _ if reviews == 0 || due_at.is_none() => Schedule::New,
+        Some(due) if due <= now_ms => Schedule::Due,
+        Some(due) => {
+            Schedule::Interval(u32::try_from((due - now_ms) / ONE_DAY_MS).unwrap_or(u32::MAX))
+        }
+        None => Schedule::New,
+    }
+}
+
+#[cfg(test)]
+mod schedule_tests {
+    use super::*;
+
+    #[test]
+    fn schedule_of_classifies_new_due_and_future_intervals() {
+        assert_eq!(schedule_of(0, None, 1_000), Schedule::New);
+        assert_eq!(schedule_of(0, Some(500), 1_000), Schedule::New);
+        assert_eq!(schedule_of(1, None, 1_000), Schedule::New);
+        assert_eq!(schedule_of(1, Some(1_000), 1_000), Schedule::Due);
+        assert_eq!(schedule_of(1, Some(500), 1_000), Schedule::Due);
+        assert_eq!(
+            schedule_of(1, Some(1_000 + 5 * ONE_DAY_MS), 1_000),
+            Schedule::Interval(5)
+        );
+    }
 }
 
 #[cfg(test)]

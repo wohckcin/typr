@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use crate::hidden;
-use crate::store::Id;
+use crate::model::Id;
 
 /// The scheme a resolved reference becomes, and the one the renderer intercepts to open a card.
 pub const SCHEME: &str = "typr-card:";

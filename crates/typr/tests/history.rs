@@ -7,12 +7,7 @@ use nsh_testing::Headless;
 use typr::screens::history::{Record, history, review_count};
 
 fn record(phase: &'static str, grade: &'static str, at: &'static str) -> Record {
-    Record {
-        phase: phase.into(),
-        grade: grade.into(),
-        at: at.into(),
-        due: "tomorrow".into(),
-    }
+    Record::new(phase, grade, at, "tomorrow")
 }
 
 #[component]

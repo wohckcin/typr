@@ -9,7 +9,7 @@ use nsh_core::keymap::{Key as NshKey, Keystroke, Modifiers};
 use nsh_core::prelude::*;
 use typr_core::keymap::{Chord, Command, Key, Mods, Surface, bindings_of, chord_of};
 
-pub use crate::ui::command::Mode;
+pub use crate::ui::command::{CommandItem, Mode};
 
 /// The key a shifted character is typed on: NSH names `?` as `shift+/`, so a table chord that
 /// holds `?` must be written that way or `on_key` refuses it.
@@ -100,21 +100,21 @@ pub fn keystroke_of_chord(chord: Chord) -> Option<String> {
 /// The items a command list shows for `surface`: one per binding, named by the command, labelled
 /// by its noun, with its chord among the words the query matches and its keystroke for the row to
 /// draw.
-pub fn items(surface: Surface) -> Vec<nsh_base::CommandItem> {
+pub fn items(surface: Surface) -> Vec<CommandItem> {
     // One item per command, not per chord: a command may hold several chords (the arrows and the
     // letters both walk the library), and the list is chosen by the item's id.
     let mut listed = Vec::new();
     for binding in bindings_of(surface) {
         if let Some(item) = listed
             .iter_mut()
-            .find(|item: &&mut nsh_base::CommandItem| item.id == binding.command.name())
+            .find(|item: &&mut CommandItem| item.id == binding.command.name())
         {
             let mut words: Vec<SharedString> = item.keywords.clone();
             words.push(binding.chord.to_string().into());
             *item = item.clone().keywords(words);
             continue;
         }
-        let mut item = nsh_base::CommandItem::new(binding.command.name(), binding.command.label())
+        let mut item = CommandItem::new(binding.command.name(), binding.command.label())
             .keywords([binding.chord.to_string()])
             .disabled(!binding.command.runnable());
         if let Some(keys) = keystroke_of_chord(binding.chord) {

@@ -26,12 +26,10 @@ fn Probe() -> impl IntoElement {
 #[test]
 fn a_prompt_becomes_the_entry_it_names() {
     use typr_core::store::{CardKind, CardSummary, MaskRect, MaskRow};
-    let sides = CardSummary {
-        id: 1,
-        markdown: "gato\n---\ncat".to_owned(),
-        sides: 2,
-        ..CardSummary::default()
-    };
+    let mut sides = CardSummary::default();
+    sides.id = 1;
+    sides.markdown = "gato\n---\ncat".to_owned();
+    sides.sides = 2;
     assert!(
         entry_for(&sides, "fwd", 0).is_some(),
         "a two-sided card asks forwards"
@@ -42,32 +40,22 @@ fn a_prompt_becomes_the_entry_it_names() {
         "a prompt it does not hold"
     );
 
-    let hidden = CardSummary {
-        id: 2,
-        markdown: "The {{1::air}} holds {{2::oxygen}}.".to_owned(),
-        sides: 1,
-        ..CardSummary::default()
-    };
+    let mut hidden = CardSummary::default();
+    hidden.id = 2;
+    hidden.markdown = "The {{1::air}} holds {{2::oxygen}}.".to_owned();
+    hidden.sides = 1;
     let entry = entry_for(&hidden, "cloze:2", 0).expect("a hidden group");
     assert_eq!(entry.prompt, "cloze:2");
 
-    let diagram = CardSummary {
-        id: 3,
-        kind: CardKind::Diagram,
-        image: Some("plate.png".to_owned()),
-        caption: Some("The heart".to_owned()),
-        masks: vec![
-            MaskRow {
-                group: 1,
-                rect: MaskRect::new(0.1, 0.1, 0.2, 0.2),
-            },
-            MaskRow {
-                group: 2,
-                rect: MaskRect::new(0.4, 0.4, 0.2, 0.2),
-            },
-        ],
-        ..CardSummary::default()
-    };
+    let mut diagram = CardSummary::default();
+    diagram.id = 3;
+    diagram.kind = CardKind::Diagram;
+    diagram.image = Some("plate.png".to_owned());
+    diagram.caption = Some("The heart".to_owned());
+    diagram.masks = vec![
+        MaskRow::new(1, MaskRect::new(0.1, 0.1, 0.2, 0.2)),
+        MaskRow::new(2, MaskRect::new(0.4, 0.4, 0.2, 0.2)),
+    ];
     assert!(
         entry_for(&diagram, "mask:1", 0).is_some(),
         "a diagram group"

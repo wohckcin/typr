@@ -7,10 +7,10 @@ use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
 use typr::ui::{
     button::{Variant, busy_button, button},
-    choice::{choose, list_row, tab_row},
-    input::field,
+    choice::{Choice, TabSelect, choose, list_row, tab_row},
+    input::{FieldInput, field},
     overlay::{Toasts, anchored, command_menu, decision, toasts},
-    toggle::{check, toggle},
+    toggle::{CheckChange, ToggleChange, check, toggle},
 };
 
 const TABS: &[&str] = &["Notes", "History"];
@@ -37,19 +37,19 @@ fn Gallery() -> impl IntoElement {
             field()
                 .placeholder("Search")
                 .value(move || SharedString::from(draft.get()))
-                .on_change(move |text: &String| draft.set(text.to_string())),
+                .on_change(move |input: &FieldInput| draft.set(input.text.clone())),
         )
         .child(
             check()
                 .label("Remember")
                 .checked(move || ticked.get())
-                .on_change(move |next: &bool| ticked.set(*next)),
+                .on_change(move |next: &CheckChange| ticked.set(next.checked)),
         )
         .child(
             toggle()
                 .label("Sound")
                 .on(move || sound.get())
-                .on_change(move |next: &bool| sound.set(*next)),
+                .on_change(move |next: &ToggleChange| sound.set(next.on)),
         )
         .child(text(move || {
             format!(
@@ -67,7 +67,7 @@ fn Gallery() -> impl IntoElement {
                         .collect::<Vec<_>>(),
                 )
                 .selected(move || tab.get())
-                .on_select(move |index: &usize| tab.set(*index)),
+                .on_select(move |select: &TabSelect| tab.set(select.index)),
         )
         .child(text(move || format!("tab={}", tab.get())))
         .child(
@@ -130,7 +130,7 @@ fn Gallery() -> impl IntoElement {
                     SelectItem::new("kiwi", "Kiwi"),
                 ])
                 .chosen(move || chosen.get())
-                .on_change(move |next: &Option<SharedString>| chosen.set(next.clone())),
+                .on_change(move |next: &Choice| chosen.set(next.value.clone())),
         )
         .child(text(move || format!("renamed={}", renamed.get())))
         .child(

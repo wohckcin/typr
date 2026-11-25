@@ -1,14 +1,17 @@
 //! The part of typr that does not draw anything: scheduling, sessions, sides and the library.
 
 pub mod clock;
+pub mod command;
 pub mod day;
 pub mod edits;
+pub mod error;
 pub mod fsrs;
 pub mod hidden;
 pub mod inbox;
 pub mod keymap;
 pub mod library_view;
 pub mod markdown_ext;
+pub mod model;
 pub mod name;
 pub mod reference;
 pub mod schedule;

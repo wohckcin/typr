@@ -7,34 +7,24 @@ use nsh_testing::Headless;
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 fn card(id: i64, preview: &str, position: i64) -> CardSummary {
-    CardSummary {
-        id,
-        deck: 1,
-        preview: preview.into(),
-        markdown: preview.into(),
-        sides: 1,
-        // A new prompt, so the Inbox the app opens on holds the card.
-        prompts: 1,
-        unscheduled: 1,
-        position,
-        ..CardSummary::default()
-    }
+    let mut card = CardSummary::default();
+    card.id = id;
+    card.deck = 1;
+    card.preview = preview.into();
+    card.markdown = preview.into();
+    card.sides = 1;
+    // A new prompt, so the Inbox the app opens on holds the card.
+    card.prompts = 1;
+    card.unscheduled = 1;
+    card.position = position;
+    card
 }
 
 fn fixture() -> Snapshot {
-    Snapshot {
-        decks: vec![Deck {
-            id: 1,
-            parent: None,
-            name: "Spanish".into(),
-            archived: false,
-            reverse: None,
-            template: None,
-            view: typr_core::library_view::ViewMode::default(),
-        }],
-        cards: vec![card(1, "hola", 0), card(2, "adios", 1)],
-        ..Snapshot::default()
-    }
+    let mut snapshot = Snapshot::default();
+    snapshot.decks = vec![Deck::new(1, "Spanish")];
+    snapshot.cards = vec![card(1, "hola", 0), card(2, "adios", 1)];
+    snapshot
 }
 
 #[component]

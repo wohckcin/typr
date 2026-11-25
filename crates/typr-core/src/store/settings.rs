@@ -5,9 +5,11 @@
 //! [`SettingValue`], so a misspelt key or a value of the wrong shape cannot be stored, and the
 //! ranges below are checked on the way in and on the way out.
 
+use crate::error::StoreError;
 use crate::fsrs;
-use crate::schedule::{DAY_MS, MINUTE_MS};
-use crate::store::{SchedulerKind, Settings, StoreError};
+use crate::model::{
+    Group, MAX_RETENTION, MIN_RETENTION, SchedulerKind, SettingKey, SettingValue, Settings, Theme,
+};
 
 /// The narrowest and widest library-wide new-card cap. Zero pauses new cards; a thousand is far
 /// beyond any study day a person finishes.
@@ -25,82 +27,6 @@ pub const MAX_MAX_INTERVAL_DAYS: u32 = 3_650;
 /// The body text size the editor and review use, in points.
 pub const MIN_PREVIEW_FONT_SIZE: u32 = 10;
 pub const MAX_PREVIEW_FONT_SIZE: u32 = 28;
-
-/// Whether the app draws dark, light, or whichever the desktop is set to. Stored in the library so
-/// a copied library looks the same.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Theme {
-    /// The default: follow the desktop, as the app did before the setting was applied.
-    #[default]
-    System,
-    Dark,
-    Light,
-}
-
-impl Theme {
-    /// Every theme, in the order the settings screen offers them.
-    pub const ALL: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Theme::System => "system",
-            Theme::Dark => "dark",
-            Theme::Light => "light",
-        }
-    }
-
-    pub fn parse(text: &str) -> Option<Self> {
-        match text {
-            "system" => Some(Theme::System),
-            "dark" => Some(Theme::Dark),
-            "light" => Some(Theme::Light),
-            _ => None,
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Theme::System => "System",
-            Theme::Dark => "Dark",
-            Theme::Light => "Light",
-        }
-    }
-}
-
-/// The three groups the settings screen is read in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Group {
-    Review,
-    Appearance,
-    Library,
-}
-
-impl Group {
-    pub const ALL: [Group; 3] = [Group::Review, Group::Appearance, Group::Library];
-
-    pub fn title(self) -> &'static str {
-        match self {
-            Group::Review => "Review",
-            Group::Appearance => "Appearance",
-            Group::Library => "Library",
-        }
-    }
-}
-
-/// One setting, named. The stored spelling is [`SettingKey::as_str`]; the text of a value is
-/// [`SettingValue::text`], and the pair is the only thing the store writes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SettingKey {
-    NewPerDay,
-    LearningStepMinutes,
-    MaxIntervalDays,
-    Scheduler,
-    Retention,
-    Weights,
-    ReverseDefault,
-    Theme,
-    PreviewFontSize,
-}
 
 impl SettingKey {
     pub const ALL: [SettingKey; 9] = [
@@ -171,8 +97,7 @@ impl SettingKey {
         }
     }
 
-    /// One sentence saying what the setting does and what its range means. The settings screen
-    /// and the README both describe the same keys, so the description lives here.
+    /// One sentence saying what the setting does and what its range means.
     pub fn help(self) -> &'static str {
         match self {
             SettingKey::NewPerDay => {
@@ -238,9 +163,6 @@ impl SettingKey {
     }
 
     /// Read stored text as this key's value, refusing anything [`validate`](Self::validate) would.
-    ///
-    /// This is the only reader: a hand-edited row that no longer parses fails the snapshot with
-    /// the key and the offending text, rather than being replaced with a default in silence.
     pub fn parse_value(self, text: &str) -> Result<SettingValue, StoreError> {
         let refused = || StoreError::Setting {
             key: self.as_str().to_string(),
@@ -269,9 +191,7 @@ impl SettingKey {
         Ok(value)
     }
 
-    /// Whether this key accepts this value. The ranges are per group: whole numbers check their
-    /// bounds, a scheduler or a theme is whichever variant it is, and the weights go through the
-    /// parser FSRS itself trusts.
+    /// Whether this key accepts this value.
     pub fn validate(self, value: &SettingValue) -> Result<(), StoreError> {
         let accepted = match (self, value) {
             (SettingKey::NewPerDay, SettingValue::Number(n)) => {
@@ -285,7 +205,7 @@ impl SettingKey {
             }
             (SettingKey::Scheduler, SettingValue::Scheduler(_)) => true,
             (SettingKey::Retention, SettingValue::Number(n)) => {
-                in_range(*n, crate::store::MIN_RETENTION, crate::store::MAX_RETENTION)
+                in_range(*n, MIN_RETENTION, MAX_RETENTION)
             }
             (SettingKey::Weights, SettingValue::Weights(weights)) => fsrs::are_weights(weights),
             (SettingKey::ReverseDefault, SettingValue::Flag(_)) => true,
@@ -293,8 +213,6 @@ impl SettingKey {
             (SettingKey::PreviewFontSize, SettingValue::Number(n)) => {
                 in_range(*n, MIN_PREVIEW_FONT_SIZE, MAX_PREVIEW_FONT_SIZE)
             }
-            // A number for a flag, a theme for a scheduler: the caller picked the wrong pair even
-            // when the value would be valid for some other key.
             _ => false,
         };
         if accepted {
@@ -325,23 +243,9 @@ impl SettingKey {
             (SettingKey::PreviewFontSize, SettingValue::Number(n)) => {
                 settings.preview_font_size = n
             }
-            // `validate` has already refused every other pair.
             _ => {}
         }
     }
-}
-
-/// A setting's value, typed so a caller cannot hand a flag to a number.
-#[derive(Clone, Debug, PartialEq)]
-pub enum SettingValue {
-    /// A whole number: a cap, a step in minutes, a percentage or a size in points.
-    Number(u32),
-    /// An on/off switch, stored as `1` or `0`.
-    Flag(bool),
-    Scheduler(SchedulerKind),
-    /// The nineteen FSRS weights, checked before they are written.
-    Weights(Vec<f64>),
-    Theme(Theme),
 }
 
 impl SettingValue {
@@ -356,8 +260,7 @@ impl SettingValue {
         }
     }
 
-    /// The value shown on the settings screen: flags and themes in words, everything else in the
-    /// spelling a reader would type.
+    /// The value shown on the settings screen.
     pub fn display(&self) -> String {
         match self {
             SettingValue::Flag(true) => "On".to_string(),
@@ -371,22 +274,40 @@ impl SettingValue {
 }
 
 impl Settings {
-    /// How long a learning step waits, in milliseconds.
-    pub fn learning_step_ms(&self) -> i64 {
-        i64::from(self.learning_step_minutes) * MINUTE_MS
-    }
-
-    /// The furthest a remembered card can be scheduled, in milliseconds.
-    pub fn max_interval_ms(&self) -> i64 {
-        i64::from(self.max_interval_days) * DAY_MS
-    }
-
     /// The value of `key` in this library.
     pub fn value(&self, key: SettingKey) -> SettingValue {
         key.value(self)
     }
 }
 
+/// Checks a new-card cap typed by the user against the limit the store keeps. The error names the
+/// limit so the user knows what is allowed.
+pub fn check_new_card_cap(text: &str) -> Result<u32, String> {
+    let value: u32 = text
+        .trim()
+        .parse()
+        .map_err(|_| format!("New cards a day must be a whole number up to {MAX_NEW_PER_DAY}"))?;
+    if value > MAX_NEW_PER_DAY {
+        return Err(format!("New cards a day must be {MAX_NEW_PER_DAY} or less"));
+    }
+    Ok(value)
+}
+
 fn in_range(value: u32, min: u32, max: u32) -> bool {
     (min..=max).contains(&value)
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_whole_numbers_within_limit_and_refuses_others() {
+        assert_eq!(check_new_card_cap("0"), Ok(0));
+        assert_eq!(check_new_card_cap(" 25 "), Ok(25));
+        assert_eq!(check_new_card_cap("1000"), Ok(1000));
+        assert!(check_new_card_cap("1001").unwrap_err().contains("1000"));
+        assert!(check_new_card_cap("-1").is_err());
+        assert!(check_new_card_cap("abc").is_err());
+    }
 }
