@@ -10,7 +10,7 @@ unicode-normalization = "0.1.26"
 # Mochi's export is a zip of JSON. `zip` is pure Rust and its deflate path reuses the `flate2`
 # build the app already selects, so the backend gains a serializer and a reader, not a toolkit or a C
 # toolchain. Both stay out of the UI crate, which only names files.
-zip = { version = "9.7", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9.8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

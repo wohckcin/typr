@@ -84,6 +84,17 @@ fn a_recycled_cell_shows_the_row_it_is_given() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
     app.wait_for("card 0")?;
     app.scroll("card 0", px(20000.0))?;
+    // Measured tiles can exceed the initial estimate, growing scroll_end as rows are visited.
+    if !app.screen().shows("card 199") {
+        let anchor = app
+            .screen()
+            .texts()
+            .into_iter()
+            .find(|text| text.starts_with("card "))
+            .map(str::to_owned)
+            .ok_or_else(|| String::from("no card visible after scrolling"))?;
+        app.scroll(&anchor, px(20000.0))?;
+    }
     app.wait_for("card 199")?;
     assert!(
         !app.screen().shows("card 0"),

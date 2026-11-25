@@ -77,6 +77,7 @@ pub fn keystroke(chord: Chord) -> Option<Keystroke> {
         alt: mods.alt,
         shift: mods.shift || shifted,
         cmd: mods.cmd,
+        ..Modifiers::default()
     };
     Some(Keystroke { modifiers, key })
 }

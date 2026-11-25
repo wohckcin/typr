@@ -53,8 +53,8 @@ The agent checks for relevant skills before any task. Mandatory workflows, not s
 
 ## Prerequisites
 
-- [mise](https://mise.jdx.dev), which installs the pinned tools: Rust `1.99.1` with `rustfmt` and
-  `clippy`, and the `nsh` CLI `0.6.0`, all from `mise.toml`.
+- [mise](https://mise.jdx.dev), which installs the pinned tools: Rust `1.100.0` with `rustfmt` and
+  `clippy`, and the `nsh` CLI `0.7.0`, all from `mise.toml`.
 
   ```sh
   mise install     # Rust and nsh, at the versions mise.toml pins

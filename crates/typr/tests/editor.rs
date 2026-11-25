@@ -3,7 +3,7 @@
 
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
-use nsh_testing::Headless;
+use nsh_testing::{DragOptions, Headless};
 use typr::screens::editor::{
     Answer, CardText, Cover, Diagram, GroupMerge, Leaving, MaskAdded, MaskGroup, Template,
     TemplateField, attach_image, cover_box, editor, field_table, image_reference, leave_decision,
@@ -465,7 +465,7 @@ fn a_drag_across_the_pane_adds_a_rectangle_to_the_last_group() -> Result<(), Str
         x: px(80.0),
         y: px(60.0),
     };
-    app.drag("text:diagram", by)?;
+    app.drag("text:diagram", by, DragOptions::default())?;
     app.wait_for("text:/added=2 /")?;
     let drawn = app.screen().texts().join(" ");
     assert!(!drawn.contains("w=0.00"), "the rectangle has size: {drawn}");
@@ -480,7 +480,7 @@ fn a_click_on_the_pane_adds_nothing() -> Result<(), String> {
         x: px(0.0),
         y: px(0.0),
     };
-    app.drag("text:diagram", nowhere)?;
+    app.drag("text:diagram", nowhere, DragOptions::default())?;
     app.wait_for("text:/added=none/")?;
     Ok(())
 }

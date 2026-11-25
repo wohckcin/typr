@@ -3,7 +3,7 @@
 
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
-use nsh_testing::Headless;
+use nsh_testing::{DragOptions, Headless};
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 fn deck(id: i64, parent: Option<i64>, name: &str) -> Deck {
@@ -201,7 +201,7 @@ fn a_drag_on_a_diagram_card_writes_its_rectangle_to_the_library() -> Result<(), 
         x: px(80.0),
         y: px(60.0),
     };
-    app.drag("text:diagram", by)?;
+    app.drag("text:diagram", by, DragOptions::default())?;
     app.wait_for("group 1")?;
     // The editor writes through the store, so a second look at the library file sees the rectangle.
     let reader = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
@@ -232,6 +232,7 @@ fn clearing_a_diagram_turns_the_card_into_text_in_the_library() -> Result<(), St
     app.press("Biology")?;
     app.wait_for("the cell")?;
     app.press("role:button[the cell]")?;
+    app.wait_for("Clear the diagram…")?;
     app.press("role:button[Clear the diagram…]")?;
     app.wait_for("Clear this diagram?")?;
     app.press("role:button[Clear]")?;
