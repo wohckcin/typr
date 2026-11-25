@@ -2,5 +2,5 @@
 # rust-toolchain.toml: that file serves a plain `cargo` on a machine without mise, and this one is
 # what CI installs.
 [tools]
-rust = { version = "1.99.1", components = ["rustfmt", "clippy"] }
-"github:longbridge/nsh" = "0.6.0"
+rust = { version = "1.100.0", components = "rustfmt,clippy,rust-analyzer" }
+"github:longbridge/nsh" = "0.7.0"
