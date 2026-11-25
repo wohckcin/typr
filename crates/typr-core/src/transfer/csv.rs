@@ -11,9 +11,9 @@ use std::collections::BTreeMap;
 use crate::command::{Command, Outcome};
 use crate::error::StoreError;
 use crate::hidden;
-use crate::model::{CardKind, Id};
+use crate::model::{CardKind, Id, ImportReport};
 
-use super::{ImportReport, TransferTarget};
+use super::target::TransferTarget;
 
 /// The header every CSV must name. Order is free; a missing column is refused by name.
 pub const HEADER: [&str; 5] = ["deck", "sides", "tags", "fields", "markdown"];

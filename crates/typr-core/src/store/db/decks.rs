@@ -7,7 +7,7 @@ use crate::edits;
 use crate::error::StoreError;
 use crate::model::Id;
 
-use super::Db;
+use super::core::Db;
 
 impl Db {
     pub(super) fn dispatch_deck(

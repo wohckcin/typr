@@ -6,17 +6,17 @@
 
 mod editor;
 mod navigation;
+mod screen;
 mod store_bridge;
 mod study;
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use nsh_core::prelude::*;
 use typr_core::clock::{Clock, SystemClock};
 use typr_core::keymap::{Command as Key, Surface, bindings_of};
-use typr_core::session::Session;
 use typr_core::store::{
     Command, Handle, Id, Outcome, SettingKey, SettingValue, Snapshot, Store, Theme,
 };
@@ -39,51 +39,9 @@ pub use study::{overdue_days, wake_session};
 
 use self::editor::EditorController;
 use self::navigation::LibraryNav;
+use self::screen::{Screen, screen_for};
 use self::store_bridge::StoreBridge;
 use self::study::StudyController;
-
-/// What the work area shows. One value owns it, so a key can only act where its screen is showing
-/// and a screen can only be entered by setting it.
-#[derive(Clone)]
-pub(super) enum Screen {
-    /// The grid, filtered by the sidebar's row in force.
-    Library,
-    /// One card's editor.
-    Editor(Id),
-    /// The library's paths and defaults.
-    Settings,
-    /// What the store and the slow commands have done since launch.
-    Diagnostics,
-    /// The cards that were deleted and can still be restored.
-    Trash,
-    /// A session, shared rather than taken, so a rebuild keeps the session it is showing.
-    Study(Rc<RefCell<Session>>),
-}
-
-impl PartialEq for Screen {
-    /// Two screens are the same when they show the same thing; a session is the same session while
-    /// its handle matches, so a rebuild of the work area is not a new screen.
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Screen::Library, Screen::Library)
-            | (Screen::Settings, Screen::Settings)
-            | (Screen::Diagnostics, Screen::Diagnostics)
-            | (Screen::Trash, Screen::Trash) => true,
-            (Screen::Editor(one), Screen::Editor(two)) => one == two,
-            (Screen::Study(one), Screen::Study(two)) => Rc::ptr_eq(one, two),
-            _ => false,
-        }
-    }
-}
-
-/// The screen a sidebar row opens: Settings and Trash are screens, every other row filters the grid.
-fn screen_for(key: &SharedString) -> Screen {
-    match key.as_ref() {
-        "settings" => Screen::Settings,
-        "trash" => Screen::Trash,
-        _ => Screen::Library,
-    }
-}
 
 /// The shell over `snapshot`: `library_open` says whether the store opened, which the sidebar
 /// states. Tests drive this with a fixture; the app drives the same function with its store worker.

@@ -9,7 +9,7 @@ use typr_core::store::{Command, Id, Snapshot};
 use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::sidebar::Sidebar;
 
-use super::Screen;
+use super::screen::Screen;
 use super::store_bridge::StoreBridge;
 
 /// Owns the library screen's visible selection and search focus.

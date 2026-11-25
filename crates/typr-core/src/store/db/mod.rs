@@ -4,42 +4,20 @@
 //! what keeps the threaded part (`task`) down to plumbing.
 
 mod cards;
+mod core;
 mod decks;
 mod review;
 mod snapshot;
 mod views;
 
-use std::path::{Path, PathBuf};
-
-use rusqlite::{Connection, OpenFlags};
-
 use crate::command::{Command, Outcome};
 use crate::error::StoreError;
-use crate::model::{Grade, Id, MaskRect, Snapshot};
+use crate::model::{Grade, Id, Snapshot};
 use crate::transfer::{self, TransferTarget, mochi};
 
-use super::schema::{self, SchemaFacts};
-
-/// A record as a later build would have written it, for the extra keys a future version schedules.
+pub use self::core::Db;
 #[cfg(test)]
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Record {
-    pub(crate) card: Id,
-    pub(crate) key: &'static str,
-    pub(crate) phase: crate::model::Phase,
-    pub(crate) grade: Grade,
-    pub(crate) at: i64,
-    pub(crate) interval_ms: i64,
-    pub(crate) due_at: Option<i64>,
-}
-
-/// A database file, owned by exactly one thread.
-#[derive(Debug)]
-pub struct Db {
-    pub(super) conn: Connection,
-    schema: SchemaFacts,
-    pub(super) path: PathBuf,
-}
+pub(crate) use self::core::Record;
 
 type DomainDispatcher = fn(&Db, &Command, i64) -> Result<Option<Outcome>, StoreError>;
 
@@ -54,56 +32,6 @@ const DISPATCHERS: &[DomainDispatcher] = &[
 ];
 
 impl Db {
-    /// Open (creating if needed) the database at `path` and bring its schema up to date.
-    ///
-    /// A path that is not a database is an error: the file is read for its header before anything
-    /// is written, so an unrelated file is reported rather than overwritten.
-    pub fn open(path: &Path) -> Result<Self, StoreError> {
-        // A failure here is about this file, so the name of the file travels with the reason: a
-        // reader with "file is not a database" and no path has nothing to act on.
-        let named = |error: StoreError| match error {
-            StoreError::Sqlite(source) => StoreError::Unreadable {
-                path: path.to_path_buf(),
-                source,
-            },
-            other => other,
-        };
-        let conn = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_WRITE
-                | OpenFlags::SQLITE_OPEN_CREATE
-                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|error| named(error.into()))?;
-        let mut db = Self {
-            conn,
-            schema: SchemaFacts {
-                found: 0,
-                written: 0,
-                applied: 0,
-            },
-            path: path.to_path_buf(),
-        };
-        db.conn
-            .pragma_update(None, "journal_mode", "WAL")
-            .map_err(|error| named(error.into()))?;
-        db.conn
-            .pragma_update(None, "foreign_keys", true)
-            .map_err(|error| named(error.into()))?;
-        db.schema = schema::migrate(&mut db.conn).map_err(named)?;
-        Ok(db)
-    }
-
-    /// What the file recorded about its schema before it was opened, and what it records now.
-    pub fn schema_facts(&self) -> SchemaFacts {
-        self.schema
-    }
-
-    /// The file this library lives in, for a log line or an error message.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
     /// Apply one command and report what it did. `now_ms` is the caller's clock, never this
     /// module's.
     ///
@@ -138,30 +66,6 @@ impl Db {
         self.dispatch(command, now_ms)
     }
 
-    /// Write a row whose name is unique, turning SQLite's refusal into something the reader
-    /// understands: "a view called X already exists" is a sentence, the constraint is not.
-    ///
-    /// Only the extended code for a unique violation is translated: a foreign key or a check
-    /// failure stays a database error, because it means the caller asked for something else.
-    pub(super) fn named_write(
-        &self,
-        sql: &str,
-        params: impl rusqlite::Params,
-        what: &'static str,
-        name: &str,
-    ) -> Result<usize, StoreError> {
-        self.conn.execute(sql, params).map_err(|error| {
-            if error.sqlite_extended_error_code() == Some(rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE) {
-                StoreError::DuplicateName {
-                    what,
-                    name: name.to_string(),
-                }
-            } else {
-                StoreError::Sqlite(error)
-            }
-        })
-    }
-
     /// The body of one command, run inside the transaction [`Db::apply`] opens.
     fn dispatch(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
         for handler in DISPATCHERS {
@@ -191,26 +95,5 @@ impl TransferTarget for Db {
         at_ms: i64,
     ) -> Result<Outcome, StoreError> {
         Db::record_review(self, card, key, grade, duration_ms, at_ms)
-    }
-}
-
-/// A nullable integer flag, where NULL means "inherit".
-pub(super) fn flag(value: Option<i64>) -> Option<bool> {
-    value.map(|value| value != 0)
-}
-
-/// A stored count as the `u32` the API reports. More than four billion records cannot be held in
-/// a `Snapshot` on any machine typr runs on, so the count saturates instead of wrapping.
-pub(super) fn count_of(value: i64) -> u32 {
-    u32::try_from(value.max(0)).unwrap_or(u32::MAX)
-}
-
-/// A rectangle has to sit inside the image, or the fraction it stores would draw outside the pane
-/// and a cover would land on nothing.
-pub(super) fn check_mask(card: Id, rect: MaskRect) -> Result<(), StoreError> {
-    if rect.inside_the_image() {
-        Ok(())
-    } else {
-        Err(StoreError::MaskOutsideImage { card })
     }
 }

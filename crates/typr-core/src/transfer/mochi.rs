@@ -20,9 +20,9 @@ use zip::ZipArchive;
 
 use crate::command::{Command, Outcome};
 use crate::error::StoreError;
-use crate::model::{Grade, Id, MaskRect};
+use crate::model::{Grade, Id, ImportReport, MaskRect};
 
-use super::{ImportReport, TransferTarget, attach_bytes};
+use super::target::{TransferTarget, attach_bytes};
 
 /// The `format` field every Mochi manifest this build reads must name.
 pub const FORMAT: &str = "mochi";
@@ -298,8 +298,32 @@ fn import_into(
     let cards: Vec<ArchiveCard> = read_json(&mut zip, "cards.json", archive)?;
 
     let mut report = ImportReport::default();
+    let deck_ids = import_decks(db, decks, archive, now_ms, &mut report)?;
+    for card in cards {
+        import_card(
+            db,
+            &mut zip,
+            card,
+            &deck_ids,
+            archive,
+            attachments,
+            now_ms,
+            copied,
+            &mut report,
+        )?;
+    }
+    verify_counts(&declared, &report, archive)?;
+    Ok(report)
+}
+
+fn import_decks(
+    db: &impl TransferTarget,
+    mut pending: Vec<ArchiveDeck>,
+    archive: &Path,
+    now_ms: i64,
+    report: &mut ImportReport,
+) -> Result<HashMap<i64, Id>, StoreError> {
     let mut deck_ids: HashMap<i64, Id> = HashMap::new();
-    let mut pending = decks;
     while !pending.is_empty() {
         let mut waiting = Vec::new();
         let mut placed = 0;
@@ -347,131 +371,207 @@ fn import_into(
         report.decks += placed;
         pending = waiting;
     }
+    Ok(deck_ids)
+}
 
-    for card in cards {
-        let Some(&deck) = deck_ids.get(&card.deck) else {
-            return Err(StoreError::Archive {
-                path: archive.to_path_buf(),
-                reason: format!("card {} names deck {}", card.id, card.deck),
-            });
-        };
-        let diagram = card
-            .image
-            .as_deref()
-            .is_some_and(|image| !image.trim().is_empty());
-        let outcome = if diagram {
-            let image = card.image.as_deref().unwrap_or_default();
-            let bytes = picture(&mut zip, image, archive)?;
-            let name =
-                attach_bytes(attachments, image, &bytes).map_err(|source| StoreError::Write {
-                    path: attachments.join(image),
-                    source,
-                })?;
-            copied.push(attachments.join(&name));
-            report.images += 1;
-            db.staged(
-                &Command::CreateDiagram {
-                    deck,
-                    image: name,
-                    caption: card.caption,
-                },
-                now_ms,
-            )?
-        } else {
-            db.staged(
-                &Command::CreateCard {
-                    deck,
-                    markdown: card.text,
-                },
-                now_ms,
-            )?
-        };
-        let Outcome::Card(id) = outcome else {
-            return Err(StoreError::Archive {
-                path: archive.to_path_buf(),
-                reason: "a card command did not return a card".to_string(),
-            });
-        };
-        for mask in card.masks {
-            db.staged(
-                &Command::AddMask {
-                    card: id,
-                    group: mask.group,
-                    rect: MaskRect::new(mask.x, mask.y, mask.w, mask.h),
-                },
-                now_ms,
-            )?;
-            report.masks += 1;
-        }
-        // A diagram has no text to render, so its template and fields (which a text card would
-        // carry) have nothing to apply to; our own export leaves them out for diagrams.
-        if !diagram && !card.fields.is_empty() {
-            db.staged(
-                &Command::SetFields {
-                    card: id,
-                    fields: card
-                        .fields
-                        .into_iter()
-                        .map(|field| (field.name, field.value))
-                        .collect(),
-                },
-                now_ms,
-            )?;
-        }
-        if !diagram && let Some(template) = card.template {
-            db.staged(
-                &Command::SetCardTemplate {
-                    card: id,
-                    template: Some(template),
-                    // The archive names decks but not cards, so the imported card takes the name
-                    // its text and this template imply.
-                    name: None,
-                },
-                now_ms,
-            )?;
-        }
-        if !card.tags.is_empty() {
-            db.staged(
-                &Command::SetTags {
-                    card: id,
-                    tags: card.tags,
-                },
-                now_ms,
-            )?;
-        }
-        // Replaying oldest first is what makes each record's phase and interval the ones a live
-        // grade would have written: the scheduler reads the state the previous record left.
-        let mut reviews = card.reviews;
-        reviews.sort_by_key(|review| review.at);
-        for review in reviews {
-            let key = match review.variant {
-                ArchiveVariant::Forward => "fwd".to_string(),
-                ArchiveVariant::Reverse => "rev".to_string(),
-                ArchiveVariant::Cloze => format!(
-                    "cloze:{}",
-                    review.group.ok_or_else(|| {
-                        bad_review(archive, card.id, "a cloze review needs its group")
-                    })?
-                ),
-                ArchiveVariant::Mask => format!(
-                    "mask:{}",
-                    review.group.ok_or_else(|| {
-                        bad_review(archive, card.id, "a mask review needs its group")
-                    })?
-                ),
-            };
-            db.record_review(
-                id,
-                &key,
-                review.grade.into_grade(),
-                review.duration_ms,
-                review.at,
-            )?;
-            report.reviews += 1;
-        }
-        report.cards += 1;
+#[allow(clippy::too_many_arguments)]
+fn import_card(
+    db: &impl TransferTarget,
+    zip: &mut ZipArchive<File>,
+    card: ArchiveCard,
+    deck_ids: &HashMap<i64, Id>,
+    archive: &Path,
+    attachments: &Path,
+    now_ms: i64,
+    copied: &mut Vec<PathBuf>,
+    report: &mut ImportReport,
+) -> Result<(), StoreError> {
+    let Some(&deck) = deck_ids.get(&card.deck) else {
+        return Err(StoreError::Archive {
+            path: archive.to_path_buf(),
+            reason: format!("card {} names deck {}", card.id, card.deck),
+        });
+    };
+    let diagram = card
+        .image
+        .as_deref()
+        .is_some_and(|image| !image.trim().is_empty());
+    let id = create_archive_card(
+        db,
+        zip,
+        deck,
+        diagram,
+        card.image.as_deref(),
+        card.caption,
+        card.text,
+        archive,
+        attachments,
+        now_ms,
+        copied,
+        report,
+    )?;
+    for mask in card.masks {
+        db.staged(
+            &Command::AddMask {
+                card: id,
+                group: mask.group,
+                rect: MaskRect::new(mask.x, mask.y, mask.w, mask.h),
+            },
+            now_ms,
+        )?;
+        report.masks += 1;
     }
+    apply_card_metadata(
+        db,
+        id,
+        diagram,
+        card.fields,
+        card.template,
+        card.tags,
+        now_ms,
+    )?;
+    import_reviews(db, id, card.id, card.reviews, archive, report)?;
+    report.cards += 1;
+    Ok(())
+}
 
+#[allow(clippy::too_many_arguments)]
+fn create_archive_card(
+    db: &impl TransferTarget,
+    zip: &mut ZipArchive<File>,
+    deck: Id,
+    diagram: bool,
+    image: Option<&str>,
+    caption: String,
+    text: String,
+    archive: &Path,
+    attachments: &Path,
+    now_ms: i64,
+    copied: &mut Vec<PathBuf>,
+    report: &mut ImportReport,
+) -> Result<Id, StoreError> {
+    let outcome = if diagram {
+        let image = image.unwrap_or_default();
+        let bytes = picture(zip, image, archive)?;
+        let name =
+            attach_bytes(attachments, image, &bytes).map_err(|source| StoreError::Write {
+                path: attachments.join(image),
+                source,
+            })?;
+        copied.push(attachments.join(&name));
+        report.images += 1;
+        db.staged(
+            &Command::CreateDiagram {
+                deck,
+                image: name,
+                caption,
+            },
+            now_ms,
+        )?
+    } else {
+        db.staged(
+            &Command::CreateCard {
+                deck,
+                markdown: text,
+            },
+            now_ms,
+        )?
+    };
+    match outcome {
+        Outcome::Card(id) => Ok(id),
+        _ => Err(StoreError::Archive {
+            path: archive.to_path_buf(),
+            reason: "a card command did not return a card".to_string(),
+        }),
+    }
+}
+
+fn apply_card_metadata(
+    db: &impl TransferTarget,
+    id: Id,
+    diagram: bool,
+    fields: Vec<ArchiveField>,
+    template: Option<String>,
+    tags: Vec<String>,
+    now_ms: i64,
+) -> Result<(), StoreError> {
+    // A diagram has no text to render, so its template and fields (which a text card would
+    // carry) have nothing to apply to; our own export leaves them out for diagrams.
+    if !diagram && !fields.is_empty() {
+        db.staged(
+            &Command::SetFields {
+                card: id,
+                fields: fields
+                    .into_iter()
+                    .map(|field| (field.name, field.value))
+                    .collect(),
+            },
+            now_ms,
+        )?;
+    }
+    if !diagram && let Some(template) = template {
+        db.staged(
+            &Command::SetCardTemplate {
+                card: id,
+                template: Some(template),
+                // The archive names decks but not cards, so the imported card takes the name
+                // its text and this template imply.
+                name: None,
+            },
+            now_ms,
+        )?;
+    }
+    if !tags.is_empty() {
+        db.staged(&Command::SetTags { card: id, tags }, now_ms)?;
+    }
+    Ok(())
+}
+
+fn import_reviews(
+    db: &impl TransferTarget,
+    id: Id,
+    archive_card_id: i64,
+    mut reviews: Vec<ArchiveReview>,
+    archive: &Path,
+    report: &mut ImportReport,
+) -> Result<(), StoreError> {
+    // Replaying oldest first is what makes each record's phase and interval the ones a live
+    // grade would have written: the scheduler reads the state the previous record left.
+    reviews.sort_by_key(|review| review.at);
+    for review in reviews {
+        let key = match review.variant {
+            ArchiveVariant::Forward => "fwd".to_string(),
+            ArchiveVariant::Reverse => "rev".to_string(),
+            ArchiveVariant::Cloze => format!(
+                "cloze:{}",
+                review.group.ok_or_else(|| {
+                    bad_review(archive, archive_card_id, "a cloze review needs its group")
+                })?
+            ),
+            ArchiveVariant::Mask => format!(
+                "mask:{}",
+                review.group.ok_or_else(|| {
+                    bad_review(archive, archive_card_id, "a mask review needs its group")
+                })?
+            ),
+        };
+        db.record_review(
+            id,
+            &key,
+            review.grade.into_grade(),
+            review.duration_ms,
+            review.at,
+        )?;
+        report.reviews += 1;
+    }
+    Ok(())
+}
+
+fn verify_counts(
+    declared: &Manifest,
+    report: &ImportReport,
+    archive: &Path,
+) -> Result<(), StoreError> {
     let written = Counts {
         decks: report.decks,
         cards: report.cards,
@@ -487,7 +587,7 @@ fn import_into(
             ),
         });
     }
-    Ok(report)
+    Ok(())
 }
 
 fn picture(zip: &mut ZipArchive<File>, entry: &str, archive: &Path) -> Result<Vec<u8>, StoreError> {

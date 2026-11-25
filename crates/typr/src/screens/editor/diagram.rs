@@ -1,108 +1,16 @@
 //! The diagram pane: the picture, a cover per rectangle, the drag that draws one, and the geometry
 //! that turns a drag into fractions of the picture.
 
-use nsh_core::element::JsObject;
 use nsh_core::prelude::*;
 use nsh_core::{TouchEvent, TouchPhase};
-use typr_core::store::{MaskRect, MaskRow};
+use typr_core::store::MaskRect;
 
-use super::{EditorEvent, GroupMerge, MaskAdded, MaskGroup};
+use super::events::{Cover, Diagram, EditorEvent, GroupMerge, MaskAdded, MaskGroup, Rect};
 use crate::ui::{
     button::{Variant, button},
     prose::prose,
     tokens,
 };
-
-/// A rectangle as fractions of the picture.
-#[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct Rect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl Rect {
-    fn of(rect: MaskRect) -> Rect {
-        Rect {
-            x: rect.x,
-            y: rect.y,
-            w: rect.w,
-            h: rect.h,
-        }
-    }
-
-    fn rect(self) -> MaskRect {
-        MaskRect::new(self.x, self.y, self.w, self.h)
-    }
-}
-
-/// One cover on a diagram's picture: the group it belongs to, and its rectangle as fractions of
-/// the picture.
-#[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct Cover {
-    pub group: u32,
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl Cover {
-    /// The cover `group` draws over `rect`, both as fractions of the picture.
-    pub fn new(group: u32, rect: MaskRect) -> Cover {
-        Cover {
-            group,
-            x: rect.x,
-            y: rect.y,
-            w: rect.w,
-            h: rect.h,
-        }
-    }
-
-    /// A store row as the pane draws it.
-    pub fn of(row: &MaskRow) -> Cover {
-        Cover {
-            group: row.group,
-            x: row.rect.x,
-            y: row.rect.y,
-            w: row.rect.w,
-            h: row.rect.h,
-        }
-    }
-
-    /// The rectangle the store holds.
-    fn rect(&self) -> MaskRect {
-        Rect {
-            x: self.x,
-            y: self.y,
-            w: self.w,
-            h: self.h,
-        }
-        .rect()
-    }
-}
-
-/// A diagram card's picture, its caption, and the rectangles drawn on it.
-#[derive(Clone, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct Diagram {
-    pub image: String,
-    pub caption: String,
-    pub rows: Vec<Cover>,
-}
-
-impl Diagram {
-    /// A diagram showing `image`, with an empty caption and no masks yet.
-    pub fn new(image: impl Into<String>) -> Self {
-        Self {
-            image: image.into(),
-            ..Self::default()
-        }
-    }
-}
 
 /// The diagram pane: the picture, a cover per rectangle labelled with its group, a drag across it
 /// that adds a rectangle to the last group, and actions that merge the picked group into one

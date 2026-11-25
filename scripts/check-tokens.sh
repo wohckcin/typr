@@ -12,6 +12,7 @@ set -uo pipefail
 
 screens=(
   crates/typr/src/shell/mod.rs
+  crates/typr/src/shell/screen.rs
   crates/typr/src/shell/store_bridge.rs
   crates/typr/src/shell/navigation.rs
   crates/typr/src/shell/study.rs
@@ -20,6 +21,7 @@ screens=(
   crates/typr/src/screens/grid.rs
   crates/typr/src/screens/library.rs
   crates/typr/src/screens/editor/mod.rs
+  crates/typr/src/screens/editor/events.rs
   crates/typr/src/screens/editor/diagram.rs
   crates/typr/src/screens/editor/dialogs.rs
   crates/typr/src/screens/editor/fields.rs

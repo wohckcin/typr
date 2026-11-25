@@ -30,6 +30,7 @@ impl Surface {
 
 /// A thing the app can be asked to do. Whether it can be done is the surface's business.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(usize)]
 pub enum Command {
     StartDueSession,
     StartNewSession,
@@ -66,104 +67,238 @@ pub enum Command {
     MoveCardDown,
 }
 
+struct CommandInfo {
+    command: Command,
+    name: &'static str,
+    label: &'static str,
+    runnable: bool,
+}
+
+const COMMANDS: &[CommandInfo] = &[
+    CommandInfo {
+        command: Command::StartDueSession,
+        name: "start-due-session",
+        label: "Review cards that are due",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::StartNewSession,
+        name: "start-new-session",
+        label: "Review new cards",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::NewCard,
+        name: "new-card",
+        label: "New card",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::Leave,
+        name: "leave",
+        label: "Back to the library",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::Save,
+        name: "save",
+        label: "Save the card",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::ToggleHistory,
+        name: "toggle-history",
+        label: "Show this card's history",
+        runnable: false,
+    },
+    CommandInfo {
+        command: Command::Reveal,
+        name: "reveal",
+        label: "Reveal the side",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::GradeRemembered,
+        name: "grade-remembered",
+        label: "Remembered",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::GradeForgot,
+        name: "grade-forgot",
+        label: "Forgot",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::Forward,
+        name: "forward",
+        label: "Forward",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::Back,
+        name: "back",
+        label: "Back",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::Shuffle,
+        name: "shuffle",
+        label: "Shuffle the queue",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::ShowShortcuts,
+        name: "show-shortcuts",
+        label: "Keyboard shortcuts",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::ShowPalette,
+        name: "show-palette",
+        label: "Command palette",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::AddRectangle,
+        name: "add-rectangle",
+        label: "Add a rectangle",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::WiderRectangle,
+        name: "wider-rectangle",
+        label: "Widen the rectangle",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::NarrowerRectangle,
+        name: "narrower-rectangle",
+        label: "Narrow the rectangle",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::TallerRectangle,
+        name: "taller-rectangle",
+        label: "Make the rectangle taller",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::ShorterRectangle,
+        name: "shorter-rectangle",
+        label: "Make the rectangle shorter",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::CramSession,
+        name: "cram-session",
+        label: "Cram the cards the filter selects",
+        runnable: false,
+    },
+    CommandInfo {
+        command: Command::Settings,
+        name: "settings",
+        label: "Settings",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::SelectionNext,
+        name: "selection-next",
+        label: "Select the next card",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::SelectionPrevious,
+        name: "selection-previous",
+        label: "Select the previous card",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::SelectionFirst,
+        name: "selection-first",
+        label: "Select the first card",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::SelectionLast,
+        name: "selection-last",
+        label: "Select the last card",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::FocusSearch,
+        name: "focus-search",
+        label: "Focus the search field",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::EditCard,
+        name: "edit-card",
+        label: "Edit the selected card",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::PreviewCard,
+        name: "preview-card",
+        label: "Preview the selected card",
+        runnable: false,
+    },
+    CommandInfo {
+        command: Command::DeleteCard,
+        name: "delete-card",
+        label: "Move the selected card to the trash",
+        runnable: true,
+    },
+    CommandInfo {
+        command: Command::AddCardBelow,
+        name: "add-card-below",
+        label: "Add a card below",
+        runnable: false,
+    },
+    CommandInfo {
+        command: Command::AddCardAbove,
+        name: "add-card-above",
+        label: "Add a card above",
+        runnable: false,
+    },
+    CommandInfo {
+        command: Command::MoveCardUp,
+        name: "move-card-up",
+        label: "Move the card up its deck",
+        runnable: false,
+    },
+    CommandInfo {
+        command: Command::MoveCardDown,
+        name: "move-card-down",
+        label: "Move the card down its deck",
+        runnable: false,
+    },
+];
+
 impl Command {
     pub fn label(self) -> &'static str {
-        match self {
-            Command::StartDueSession => "Review cards that are due",
-            Command::StartNewSession => "Review new cards",
-            Command::NewCard => "New card",
-            Command::Leave => "Back to the library",
-            Command::Save => "Save the card",
-            Command::ToggleHistory => "Show this card's history",
-            Command::Reveal => "Reveal the side",
-            Command::GradeRemembered => "Remembered",
-            Command::GradeForgot => "Forgot",
-            Command::Forward => "Forward",
-            Command::Back => "Back",
-            Command::Shuffle => "Shuffle the queue",
-            Command::ShowShortcuts => "Keyboard shortcuts",
-            Command::ShowPalette => "Command palette",
-            Command::AddRectangle => "Add a rectangle",
-            Command::WiderRectangle => "Widen the rectangle",
-            Command::NarrowerRectangle => "Narrow the rectangle",
-            Command::TallerRectangle => "Make the rectangle taller",
-            Command::ShorterRectangle => "Make the rectangle shorter",
-            Command::CramSession => "Cram the cards the filter selects",
-            Command::Settings => "Settings",
-            Command::SelectionNext => "Select the next card",
-            Command::SelectionPrevious => "Select the previous card",
-            Command::SelectionFirst => "Select the first card",
-            Command::SelectionLast => "Select the last card",
-            Command::FocusSearch => "Focus the search field",
-            Command::EditCard => "Edit the selected card",
-            Command::PreviewCard => "Preview the selected card",
-            Command::DeleteCard => "Move the selected card to the trash",
-            Command::AddCardBelow => "Add a card below",
-            Command::AddCardAbove => "Add a card above",
-            Command::MoveCardUp => "Move the card up its deck",
-            Command::MoveCardDown => "Move the card down its deck",
-        }
+        COMMANDS[self as usize].label
     }
 
     /// The command whose [`Command::name`] is `name`, if the table holds it.
     pub fn from_name(name: &str) -> Option<Command> {
-        ALL.iter().copied().find(|command| command.name() == name)
+        COMMANDS
+            .iter()
+            .find(|info| info.name == name)
+            .map(|info| info.command)
     }
 
     /// Whether the app carries this command out today. A binding whose command is not carried out
     /// is still listed, dimmed, rather than hidden: the key is bound and does nothing, which is the
     /// fact worth showing.
     pub fn runnable(self) -> bool {
-        !matches!(
-            self,
-            Command::PreviewCard
-                | Command::AddCardBelow
-                | Command::AddCardAbove
-                | Command::MoveCardUp
-                | Command::MoveCardDown
-                | Command::CramSession
-                | Command::ToggleHistory
-        )
+        COMMANDS[self as usize].runnable
     }
 
     /// The command's name in the table: what a palette identifies it by, and what a test reads.
     /// Lower-case with dashes, so it survives being an id and never reads as its label.
     pub fn name(self) -> &'static str {
-        match self {
-            Command::StartDueSession => "start-due-session",
-            Command::StartNewSession => "start-new-session",
-            Command::NewCard => "new-card",
-            Command::Leave => "leave",
-            Command::Save => "save",
-            Command::ToggleHistory => "toggle-history",
-            Command::Reveal => "reveal",
-            Command::GradeRemembered => "grade-remembered",
-            Command::GradeForgot => "grade-forgot",
-            Command::Forward => "forward",
-            Command::Back => "back",
-            Command::Shuffle => "shuffle",
-            Command::ShowShortcuts => "show-shortcuts",
-            Command::ShowPalette => "show-palette",
-            Command::AddRectangle => "add-rectangle",
-            Command::WiderRectangle => "wider-rectangle",
-            Command::NarrowerRectangle => "narrower-rectangle",
-            Command::TallerRectangle => "taller-rectangle",
-            Command::ShorterRectangle => "shorter-rectangle",
-            Command::CramSession => "cram-session",
-            Command::Settings => "settings",
-            Command::SelectionNext => "selection-next",
-            Command::SelectionPrevious => "selection-previous",
-            Command::SelectionFirst => "selection-first",
-            Command::SelectionLast => "selection-last",
-            Command::FocusSearch => "focus-search",
-            Command::EditCard => "edit-card",
-            Command::PreviewCard => "preview-card",
-            Command::DeleteCard => "delete-card",
-            Command::AddCardBelow => "add-card-below",
-            Command::AddCardAbove => "add-card-above",
-            Command::MoveCardUp => "move-card-up",
-            Command::MoveCardDown => "move-card-down",
-        }
+        COMMANDS[self as usize].name
     }
 }
 

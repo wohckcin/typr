@@ -11,8 +11,7 @@ use crate::model::{
     Snapshot, Sort, SortDir, ViewSpec,
 };
 
-use super::views::{decode_tags, mode_parse};
-use super::{Db, count_of, flag};
+use super::core::{Db, count_of, decode_tags, flag, mode_parse};
 
 impl Db {
     /// Everything a view may read without a round trip.

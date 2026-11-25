@@ -11,9 +11,9 @@ use std::path::{Path, PathBuf};
 
 use crate::command::{Command, Outcome};
 use crate::error::StoreError;
-use crate::model::{CardKind, Id};
+use crate::model::{CardKind, Id, ImportReport};
 
-use super::{ImportReport, TransferTarget};
+use super::target::TransferTarget;
 
 /// Write one file per deck under `target`, and answer how many cards were written.
 pub fn export(db: &impl TransferTarget, deck: Id, target: &Path) -> Result<usize, StoreError> {

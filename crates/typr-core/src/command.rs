@@ -244,12 +244,38 @@ pub enum Command {
 impl Command {
     /// The command's name, for the diagnostics list of slow writes.
     pub fn name(&self) -> &'static str {
-        match self {
+        const NAMERS: &[fn(&Command) -> Option<&'static str>] = &[
+            Command::deck_name,
+            Command::diagram_name,
+            Command::card_edit_name,
+            Command::card_state_name,
+            Command::review_name,
+            Command::view_name,
+            Command::transfer_name,
+        ];
+        for namer in NAMERS {
+            if let Some(name) = namer(self) {
+                return name;
+            }
+        }
+        unreachable!("every Command variant has a name")
+    }
+
+    fn deck_name(&self) -> Option<&'static str> {
+        Some(match self {
             Command::CreateDeck { .. } => "CreateDeck",
             Command::RenameDeck { .. } => "RenameDeck",
             Command::ArchiveDeck { .. } => "ArchiveDeck",
             Command::MoveDeck { .. } => "MoveDeck",
-            Command::CreateCard { .. } => "CreateCard",
+            Command::SetDeckTemplate { .. } => "SetDeckTemplate",
+            Command::SetDeckReverse { .. } => "SetDeckReverse",
+            Command::SetDeckView { .. } => "SetDeckView",
+            _ => return None,
+        })
+    }
+
+    fn diagram_name(&self) -> Option<&'static str> {
+        Some(match self {
             Command::CreateDiagram { .. } => "CreateDiagram",
             Command::SetDiagram { .. } => "SetDiagram",
             Command::AddMask { .. } => "AddMask",
@@ -260,18 +286,39 @@ impl Command {
             Command::MergeMasks { .. } => "MergeMasks",
             Command::MaskGroups { .. } => "MaskGroups",
             Command::Masks { .. } => "Masks",
+            _ => return None,
+        })
+    }
+
+    fn card_edit_name(&self) -> Option<&'static str> {
+        Some(match self {
+            Command::CreateCard { .. } => "CreateCard",
             Command::SaveCard { .. } => "SaveCard",
             Command::SetFields { .. } => "SetFields",
             Command::SetCardTemplate { .. } => "SetCardTemplate",
-            Command::SetDeckTemplate { .. } => "SetDeckTemplate",
             Command::MoveCard { .. } => "MoveCard",
+            Command::MoveCardTo { .. } => "MoveCardTo",
+            Command::SetTags { .. } => "SetTags",
+            Command::SetCardReverse { .. } => "SetCardReverse",
+            _ => return None,
+        })
+    }
+
+    fn card_state_name(&self) -> Option<&'static str> {
+        Some(match self {
             Command::ArchiveCard { .. } => "ArchiveCard",
             Command::EmptyTrash => "EmptyTrash",
-            Command::SetTags { .. } => "SetTags",
             Command::TrashCard { .. } => "TrashCard",
             Command::RestoreCard { .. } => "RestoreCard",
             Command::SetDraft { .. } => "SetDraft",
             Command::Draft { .. } => "Draft",
+            Command::SetPinned { .. } => "SetPinned",
+            _ => return None,
+        })
+    }
+
+    fn review_name(&self) -> Option<&'static str> {
+        Some(match self {
             Command::Grade { .. } => "Grade",
             Command::ResetHistory { .. } => "ResetHistory",
             Command::DuePrompts { .. } => "DuePrompts",
@@ -280,25 +327,33 @@ impl Command {
             Command::SetScheduler { .. } => "SetScheduler",
             Command::SetRetention { .. } => "SetRetention",
             Command::SetWeights { .. } => "SetWeights",
-            Command::SetCardReverse { .. } => "SetCardReverse",
-            Command::SetDeckReverse { .. } => "SetDeckReverse",
-            Command::SetDeckView { .. } => "SetDeckView",
-            Command::MoveCardTo { .. } => "MoveCardTo",
+            Command::History { .. } => "History",
+            Command::Stats { .. } => "Stats",
+            _ => return None,
+        })
+    }
+
+    fn view_name(&self) -> Option<&'static str> {
+        Some(match self {
             Command::CreateView { .. } => "CreateView",
             Command::RenameView { .. } => "RenameView",
             Command::DeleteView { .. } => "DeleteView",
             Command::UpdateView { .. } => "UpdateView",
-            Command::SetPinned { .. } => "SetPinned",
+            Command::CardsForView { .. } => "CardsForView",
+            _ => return None,
+        })
+    }
+
+    fn transfer_name(&self) -> Option<&'static str> {
+        Some(match self {
             Command::ImportArchive { .. } => "ImportArchive",
             Command::ExportLibrary { .. } => "ExportLibrary",
             Command::ImportCsv { .. } => "ImportCsv",
             Command::ExportCsv { .. } => "ExportCsv",
             Command::ImportMarkdown { .. } => "ImportMarkdown",
             Command::ExportMarkdown { .. } => "ExportMarkdown",
-            Command::History { .. } => "History",
-            Command::Stats { .. } => "Stats",
-            Command::CardsForView { .. } => "CardsForView",
-        }
+            _ => return None,
+        })
     }
 }
 

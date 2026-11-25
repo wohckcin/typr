@@ -4,10 +4,10 @@ use rusqlite::params;
 
 use crate::command::{Command, Outcome};
 use crate::error::StoreError;
-use crate::model::{CardMode, CardSummary, ViewSpec};
+use crate::model::{CardSummary, ViewSpec};
 use crate::transfer::{self, mochi};
 
-use super::Db;
+use super::core::{Db, encode_tags, mode_text};
 
 impl Db {
     pub(super) fn dispatch_view(
@@ -126,42 +126,5 @@ impl Db {
             .filter(|card| card.prompts > 0)
             .cloned()
             .collect())
-    }
-}
-
-/// The separator a view's tag set is stored with: ASCII unit separator, which a tag typed by hand
-/// cannot hold, so no tag can be confused with two.
-const TAG_SEPARATOR: char = '\u{1f}';
-
-fn encode_tags(tags: &[String]) -> String {
-    let separator = TAG_SEPARATOR.to_string();
-    tags.iter()
-        .map(|tag| tag.trim())
-        .filter(|tag| !tag.is_empty())
-        .collect::<Vec<_>>()
-        .join(&separator)
-}
-
-pub(super) fn decode_tags(text: &str) -> Vec<String> {
-    text.split(TAG_SEPARATOR)
-        .map(str::trim)
-        .filter(|tag| !tag.is_empty())
-        .map(str::to_string)
-        .collect()
-}
-
-fn mode_text(mode: CardMode) -> &'static str {
-    match mode {
-        CardMode::Active => "active",
-        CardMode::Archived => "archived",
-        CardMode::Trash => "trash",
-    }
-}
-
-pub(super) fn mode_parse(text: &str) -> CardMode {
-    match text {
-        "archived" => CardMode::Archived,
-        "trash" => CardMode::Trash,
-        _ => CardMode::Active,
     }
 }

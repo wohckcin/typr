@@ -11,7 +11,7 @@ use typr_core::store::{CardKind, Command, Id, MaskRect, Outcome, Snapshot};
 use crate::screens::editor::{self, Cover, Diagram, Template, TemplateField};
 use crate::screens::sidebar::Sidebar;
 
-use super::Screen;
+use super::screen::Screen;
 use super::store_bridge::StoreBridge;
 
 /// Coordinates opening, creating, drafting, and saving cards in the editor over the store worker.

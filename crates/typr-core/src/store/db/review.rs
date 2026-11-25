@@ -12,8 +12,8 @@ use crate::model::{
 use crate::schedule::{FixedMultiplier, Fsrs, Policy, PromptState, Scheduler};
 
 #[cfg(test)]
-use super::Record;
-use super::{Db, count_of};
+use super::core::Record;
+use super::core::{Db, count_of};
 
 impl Db {
     pub(super) fn dispatch_review(

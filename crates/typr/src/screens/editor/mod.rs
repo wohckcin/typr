@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use nsh_core::file_dialog::OpenDialog;
 use nsh_core::prelude::*;
 
-use nsh_core::element::{JsObject, Prop};
+use nsh_core::element::Prop;
 use typr_core::edits::has_content;
 use typr_core::keymap::{Command, Surface};
 use typr_core::sides;
@@ -25,10 +25,15 @@ use crate::ui::{
 
 mod diagram;
 mod dialogs;
+mod events;
 mod fields;
 
-pub use diagram::{Cover, Diagram, Rect, cover_box, diagram_pane, rect_from_corners};
+pub use diagram::{cover_box, diagram_pane, rect_from_corners};
 pub use dialogs::{Answer, Leaving, clear_question, leave_decision, leaving_choice};
+pub use events::{
+    CardText, Cover, Diagram, DiagramStart, EditorEvent, FieldValues, GroupMerge, MaskAdded,
+    MaskGroup, Rect, Template,
+};
 pub use fields::{TemplateField, field_table, template_preview};
 
 /// The file name a chosen picture is copied to, which is also the reference the card holds. A name
@@ -154,25 +159,6 @@ pub fn preview_of(side: &str) -> String {
     }
 }
 
-/// A template in force on the card: its text, the fields it fills from, and the deck's name.
-#[derive(Clone, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct Template {
-    pub text: String,
-    pub fields: Vec<TemplateField>,
-    pub deck: Option<String>,
-}
-
-impl Template {
-    /// A template whose text is `text`, with no fields filled and no deck named.
-    pub fn new(text: impl Into<String>) -> Template {
-        Template {
-            text: text.into(),
-            ..Template::default()
-        }
-    }
-}
-
 /// What the editor opens with: the card as the store has it.
 #[derive(Clone, PartialEq, Props)]
 #[non_exhaustive]
@@ -193,81 +179,6 @@ pub struct EditorProps {
     /// Why the last save was refused, shown under the Save button until the caller clears it.
     #[prop(default)]
     pub save_error: Prop<Option<SharedString>>,
-}
-
-/// The card's text, as the editor reports it.
-#[derive(Clone, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct CardText {
-    /// The whole text.
-    pub text: String,
-}
-
-/// The fields of a templated card, as the user has them.
-#[derive(Clone, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct FieldValues {
-    pub fields: Vec<TemplateField>,
-}
-
-/// One rectangle dragged onto the picture, and the group it joins.
-#[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct MaskAdded {
-    /// The cover the drag drew.
-    pub mask: Cover,
-}
-
-/// One group's rectangles, to be replaced by the one that holds them all.
-#[derive(Clone, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct GroupMerge {
-    /// The group the rectangles belong to.
-    pub group: u32,
-    /// Every rectangle of that group.
-    pub rects: Vec<Rect>,
-}
-
-/// One group of covers, to be let go.
-#[derive(Clone, Copy, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct MaskGroup {
-    /// The group's number.
-    pub group: u32,
-}
-
-/// The picture a card becomes a diagram of.
-#[derive(Clone, Debug, Default, PartialEq, JsObject)]
-#[non_exhaustive]
-pub struct DiagramStart {
-    /// The picture's name, already copied beside the library.
-    pub name: String,
-}
-
-/// What the editor reports: the card's text, and every edit to what it draws. The caller writes
-/// them down; the editor holds nothing of the store.
-#[derive(Event)]
-pub enum EditorEvent {
-    /// The text, to write down as the card.
-    Save(CardText),
-    /// A templated card's fields, to write down so its text is rendered from them.
-    SaveFields(FieldValues),
-    /// The text as it is typed, to keep as the draft.
-    Draft(CardText),
-    /// Leaving, with nothing unsaved.
-    Leave,
-    /// Leaving without the draft: the in-progress text is thrown away.
-    Discard,
-    /// A rectangle dragged on the picture.
-    AddMask(MaskAdded),
-    /// One group's rectangles to replace with the one that holds them all.
-    MergeMasks(GroupMerge),
-    /// Every rectangle of a group let go.
-    RemoveMaskGroup(MaskGroup),
-    /// The picture and every rectangle let go; the card is text again.
-    ClearDiagram,
-    /// The card becomes a diagram of the picture copied under `name`.
-    StartDiagram(DiagramStart),
 }
 
 /// The whole editor: the source or the diagram pane, the preview (from the template when one is in

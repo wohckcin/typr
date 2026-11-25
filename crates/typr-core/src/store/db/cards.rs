@@ -9,7 +9,7 @@ use crate::hidden::{self, Shape};
 use crate::model::{Id, MaskRect, folded};
 use crate::template;
 
-use super::{Db, check_mask};
+use super::core::{Db, check_mask};
 
 impl Db {
     pub(super) fn dispatch_diagram(

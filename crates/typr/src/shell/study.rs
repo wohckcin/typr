@@ -12,7 +12,7 @@ use typr_core::store::{Command, Grade, Id, Outcome, Snapshot};
 
 use crate::screens::study::{entries_for, study_async};
 
-use super::Screen;
+use super::screen::Screen;
 use super::store_bridge::StoreBridge;
 
 /// How many study days before `now` a prompt fell due, which is what a session's `Entry` orders and

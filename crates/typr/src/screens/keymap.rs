@@ -45,36 +45,38 @@ fn shift_base(c: char) -> Option<char> {
     SHIFTED.iter().find(|(s, _)| *s == c).map(|&(_, base)| base)
 }
 
+/// Maps one keymap [`Key`] to NSH's [`NshKey`], reporting whether Shift must be added.
+fn map_key(key: Key) -> (NshKey, bool) {
+    match key {
+        Key::Char(c) => match shift_base(c) {
+            Some(base) => (NshKey::Char(base), true),
+            None => (NshKey::Char(c), false),
+        },
+        Key::Space => (NshKey::Char(' '), false),
+        Key::Enter => (NshKey::Enter, false),
+        Key::Escape => (NshKey::Escape, false),
+        Key::Left => (NshKey::Left, false),
+        Key::Right => (NshKey::Right, false),
+        Key::Up => (NshKey::Up, false),
+        Key::Down => (NshKey::Down, false),
+        Key::Home => (NshKey::Home, false),
+        Key::End => (NshKey::End, false),
+        Key::Backspace => (NshKey::Backspace, false),
+    }
+}
+
 /// One table chord as NSH's keystroke, with Shift added for a character that needs it.
 pub fn keystroke(chord: Chord) -> Option<Keystroke> {
     let (key, mods) = match chord {
         Chord::Key(key) => (key, Mods::NONE),
         Chord::Modified { key, mods } => (key, mods),
     };
-    let mut modifiers = Modifiers {
+    let (key, shifted) = map_key(key);
+    let modifiers = Modifiers {
         ctrl: mods.ctrl,
         alt: mods.alt,
-        shift: mods.shift,
+        shift: mods.shift || shifted,
         cmd: mods.cmd,
-    };
-    let key = match key {
-        Key::Char(c) => match shift_base(c) {
-            Some(base) => {
-                modifiers.shift = true;
-                NshKey::Char(base)
-            }
-            None => NshKey::Char(c),
-        },
-        Key::Space => NshKey::Char(' '),
-        Key::Enter => NshKey::Enter,
-        Key::Escape => NshKey::Escape,
-        Key::Left => NshKey::Left,
-        Key::Right => NshKey::Right,
-        Key::Up => NshKey::Up,
-        Key::Down => NshKey::Down,
-        Key::Home => NshKey::Home,
-        Key::End => NshKey::End,
-        Key::Backspace => NshKey::Backspace,
     };
     Some(Keystroke { modifiers, key })
 }
