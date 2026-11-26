@@ -174,7 +174,7 @@ pub fn shell_over(
         }
     };
 
-    // The system title bar is hidden (nsh.json): the shell starts below the window buttons, and a
+    // The system title bar is hidden (`App`'s window): the shell starts below the window buttons, and a
     // strip over that space moves the window.
     let bar = move || nsh_core::element::desktop::title_bar().top;
     view()
@@ -379,8 +379,8 @@ fn sidebar_picker(
     }
 }
 
-/// The app's root: the real library when it opens, and an empty, closed one when it does not, so
-/// the sidebar says so rather than hiding it.
+/// The app's root: its one window. Since nsh 0.7 the host window never shows, so the app declares
+/// the window it lives in; the hidden title bar it had in `nsh.json` is set here.
 #[component]
 pub fn App() -> impl IntoElement {
     crate::ui::tokens::install();
@@ -397,6 +397,24 @@ pub fn App() -> impl IntoElement {
             Err(error) => log::error!("the log could not be installed: {error}"),
         }
     }
+    // Fields are set one by one: both structs are `#[non_exhaustive]`.
+    let mut bar = nsh_core::desktop::TitleBarOptions::default();
+    bar.style = nsh_core::desktop::TitleBarStyle::Hidden;
+    bar.height = Some(tokens::title_bar_height());
+    let mut attributes = nsh_core::desktop::WindowAttributes::default();
+    attributes.title_bar = Some(bar);
+    nsh_core::element::desktop::window()
+        .id("main")
+        .title("typr")
+        .default_size(tokens::window_size())
+        .restore_bounds(true)
+        .attributes(attributes)
+        .content(library_shell)
+}
+
+/// The real library when it opens, and an empty, closed one when it does not, so the sidebar says
+/// so rather than hiding it.
+fn library_shell() -> AnyElement {
     match crate::paths::open_from_environment() {
         Ok(db) => {
             let library = LibraryInfo::of(&db);

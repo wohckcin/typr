@@ -113,6 +113,16 @@ pub fn sidebar_width() -> Points {
     px(220.0)
 }
 
+/// The height of the app's own title bar strip, the system's window controls centred in it.
+pub fn title_bar_height() -> Points {
+    px(32.0)
+}
+
+/// The main window's content size when it first opens.
+pub fn window_size() -> nsh_core::prelude::Size<Points> {
+    nsh_core::prelude::size(px(960.0), px(1280.0))
+}
+
 /// The fill a row takes when it is the one in force: the hover wash, which is visibly a fill and
 /// never transparent. An unselected row takes the page's background, so the two always differ.
 pub fn row_fill(selected: bool) -> AdaptiveColor {
