@@ -67,7 +67,7 @@ pub fn shell_over(
 
     // Keep ownership of the worker handle and wake guard inside the reactive owner so unmounting
     // the shell closes the wake loop and joins the store worker thread.
-    let (bridge, owner) = StoreBridge::new(store, snapshot_signal, stopped, slow);
+    let (bridge, owner) = StoreBridge::new(store, snapshot_signal, stopped, slow, results);
     let _owner = stored(owner);
 
     let now = SystemClock.now_ms();

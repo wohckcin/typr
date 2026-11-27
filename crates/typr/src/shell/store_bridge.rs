@@ -151,6 +151,7 @@ impl StoreBridge {
         snapshot_signal: Signal<Snapshot>,
         stopped: Signal<bool>,
         slow: Signal<Vec<SlowCommand>>,
+        results: Toasts,
     ) -> (Self, Option<(Rc<Handle>, WakeGuard)>) {
         let (handle, wake) = match store {
             Some((handle, wake)) => (Some(handle), Some(wake)),
@@ -164,7 +165,7 @@ impl StoreBridge {
             let pending = Rc::clone(&pending);
             let wake_loop = Arc::clone(wake_arc);
             let drain = move |handle: &Handle| {
-                drain_events(handle, &pending, snapshot_signal, stopped, slow);
+                drain_events(handle, &pending, snapshot_signal, stopped, slow, results);
             };
             spawn(async move {
                 while wake_loop.next().await {
@@ -304,15 +305,20 @@ fn drain_events(
     snapshot_signal: Signal<Snapshot>,
     stopped: Signal<bool>,
     slow: Signal<Vec<SlowCommand>>,
+    results: Toasts,
 ) {
     for event in handle.poll() {
         if event.id == UNPROMPTED {
             if let Err(error) = event.result {
-                stopped.set(true);
-                log::error!(
-                    "store worker reported an error: {}",
-                    crate::logging::describe(&error)
-                );
+                let why = crate::logging::describe(&error);
+                if error.is_fatal() {
+                    stopped.set(true);
+                    log::error!("store worker reported an error: {why}");
+                } else {
+                    // A snapshot that could not be re-read: the worker keeps running.
+                    log::warn!("store worker reported an error: {why}");
+                    results.push(format!("The library could not be re-read: {why}").into());
+                }
             }
             continue;
         }

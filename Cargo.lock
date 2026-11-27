@@ -5201,6 +5201,7 @@ dependencies = [
  "nsh-platform-linux",
  "nsh-platform-macos",
  "nsh-testing",
+ "rusqlite",
  "tempfile",
  "thiserror 2.0.21",
  "time",

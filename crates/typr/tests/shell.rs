@@ -1005,3 +1005,30 @@ fn a_refused_command_does_not_stop_the_library() -> Result<(), String> {
     assert!(!stopped, "a duplicate name is a refusal, not a stoppage");
     Ok(())
 }
+
+#[test]
+fn a_snapshot_that_cannot_be_re_read_is_toasted_and_does_not_stop_the_library() -> Result<(), String>
+{
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("reread");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("New Deck")?;
+    // A card of a kind typr never wrote: the next snapshot refuses it, the worker keeps running.
+    let other = rusqlite::Connection::open(root.join("typr.sqlite3")).unwrap();
+    other
+        .execute("UPDATE card SET kind = 'frozen'", [])
+        .unwrap();
+    app.press("New Deck")?;
+    app.type_text("text:Deck name", " Maths ")?;
+    app.press_key("enter")?;
+    app.press("Settings")?;
+    app.press("role:button[Open diagnostics]")?;
+    app.wait_for("text:/The library could not be re-read/")?;
+    let stopped = "The library work stopped";
+    assert!(
+        app.wait_for(&format!("text:{stopped}")).is_err(),
+        "the banner must not show"
+    );
+    Ok(())
+}
