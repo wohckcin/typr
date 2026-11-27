@@ -34,7 +34,7 @@ for (const scheme of ["light", "dark"]) {
   await app.screenshot("$out/editor-" + scheme + ".png");
   await app.keyboard.press("escape");
   await app.press("Settings");
-  await app.waitFor("Show review counts");
+  await app.waitFor("New cards a day");
   await app.screenshot("$out/settings-" + scheme + ".png");
   await app.keyboard.press("escape");
 }
