@@ -85,7 +85,7 @@ fn write_attachment(root: &Path, name: &str, bytes: &[u8]) -> std::io::Result<St
                 if let Err(error) = file.write_all(bytes) {
                     #[expect(
                         clippy::let_underscore_must_use,
-                        reason = "best-effort cleanup of a partial file; the export error is what the caller needs"
+                        reason = "best-effort cleanup of a partial file; the attach error is what the caller needs"
                     )]
                     let _ = std::fs::remove_file(root.join(&candidate));
                     return Err(error);
@@ -100,6 +100,7 @@ fn write_attachment(root: &Path, name: &str, bytes: &[u8]) -> std::io::Result<St
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

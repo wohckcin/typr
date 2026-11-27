@@ -108,7 +108,6 @@ impl StudyController {
                         let why = crate::logging::describe(&error);
                         log::error!("the queue was refused: {why}");
                         // The study screen is not open yet, so the sidebar is where the person looks.
-                        refused.set(true);
                         sidebar.refuse(format!("The study queue could not be loaded: {why}"));
                         Vec::new()
                     }
