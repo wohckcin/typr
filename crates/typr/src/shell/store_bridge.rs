@@ -213,8 +213,16 @@ impl StoreBridge {
                 Some(id)
             }
             Err(error) => {
-                self.stopped.set(true);
-                log::error!(
+                if error.is_fatal() {
+                    self.stopped.set(true);
+                }
+                let level = if error.is_fatal() {
+                    log::Level::Error
+                } else {
+                    log::Level::Warn
+                };
+                log::log!(
+                    level,
                     "store refused a command: {}",
                     crate::logging::describe(&error)
                 );
@@ -325,8 +333,16 @@ fn drain_events(
                         }
                     }
                     Err(error) => {
-                        stopped.set(true);
-                        log::error!(
+                        if error.is_fatal() {
+                            stopped.set(true);
+                        }
+                        let level = if error.is_fatal() {
+                            log::Level::Error
+                        } else {
+                            log::Level::Warn
+                        };
+                        log::log!(
+                            level,
                             "store refused a command: {}",
                             crate::logging::describe(error)
                         );

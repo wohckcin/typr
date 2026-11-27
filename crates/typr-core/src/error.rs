@@ -111,3 +111,36 @@ pub enum StoreError {
     #[error("the library stopped: {message}")]
     WorkerPanicked { message: String },
 }
+
+impl StoreError {
+    /// Whether the background library work is gone. Every other error refuses one command and the
+    /// worker keeps running, so only these two should tell the person the library stopped.
+    pub fn is_fatal(&self) -> bool {
+        matches!(self, Self::WorkerPanicked { .. } | Self::Closed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StoreError;
+
+    #[test]
+    fn only_a_stopped_worker_is_fatal() {
+        assert!(StoreError::Closed.is_fatal());
+        assert!(
+            StoreError::WorkerPanicked {
+                message: "x".into()
+            }
+            .is_fatal()
+        );
+        assert!(
+            !StoreError::DuplicateName {
+                what: "deck",
+                name: "Spanish".into()
+            }
+            .is_fatal()
+        );
+        assert!(!StoreError::BlankName { what: "deck" }.is_fatal());
+        assert!(!StoreError::Io(std::io::Error::other("disk full")).is_fatal());
+    }
+}
