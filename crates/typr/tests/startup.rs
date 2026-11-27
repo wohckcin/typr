@@ -44,7 +44,7 @@ fn the_app_renders_twice_without_panicking() -> Result<(), String> {
     // A route change disposes the work area's last screen and draws another; the library comes back
     // with a fresh render, which is the frame that used to read a disposed prop.
     app.press("Settings")?;
-    app.wait_for("Find a setting")?;
+    app.wait_for("New cards a day")?;
     app.press_key("escape")?;
     app.wait_for("hola")?;
     Ok(())

@@ -31,7 +31,7 @@ fn an_applied_new_card_cap_is_stored() -> Result<(), String> {
     app.press("Settings")?;
     app.wait_for("role:button[Apply]")?;
     app.clear("text:20")?;
-    app.type_text("text: >> nth=1", "35")?;
+    app.type_text("text:", "35")?;
     app.press("role:button[Apply]")?;
     app.settle();
     // Dropping the app joins the store worker so the queued write has landed before reopening.
