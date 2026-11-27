@@ -29,9 +29,10 @@ pub enum StoreError {
     /// A grade for a prompt that does not exist, e.g. for a card with one side.
     #[error("card {card} has no prompt {key}")]
     NoPrompt { card: Id, key: String },
-    /// A deck name another deck under the same parent already uses.
+    /// An id that names no row of that kind.
     #[error("{what} {id} does not exist")]
     Missing { what: &'static str, id: Id },
+    /// A deck name another deck under the same parent already uses.
     #[error("a {what} called {name:?} already exists")]
     DuplicateName { what: &'static str, name: String },
     /// A name that is empty once trimmed.
