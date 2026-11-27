@@ -70,6 +70,10 @@ pub fn export_library(db_path: &Path, target: &Path) -> Result<(), StoreError> {
         source: error,
     })?;
     if let Err(error) = source.execute("VACUUM INTO ?1", [text]) {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "best-effort temp file cleanup on an error path"
+        )]
         let _ = std::fs::remove_file(&temp);
         return Err(StoreError::Export {
             path: target.to_path_buf(),
@@ -85,6 +89,10 @@ pub fn export_library(db_path: &Path, target: &Path) -> Result<(), StoreError> {
             copy_new(&temp, target)
         }
     });
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "best-effort temp file cleanup"
+    )]
     let _ = std::fs::remove_file(&temp);
     linked.map_err(|error| {
         if error.kind() == std::io::ErrorKind::AlreadyExists {
@@ -110,6 +118,10 @@ fn copy_new(from: &Path, target: &Path) -> std::io::Result<()> {
     let copied =
         std::fs::File::open(from).and_then(|mut source| std::io::copy(&mut source, &mut out));
     if copied.is_err() {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "best-effort cleanup of the target after a failed write"
+        )]
         let _ = std::fs::remove_file(target);
     }
     copied.map(drop)

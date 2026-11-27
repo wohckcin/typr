@@ -170,6 +170,7 @@ pub fn weights(text: &str) -> Result<Vec<f64>, StoreError> {
         key: "fsrs_weights".to_string(),
         value: text.to_string(),
     };
+    #[expect(clippy::map_err_ignore, reason = "the text is in Setting")]
     let parsed = text
         .split(',')
         .map(|part| part.trim().parse::<f64>())

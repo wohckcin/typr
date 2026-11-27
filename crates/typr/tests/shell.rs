@@ -1,3 +1,7 @@
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "tests clean up temp dirs and drive the UI best-effort"
+)]
 //! The shell over a library snapshot: the sidebar's rows come from the snapshot, and a library
 //! that did not open is said so.
 

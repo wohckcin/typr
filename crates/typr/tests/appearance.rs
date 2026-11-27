@@ -1,3 +1,7 @@
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "tests clean up temp dirs and drive the UI best-effort"
+)]
 //! Every screen in both appearances: the same text keeps its size and weight, and its colour is the
 //! theme's, so it changes between light and dark. No pixels: the engine resolves the style.
 

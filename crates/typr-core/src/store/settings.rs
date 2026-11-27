@@ -169,6 +169,7 @@ impl SettingKey {
             value: text.to_string(),
         };
         let value = match self {
+            #[expect(clippy::map_err_ignore, reason = "the value is in Setting")]
             SettingKey::NewPerDay
             | SettingKey::LearningStepMinutes
             | SettingKey::MaxIntervalDays
@@ -282,6 +283,7 @@ impl Settings {
 
 /// Checks a new-card cap typed by the user against the limit the store keeps. The error names the
 /// limit so the user knows what is allowed.
+#[expect(clippy::map_err_ignore, reason = "this is UI copy for the cap field")]
 pub fn check_new_card_cap(text: &str) -> Result<u32, String> {
     let value: u32 = text
         .trim()

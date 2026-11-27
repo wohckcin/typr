@@ -1,3 +1,7 @@
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "tests clean up temp dirs and drive the UI best-effort"
+)]
 //! What the shell writes to the library on disk when a screen reports a change.
 
 use std::sync::Mutex;

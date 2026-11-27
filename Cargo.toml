@@ -11,3 +11,7 @@ nsh-engine = { version = "=0.7.1", default-features = false }
 nsh-testing = { version = "=0.7.1", default-features = false }
 nsh-platform-macos = "=0.7.1"
 nsh-platform-linux = "=0.7.1"
+
+[workspace.lints.clippy]
+map_err_ignore = "warn"
+let_underscore_must_use = "warn"

@@ -135,6 +135,10 @@ pub fn install(logs: &Path, level: LevelFilter) -> std::io::Result<PathBuf> {
         log::warn!("a logger was already installed, so typr's log file stays empty: {error}");
     }
     log::set_max_level(level);
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a second init keeps the first sender"
+    )]
     let _ = SENDER.set(tx);
     Ok(logs.join(FILE_NAME))
 }
@@ -183,6 +187,10 @@ pub fn shutdown() {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .take();
     if let Some(writer) = writer {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a panicked writer thread has nothing left to report"
+        )]
         let _ = writer.join();
     }
 }
@@ -192,6 +200,10 @@ fn rotate(path: &Path) -> std::io::Result<()> {
     let size = std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0);
     if size > SIZE_LIMIT {
         let rotated = path.with_file_name(ROTATED_NAME);
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "best-effort removal of a rotated log"
+        )]
         let _ = std::fs::remove_file(&rotated);
         std::fs::rename(path, rotated)?;
     }
@@ -216,16 +228,36 @@ fn write_loop(rx: Receiver<Message>, path: &Path, dropped: Arc<AtomicU64>) {
             }
             #[cfg(test)]
             Message::Flush(reply) => {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "logging must not fail the app; there is nowhere to report a log failure"
+                )]
                 let _ = file.flush();
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "logging must not fail the app; there is nowhere to report a log failure"
+                )]
                 let _ = reply.send(());
             }
             Message::Shutdown(reply) => {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "logging must not fail the app; there is nowhere to report a log failure"
+                )]
                 let _ = file.flush();
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "the requester may have stopped waiting"
+                )]
                 let _ = reply.send(());
                 return;
             }
         }
     }
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "logging must not fail the app; there is nowhere to report a log failure"
+    )]
     let _ = file.flush();
 }
 

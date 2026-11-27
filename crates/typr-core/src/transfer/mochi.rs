@@ -279,6 +279,10 @@ pub(crate) fn import(
         // The transaction is about to roll back its rows, so the pictures copied out of the
         // archive must not outlive the cards that would have named them.
         for path in copied {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "best-effort cleanup of a partial file; the import error is what the caller needs"
+            )]
             let _ = std::fs::remove_file(path);
         }
     }
