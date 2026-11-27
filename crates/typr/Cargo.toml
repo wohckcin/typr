@@ -23,6 +23,7 @@ nsh-platform-linux.workspace = true
 nsh-engine.workspace = true
 nsh-testing.workspace = true
 tempfile = "3.27.0"
+rusqlite = { version = "0.43.0", features = ["bundled"] }
 
 [lints]
 workspace = true
