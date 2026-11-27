@@ -687,7 +687,8 @@ fn an_empty_deck_offers_a_new_card_that_opens_its_editor() -> Result<(), String>
     let root = empty_library_on_disk("empty");
     unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
-    app.wait_for("This deck has no cards yet")?;
+    // The app opens on the Inbox, which says why it is empty and still offers the first card.
+    app.wait_for("No cards are due or new")?;
     app.press("role:button[New card]")?;
     app.wait_for("Attach image…")?;
     // The card is in the library, not only on the screen: the button writes through the store.
@@ -871,4 +872,62 @@ fn a_forgotten_cards_relearning_step_comes_back_when_the_shell_wakes_the_session
     assert!(!wake_session(&session, noon + LEARNING_STEP_MS - 1));
     assert!(wake_session(&session, noon + LEARNING_STEP_MS));
     assert_eq!(session.borrow().current().map(|entry| entry.card), Some(1));
+}
+
+/// A library whose one card was reviewed long ago, so its prompt is due now and nothing is new.
+fn due_library_on_disk(name: &str) -> std::path::PathBuf {
+    let root = library_on_disk(name);
+    let db = typr_core::store::Db::open(&root.join("typr.sqlite3")).unwrap();
+    let card = db.snapshot().unwrap().cards.first().expect("the card").id;
+    db.apply(
+        &typr_core::store::Command::Grade {
+            card,
+            key: "fwd".to_owned(),
+            grade: typr_core::store::Grade::Remembered,
+            duration_ms: None,
+        },
+        86_400_000,
+    )
+    .expect("a review that schedules the card");
+    root
+}
+
+#[test]
+fn review_due_opens_the_study_screen() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = due_library_on_disk("review-due");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("role:button[Review due 1]")?;
+    app.press("role:button[Review due 1]")?;
+    app.wait_for("role:button[Show answer]")?;
+    Ok(())
+}
+
+#[test]
+fn review_buttons_are_disabled_when_their_queue_is_empty() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = due_library_on_disk("review-new");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("role:button[Review new 0]")?;
+    let _ = app.press("role:button[Review new 0]");
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(app.screen().shows("gato"), "a disabled review left the library");
+    assert!(!app.screen().shows("role:button[Show answer]"));
+    Ok(())
+}
+
+#[test]
+fn an_empty_due_filter_offers_no_new_card_button() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    // One new card, nothing due.
+    let root = library_on_disk("empty-due");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("Due today")?;
+    app.press("Due today")?;
+    app.wait_for("Nothing is due. You're done for today")?;
+    assert_eq!(app.screen().count("role:button[New card]")?, 0);
+    Ok(())
 }

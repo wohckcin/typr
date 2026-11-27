@@ -23,7 +23,7 @@ use typr_core::store::{
 
 use crate::screens::diagnostics::{SlowCommand, diagnostics};
 use crate::screens::grid::grid;
-use crate::screens::library::{cards_in, tiles_for};
+use crate::screens::library::{cards_in, empty_message, offers_new_card, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
 use crate::screens::sidebar::{
     NEW_DECK_PREFIX, Sidebar, due_counts, items_from, search_chord, sidebar,
@@ -157,20 +157,48 @@ pub fn shell_over(
         chord if chord.is_empty() => "Search cards".to_owned(),
         chord => format!("Search cards  {chord}"),
     };
+    // Memos, so a snapshot that leaves a count alone does not rebuild its button.
+    let queued_in = move |key: &'static str| {
+        computed(move || snapshot_signal.with(|s| cards_in(s, Some(key), SystemClock.now_ms()).len()))
+    };
+    let (due_n, new_n) = (queued_in("inbox:due"), queued_in("inbox:new"));
     let library_view = {
         let editor_new = editor_ctl.clone();
         let editor_open = editor_ctl.clone();
+        let study_ctl = study_ctl.clone();
         move || {
             let editor_new = editor_new.clone();
             let editor_open = editor_open.clone();
+            let review = |label: &'static str, count: Memo<usize>, queue: typr_core::screen::Queue| {
+                let study = study_ctl.clone();
+                dynamic(move || {
+                    let study = study.clone();
+                    let n = count.get();
+                    crate::ui::button::button()
+                        .label(format!("{label} {n}"))
+                        .disabled(n == 0)
+                        .on_press(move || study.start(queue))
+                        .into_element()
+                })
+            };
+            let key = move || state.selected_key();
             view()
                 .flex_1()
                 .p_4()
                 .gap_3()
+                .child(
+                    view()
+                        .flex_row()
+                        .gap_2()
+                        .child(review("Review due", due_n, typr_core::screen::Queue::Due))
+                        .child(review("Review new", new_n, typr_core::screen::Queue::New)),
+                )
                 .child(field_reachable(search_placeholder.clone(), query, &search_handle))
                 .child(grid(
                     tiles,
                     selection,
+                    move || query.with(|q| empty_message(key().as_deref(), q)),
+                    move || query.with(|q| offers_new_card(key().as_deref(), q)),
                     move || editor_new.new_card(state),
                     move |id: Id| editor_open.open(id),
                 ))
@@ -234,7 +262,9 @@ pub fn shell_over(
                         .into_element()
                 }
                 Screen::Editor(id) => editor_ctl.render(id, library_view.clone()),
-                Screen::Library => library_view(),
+                // Untracked: a read while building the library must not rebuild it, which would
+                // drop its buttons before they first render and panic on a disposed prop.
+                Screen::Library => untracked(&library_view),
             }
         })))
         .child(overlay::decision(palette_open, {
