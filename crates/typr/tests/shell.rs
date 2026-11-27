@@ -525,7 +525,7 @@ fn choosing_a_deck_leaves_the_open_card() -> Result<(), String> {
     app.wait_for("Attach image…")?;
     // A row in the sidebar opens the grid for that row, so the card on screen goes away.
     app.press("role:treeitem[Spanish]")?;
-    app.wait_for("Search cards")?;
+    app.wait_for("text:/^Search cards/")?;
     let editor_rows = app.screen().count("Attach image…")?;
     assert_eq!(editor_rows, 0, "the editor is gone");
     Ok(())
@@ -573,7 +573,7 @@ fn a_filtered_out_card_does_not_leave_the_next_one_selected() -> Result<(), Stri
     // Select the first card, then filter it out. Nothing is in force afterwards, so Enter opens
     // nothing rather than the card that took its place.
     app.press_key("down")?;
-    app.type_text("text:Search cards", "perro")?;
+    app.type_text("text:/^Search cards/", "perro")?;
     app.wait_for_gone("gato", std::time::Duration::from_secs(5))?;
     // Escape leaves the field and shows the whole library again, which is where Enter acts.
     app.press_key("escape")?;
@@ -723,13 +723,17 @@ fn the_library_opens_on_the_inbox_and_escape_returns_to_it() -> Result<(), Strin
 }
 
 #[test]
-fn the_search_row_shows_the_library_from_another_screen() -> Result<(), String> {
+fn the_inbox_row_shows_the_library_from_another_screen() -> Result<(), String> {
     let mut app = start();
     app.wait_for("Settings")?;
     app.press("Settings")?;
     app.wait_for("Find a setting")?;
-    app.press("Search")?;
+    app.press("text:/^Inbox/")?;
     app.wait_for_gone("Find a setting", std::time::Duration::from_secs(5))?;
+    // The search field names its chord, now that no sidebar row does.
+    let chord = typr::screens::sidebar::search_chord();
+    assert!(!chord.is_empty(), "the library binds no search chord");
+    app.wait_for(&format!("text:Search cards  {chord}"))?;
     Ok(())
 }
 

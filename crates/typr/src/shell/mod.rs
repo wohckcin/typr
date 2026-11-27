@@ -26,7 +26,7 @@ use crate::screens::grid::grid;
 use crate::screens::library::{cards_in, tiles_for};
 use crate::screens::settings::{LibraryInfo, Values, settings};
 use crate::screens::sidebar::{
-    NEW_DECK_PREFIX, SEARCH_KEY, Sidebar, due_counts, items_from, search_chord, sidebar,
+    NEW_DECK_PREFIX, Sidebar, due_counts, items_from, search_chord, sidebar,
 };
 use crate::ui::{
     input::field_reachable,
@@ -75,7 +75,6 @@ pub fn shell_over(
     let state = Sidebar::new(
         items_from(&snapshot_signal.get_untracked(), &due, now),
         library_open,
-        search_chord(),
     );
     effect(move || {
         let snapshot = snapshot_signal.get();
@@ -151,8 +150,13 @@ pub fn shell_over(
     );
     bind_library_keys(screen, run.clone());
 
-    let pick = sidebar_picker(bridge.clone(), nav.clone(), state, screen, import.clone());
+    let pick = sidebar_picker(bridge.clone(), state, screen);
 
+    // The field names its chord: no sidebar row carries it any more.
+    let search_placeholder = match search_chord() {
+        chord if chord.is_empty() => "Search cards".to_owned(),
+        chord => format!("Search cards  {chord}"),
+    };
     let library_view = {
         let editor_new = editor_ctl.clone();
         let editor_open = editor_ctl.clone();
@@ -163,7 +167,7 @@ pub fn shell_over(
                 .flex_1()
                 .p_4()
                 .gap_3()
-                .child(field_reachable("Search cards", query, &search_handle))
+                .child(field_reachable(search_placeholder.clone(), query, &search_handle))
                 .child(grid(
                     tiles,
                     selection,
@@ -340,25 +344,11 @@ fn bind_library_keys(screen: Signal<Screen>, run: Rc<dyn Fn(Key)>) {
 
 fn sidebar_picker(
     bridge: StoreBridge,
-    nav: LibraryNav,
     state: Sidebar,
     screen: Signal<Screen>,
-    import: impl Fn() + Clone + 'static,
 ) -> impl Fn(&SharedString) + Clone + 'static {
     move |key: &SharedString| {
-        if key.as_ref() == "import" {
-            import();
-        } else if key.as_ref() == SEARCH_KEY {
-            let shown = matches!(screen.get_untracked(), Screen::Library);
-            screen.set(Screen::Library);
-            if shown {
-                nav.focus_search();
-            } else {
-                // The field is drawn again by the screen change; focus it once it exists.
-                let nav = nav.clone();
-                spawn(async move { nav.focus_search() });
-            }
-        } else if let Some(name) = key.strip_prefix(NEW_DECK_PREFIX) {
+        if let Some(name) = key.strip_prefix(NEW_DECK_PREFIX) {
             bridge.submit(
                 Command::CreateDeck {
                     parent: None,

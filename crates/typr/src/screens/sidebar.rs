@@ -13,20 +13,18 @@ use typr_core::store::{Id, Snapshot};
 use crate::ui::{choice::list_row, icon::Icon, input::name_field, size, status::badge, tokens};
 use typr_core::inbox::{Inbox, inbox_cards};
 
-/// The key a press on the search row reports.
-pub const SEARCH_KEY: &str = "search";
 /// The prefix of the key reported when a new deck's name is entered: `new-deck:<name>`.
 pub const NEW_DECK_PREFIX: &str = "new-deck:";
 
 /// The groups of rows, drawn in this order. A group with no visible row draws nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Group {
-    /// The way in: the dashboard and the inbox of cards that are waiting.
+    /// The way in: the inbox of cards that are waiting, and its two filters.
     #[default]
     Navigation,
     /// The decks, each with the prompts due in its subtree.
     Decks,
-    /// Import, settings and the trash.
+    /// Settings and the trash.
     Utilities,
 }
 
@@ -94,17 +92,12 @@ pub struct Sidebar {
     collapsed: Signal<Vec<SharedString>>,
     library_open: Signal<bool>,
     notice: Signal<Option<SharedString>>,
-    search_chord: Signal<SharedString>,
     naming: Signal<bool>,
 }
 
 impl Sidebar {
-    /// A sidebar over `items`, with the library open or closed and the chord that focuses search.
-    pub fn new(
-        items: Vec<Item>,
-        library_open: bool,
-        search_chord: impl Into<SharedString>,
-    ) -> Self {
+    /// A sidebar over `items`, with the library open or closed.
+    pub fn new(items: Vec<Item>, library_open: bool) -> Self {
         // The Inbox is in force until another row is chosen, so the grid and the sidebar agree about
         // what is shown; a column with no Inbox starts on its first row.
         let first = items
@@ -118,7 +111,6 @@ impl Sidebar {
             collapsed: signal(Vec::new()),
             library_open: signal(library_open),
             notice: signal(None),
-            search_chord: signal(search_chord.into()),
             naming: signal(false),
         }
     }
@@ -287,9 +279,8 @@ impl Sidebar {
     }
 }
 
-/// The column: the search row, each group with rows, then the library's state. `pick` hears every
-/// press, so the caller owns what a row opens; the search row reports [`SEARCH_KEY`] and a named
-/// deck reports `new-deck:<name>`.
+/// The column: each group with rows, then, when the library is closed, the state saying so. `pick`
+/// hears every press, so the caller owns what a row opens; a named deck reports `new-deck:<name>`.
 pub fn sidebar(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -> impl IntoElement {
     let column = view()
         .w(tokens::sidebar_width())
@@ -297,12 +288,15 @@ pub fn sidebar(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
         .gap_3()
         .border_r_1()
         .border_color(tokens::border)
-        .child(search_row(state, pick.clone()));
-    // One dynamic for every group: one owner for the rows, so a row's controls are not rebuilt
-    // under a nested owner that the next render disposes. It takes the height the footer leaves.
-    column
-        .child(view().flex_1().child(groups_view(state, pick)))
-        .child(state_row(state))
+        // One dynamic for every group: one owner for the rows, so a row's controls are not rebuilt
+        // under a nested owner that the next render disposes. It takes the height the footer leaves.
+        .child(view().flex_1().child(groups_view(state, pick)));
+    // An open library is the normal case and says nothing; only a closed one needs the footer.
+    if state.library_open.get_untracked() {
+        column
+    } else {
+        column.child(state_row(state))
+    }
 }
 
 /// A tree of `group`'s rows: the base element folds them, moves the selection with the arrow keys
@@ -373,22 +367,6 @@ fn groups_view(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
     })
 }
 
-/// The search field: a mark, the word, and the chord that focuses it. Pressing it reports
-/// [`SEARCH_KEY`] without taking the selection.
-fn search_row(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -> impl IntoElement {
-    list_row()
-        .title("Search")
-        .icon(Icon::Search)
-        .outlined(true)
-        .selected(|| false)
-        .disabled(|| false)
-        .trailing(move || {
-            let chord = state.search_chord.get();
-            (!chord.is_empty()).then_some(chord)
-        })
-        .on_press(move || pick(&SharedString::from(SEARCH_KEY)))
-}
-
 /// `New Deck`, or the field that names it. Enter with a name reports `new-deck:<name>`; a blank
 /// name puts the row back.
 ///
@@ -416,8 +394,8 @@ fn new_deck_row(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) 
     }
 }
 
-/// The foot of the column: whether the library is open, as a dot and the words. The dot is a second
-/// cue beside the tone; it has no name of its own, so a screen reader hears the state once.
+/// The foot of a closed library's column: a dot and the words, and why when it is known. The dot is
+/// a second cue beside the tone; it has no name of its own, so a screen reader hears the state once.
 fn state_row(state: Sidebar) -> impl IntoElement {
     view()
         .flex_row()
@@ -432,33 +410,18 @@ fn state_row(state: Sidebar) -> impl IntoElement {
                 .w(size::dot())
                 .h(size::dot())
                 .rounded_full()
-                .bg(move || {
-                    if state.library_open.get() {
-                        tokens::success()
-                    } else {
-                        tokens::destructive()
-                    }
-                }),
+                .bg(tokens::destructive),
         )
         .child(library_state(state))
 }
 
 fn library_state(state: Sidebar) -> impl IntoElement {
-    text(
-        move || match (state.library_open.get(), state.notice.get()) {
-            (true, _) => SharedString::from("Library open"),
-            (false, Some(why)) => SharedString::from(format!("Library closed: {why}")),
-            (false, None) => SharedString::from("Library closed"),
-        },
-    )
-    .text_sm()
-    .text_color(move || {
-        if state.library_open.get() {
-            tokens::muted_foreground()
-        } else {
-            tokens::destructive()
-        }
+    text(move || match state.notice.get() {
+        Some(why) => SharedString::from(format!("Library closed: {why}")),
+        None => SharedString::from("Library closed"),
     })
+    .text_sm()
+    .text_color(tokens::destructive)
 }
 
 /// A utility row: a glyph and a label, one press target. Settings and Trash are screens and take the
@@ -489,10 +452,10 @@ fn row_view(
     row
 }
 
-/// The rows the column shows for a library at `now_ms`: the dashboard (not yet available), the Inbox
-/// with the cards that are due or new and its two halves, every live deck with its due count (`due`
-/// comes from [`typr_core`]'s subtree counts, so a parent counts its children), and Import, Settings
-/// and Trash.
+/// The rows the column shows for a library at `now_ms`: the Inbox with the cards that are due or
+/// new, and its two filters as rows of their own, every live deck with its due count (`due`
+/// comes from [`typr_core`]'s subtree counts, so a parent counts its children), and Settings and
+/// Trash.
 pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>, now_ms: i64) -> Vec<Item> {
     let live: Vec<_> = snapshot
         .decks
@@ -506,24 +469,17 @@ pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>, now_ms: i64) -> V
         .filter(|p| live_ids.contains(p))
         .collect();
     let count = |which| inbox_cards(snapshot, now_ms, which).len();
-    let nested = |key: &str, label: &str, glyph, which| {
+    // Flat rows: a press on the Inbox opens it and never folds its filters away.
+    let inbox_row = |key: &str, label: &str, glyph, which| {
         let mut item =
             Item::new(key.to_owned(), label.to_owned(), Group::Navigation).with_icon(glyph);
-        item.parent = Some("inbox".into());
         item.due = count(which);
         item
     };
-    let mut dashboard =
-        Item::new("dashboard", "Dashboard", Group::Navigation).with_icon(Icon::Trend);
-    dashboard.disabled = true;
-    let mut inbox = Item::new("inbox", "Inbox", Group::Navigation).with_icon(Icon::Inbox);
-    inbox.due = count(Inbox::All);
-    inbox.has_children = true;
     let mut items = vec![
-        dashboard,
-        inbox,
-        nested("inbox:due", "Due today", Icon::CircleCheck, Inbox::Due),
-        nested("inbox:new", "New cards", Icon::CircleDashed, Inbox::New),
+        inbox_row("inbox", "Inbox", Icon::Inbox, Inbox::All),
+        inbox_row("inbox:due", "Due today", Icon::CircleCheck, Inbox::Due),
+        inbox_row("inbox:new", "New cards", Icon::CircleDashed, Inbox::New),
     ];
     for deck in &live {
         let mut item = Item::new(format!("deck:{}", deck.id), deck.name.clone(), Group::Decks)
@@ -540,7 +496,6 @@ pub fn items_from(snapshot: &Snapshot, due: &HashMap<Id, u32>, now_ms: i64) -> V
         item.has_children = parents.contains(&deck.id);
         items.push(item);
     }
-    items.push(Item::new("import", "Import", Group::Utilities).with_icon(Icon::Download));
     items.push(Item::new("settings", "Settings", Group::Utilities).with_icon(Icon::Gear));
     items.push(Item::new("trash", "Trash", Group::Utilities).with_icon(Icon::Trash));
     items
