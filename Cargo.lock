@@ -5202,6 +5202,7 @@ dependencies = [
  "nsh-platform-macos",
  "nsh-testing",
  "tempfile",
+ "thiserror 2.0.21",
  "time",
  "typr-core",
 ]
