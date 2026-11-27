@@ -338,3 +338,20 @@ fn pressing_the_dashboard_changes_nothing() -> Result<(), String> {
     app.wait_for("selected=inbox")?;
     Ok(())
 }
+
+#[test]
+fn the_selected_tree_row_wears_the_row_fill_and_its_sibling_does_not() -> Result<(), String> {
+    let mut app = start();
+    app.wait_for("Biology")?;
+    app.press("Biology")?;
+    app.wait_for("selected=biology")?;
+    let fill = |app: &Headless, id: &str| {
+        app.screen()
+            .view_style(&format!("id:tree-row:{id}"))
+            .map(|style| style.and_then(|s| s.background_color))
+    };
+    let chosen = fill(&app, "biology")?;
+    assert!(chosen.is_some(), "the selected tree row has no fill");
+    assert_ne!(chosen, fill(&app, "verbs")?, "the unselected row wears the same fill");
+    Ok(())
+}
