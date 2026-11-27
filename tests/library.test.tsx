@@ -15,7 +15,7 @@ test("a library that cannot open says so and still shows the app", async () => {
 
 test("an empty deck offers the one action and says what is missing", async () => {
   const app = await open("..");
-  await app.waitFor("text:This deck has no cards yet");
+  await app.waitFor("text:No cards are due or new");
   expect(app.texts()).toContain("New card");
   // The action is a control, not a badge: the badge above the sentence is the wrong element for it.
   expect(app.count("role:button[New card]")).toBe(1);

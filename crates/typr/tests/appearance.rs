@@ -139,6 +139,8 @@ fn GridScreen() -> impl IntoElement {
             vec![tile]
         }),
         signal(None),
+        || "This deck has no cards yet",
+        || true,
         || {},
         |_| {},
     )

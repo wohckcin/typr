@@ -3,7 +3,7 @@
 use nsh_core::prelude::*;
 use nsh_engine::{EngineConfig, Root};
 use nsh_testing::Headless;
-use typr::screens::library::{cards_in, tiles_for};
+use typr::screens::library::{cards_in, empty_message, offers_new_card, tiles_for};
 use typr_core::store::{CardSummary, Deck, Snapshot};
 
 fn card(id: i64, deck: i64, preview: &str, pinned: bool, position: i64) -> CardSummary {
@@ -147,4 +147,28 @@ fn the_inbox_leaves_out_what_is_not_studyable() {
     for gone in [5, 6, 7, 8, 9] {
         assert!(!shown.contains(&gone), "card {gone} is not studyable");
     }
+}
+
+#[test]
+fn each_filter_says_why_it_is_empty() {
+    assert_eq!(empty_message(Some("inbox:due"), ""), "Nothing is due. You're done for today");
+    assert_eq!(empty_message(Some("inbox:new"), ""), "No new cards to learn");
+    assert_eq!(empty_message(Some("inbox"), ""), "No cards are due or new");
+    assert_eq!(empty_message(Some("deck:3"), ""), "This deck has no cards yet");
+    assert_eq!(empty_message(None, ""), "This deck has no cards yet");
+}
+
+#[test]
+fn a_query_takes_precedence_in_the_empty_message() {
+    assert_eq!(empty_message(Some("inbox:due"), "verb"), "No cards match your search");
+    assert!(!offers_new_card(Some("deck:3"), "verb"));
+}
+
+#[test]
+fn only_the_filters_hide_the_new_card_button() {
+    assert!(!offers_new_card(Some("inbox:due"), ""));
+    assert!(!offers_new_card(Some("inbox:new"), ""));
+    // The Inbox is where a new library opens, so it keeps the way to a first card.
+    assert!(offers_new_card(Some("inbox"), ""));
+    assert!(offers_new_card(Some("deck:3"), ""));
 }

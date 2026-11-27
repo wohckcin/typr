@@ -26,7 +26,7 @@ fn Probe() -> impl IntoElement {
     let memo = computed(move || data.get());
     view()
         .flex_1()
-        .child(grid(memo, signal(None), || {}, |_| {}))
+        .child(grid(memo, signal(None), || "This deck has no cards yet", || true, || {}, |_| {}))
 }
 
 #[component]
@@ -36,7 +36,7 @@ fn Empty() -> impl IntoElement {
     let memo = computed(move || data.get());
     view()
         .flex_1()
-        .child(grid(memo, signal(None), || {}, |_| {}))
+        .child(grid(memo, signal(None), || "This deck has no cards yet", || true, || {}, |_| {}))
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn SoonDue() -> impl IntoElement {
     let memo = computed(move || soon.clone());
     view()
         .flex_1()
-        .child(grid(memo, signal(None), || {}, |_| {}))
+        .child(grid(memo, signal(None), || "This deck has no cards yet", || true, || {}, |_| {}))
 }
 
 #[test]

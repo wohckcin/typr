@@ -88,10 +88,12 @@ pub fn tile_of(card: &typr_core::store::CardSummary, now_ms: i64) -> Tile {
     }
 }
 
-/// The grid over `tiles`. An empty deck offers the tile that starts a card.
+/// The grid over `tiles`. An empty grid says `empty`, and offers New card when `offer_new`.
 pub fn grid(
     tiles: Memo<Vec<Tile>>,
     chosen: Signal<Option<Id>>,
+    empty: impl Fn() -> &'static str + 'static,
+    offer_new: impl Fn() -> bool + 'static,
     on_new: impl Fn() + Clone + 'static,
     on_open: impl Fn(i64) + Clone + 'static,
 ) -> impl IntoElement {
@@ -99,16 +101,15 @@ pub fn grid(
     let open = on_open.clone();
     view().flex_1().child(dynamic(move || {
         if tiles.with(Vec::is_empty) {
-            let on_new = empty_new.clone();
-            return view()
-                .p_4()
-                .child(
-                    text("This deck has no cards yet")
-                        .text_sm()
-                        .text_color(tokens::muted_foreground),
-                )
-                .child(button_new(on_new))
-                .into_element();
+            let mut page = view().p_4().child(
+                text(empty())
+                    .text_sm()
+                    .text_color(tokens::muted_foreground),
+            );
+            if offer_new() {
+                page = page.child(button_new(empty_new.clone()));
+            }
+            return page.into_element();
         }
         let open = open.clone();
         virtual_list(
