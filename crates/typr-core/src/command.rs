@@ -241,24 +241,92 @@ pub enum Command {
     },
 }
 
+/// The group of store handlers that owns a command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Domain {
+    Deck,
+    Diagram,
+    Card,
+    CardState,
+    Review,
+    View,
+    Transfer,
+}
+
 impl Command {
+    /// Which store handler owns this command. No wildcard arm: a new variant fails to compile
+    /// until it is routed.
+    pub(crate) fn domain(&self) -> Domain {
+        match self {
+            Command::CreateDeck { .. }
+            | Command::RenameDeck { .. }
+            | Command::ArchiveDeck { .. }
+            | Command::MoveDeck { .. }
+            | Command::SetDeckTemplate { .. }
+            | Command::SetDeckReverse { .. }
+            | Command::SetDeckView { .. } => Domain::Deck,
+            Command::CreateDiagram { .. }
+            | Command::SetDiagram { .. }
+            | Command::AddMask { .. }
+            | Command::SetMaskGroup { .. }
+            | Command::RemoveMask { .. }
+            | Command::RemoveMaskGroup { .. }
+            | Command::ClearDiagram { .. }
+            | Command::MergeMasks { .. }
+            | Command::MaskGroups { .. }
+            | Command::Masks { .. } => Domain::Diagram,
+            Command::CreateCard { .. }
+            | Command::SaveCard { .. }
+            | Command::SetFields { .. }
+            | Command::SetCardTemplate { .. }
+            | Command::MoveCard { .. }
+            | Command::MoveCardTo { .. }
+            | Command::SetTags { .. }
+            | Command::SetCardReverse { .. } => Domain::Card,
+            Command::ArchiveCard { .. }
+            | Command::EmptyTrash
+            | Command::TrashCard { .. }
+            | Command::RestoreCard { .. }
+            | Command::SetDraft { .. }
+            | Command::Draft { .. }
+            | Command::SetPinned { .. } => Domain::CardState,
+            Command::Grade { .. }
+            | Command::ResetHistory { .. }
+            | Command::DuePrompts { .. }
+            | Command::NewPrompts { .. }
+            | Command::SetSetting { .. }
+            | Command::SetScheduler { .. }
+            | Command::SetRetention { .. }
+            | Command::SetWeights { .. }
+            | Command::History { .. }
+            | Command::Stats { .. } => Domain::Review,
+            Command::CreateView { .. }
+            | Command::RenameView { .. }
+            | Command::DeleteView { .. }
+            | Command::UpdateView { .. }
+            | Command::CardsForView { .. } => Domain::View,
+            Command::ImportArchive { .. }
+            | Command::ExportLibrary { .. }
+            | Command::ImportCsv { .. }
+            | Command::ExportCsv { .. }
+            | Command::ImportMarkdown { .. }
+            | Command::ExportMarkdown { .. } => Domain::Transfer,
+        }
+    }
+
     /// The command's name, for the diagnostics list of slow writes.
     pub fn name(&self) -> &'static str {
-        const NAMERS: &[fn(&Command) -> Option<&'static str>] = &[
-            Command::deck_name,
-            Command::diagram_name,
-            Command::card_edit_name,
-            Command::card_state_name,
-            Command::review_name,
-            Command::view_name,
-            Command::transfer_name,
-        ];
-        for namer in NAMERS {
-            if let Some(name) = namer(self) {
-                return name;
-            }
-        }
-        unreachable!("every Command variant has a name")
+        let domain = self.domain();
+        let name = match domain {
+            Domain::Deck => self.deck_name(),
+            Domain::Diagram => self.diagram_name(),
+            Domain::Card => self.card_edit_name(),
+            Domain::CardState => self.card_state_name(),
+            Domain::Review => self.review_name(),
+            Domain::View => self.view_name(),
+            Domain::Transfer => self.transfer_name(),
+        };
+        name.unwrap_or_else(|| unreachable!("{self:?} is routed to {domain:?}"))
     }
 
     fn deck_name(&self) -> Option<&'static str> {
@@ -509,4 +577,45 @@ pub trait Store: Send + Sync {
     fn export_csv(&self, deck: Id, target: &std::path::Path) -> Result<u64, StoreError>;
     fn import_markdown(&self, deck: Id, source: &std::path::Path) -> Result<u64, StoreError>;
     fn export_markdown(&self, deck: Id, target: &std::path::Path) -> Result<u64, StoreError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn samples() -> Vec<(Command, Domain)> {
+        vec![
+            (
+                Command::CreateDeck {
+                    parent: None,
+                    name: String::new(),
+                },
+                Domain::Deck,
+            ),
+            (Command::ClearDiagram { card: 1 }, Domain::Diagram),
+            (
+                Command::CreateCard {
+                    deck: 1,
+                    markdown: String::new(),
+                },
+                Domain::Card,
+            ),
+            (Command::EmptyTrash, Domain::CardState),
+            (Command::History { card: 1 }, Domain::Review),
+            (Command::DeleteView { id: 1 }, Domain::View),
+            (
+                Command::ExportLibrary {
+                    target: Default::default(),
+                },
+                Domain::Transfer,
+            ),
+        ]
+    }
+
+    #[test]
+    fn every_domain_names_what_it_routes() {
+        for (command, domain) in samples() {
+            assert_eq!(command.domain(), domain, "{}", command.name());
+        }
+    }
 }

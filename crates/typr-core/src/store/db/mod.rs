@@ -10,7 +10,7 @@ mod review;
 mod snapshot;
 mod views;
 
-use crate::command::{Command, Outcome};
+use crate::command::{Command, Domain, Outcome};
 use crate::error::StoreError;
 use crate::model::{Grade, Id, Snapshot};
 use crate::transfer::{self, TransferTarget, mochi};
@@ -18,18 +18,6 @@ use crate::transfer::{self, TransferTarget, mochi};
 pub use self::core::Db;
 #[cfg(test)]
 pub(crate) use self::core::Record;
-
-type DomainDispatcher = fn(&Db, &Command, i64) -> Result<Option<Outcome>, StoreError>;
-
-const DISPATCHERS: &[DomainDispatcher] = &[
-    Db::dispatch_deck,
-    Db::dispatch_diagram,
-    Db::dispatch_card,
-    Db::dispatch_card_state,
-    Db::dispatch_review,
-    Db::dispatch_view,
-    Db::dispatch_transfer,
-];
 
 impl Db {
     /// Apply one command and report what it did. `now_ms` is the caller's clock, never this
@@ -68,12 +56,17 @@ impl Db {
 
     /// The body of one command, run inside the transaction [`Db::apply`] opens.
     fn dispatch(&self, command: &Command, now_ms: i64) -> Result<Outcome, StoreError> {
-        for handler in DISPATCHERS {
-            if let Some(outcome) = handler(self, command, now_ms)? {
-                return Ok(outcome);
-            }
-        }
-        unreachable!("every Command variant is handled by a domain dispatcher")
+        let domain = command.domain();
+        let handled = match domain {
+            Domain::Deck => self.dispatch_deck(command, now_ms)?,
+            Domain::Diagram => self.dispatch_diagram(command, now_ms)?,
+            Domain::Card => self.dispatch_card(command, now_ms)?,
+            Domain::CardState => self.dispatch_card_state(command, now_ms)?,
+            Domain::Review => self.dispatch_review(command, now_ms)?,
+            Domain::View => self.dispatch_view(command, now_ms)?,
+            Domain::Transfer => self.dispatch_transfer(command, now_ms)?,
+        };
+        Ok(handled.unwrap_or_else(|| unreachable!("{} is routed to {domain:?}", command.name())))
     }
 }
 
