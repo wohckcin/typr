@@ -59,9 +59,18 @@ pub fn trash(
         let rows = snapshot.with(trash_rows);
         if rows.is_empty() {
             confirming.set(false);
-            return text("The trash is empty")
-                .text_sm()
-                .text_color(tokens::muted_foreground)
+            return view()
+                .gap_1()
+                .child(
+                    text("Trash is empty")
+                        .text_sm()
+                        .text_color(tokens::foreground),
+                )
+                .child(
+                    text("Deleted cards stay here until you empty the trash")
+                        .text_xs()
+                        .text_color(tokens::muted_foreground),
+                )
                 .into_element();
         }
         let count = rows.len();
