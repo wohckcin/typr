@@ -73,7 +73,10 @@ pub fn Tree(props: TreeProps, cx: Scope<TreeEvent>) -> impl IntoElement {
         .expanded(move || Some(props.expanded.get()))
         .accessibility_label(move || Some(props.accessibility_label.get()))
         .render_item(move |entry: &TreeEntry| {
-            let indent = px(12.0 * entry.depth as f32);
+            // The list rows' px_2 plus one step per level, so every glyph sits on one spine.
+            let indent = px(8.0 + 12.0 * entry.depth as f32);
+            let id = entry.id.clone();
+            let in_force = move || props.selected.get().as_ref() == Some(&id);
             let glyph = props
                 .icon_ids
                 .get_untracked()
@@ -86,7 +89,17 @@ pub fn Tree(props: TreeProps, cx: Scope<TreeEvent>) -> impl IntoElement {
             } else {
                 tokens::foreground
             };
-            let mut row = view().flex_row().items_center().gap_2().pl(indent);
+            let mut row = view()
+                .test_id(&format!("tree-row:{}", entry.id))
+                .flex_row()
+                .items_center()
+                .gap_2()
+                .w_full()
+                .pl(indent)
+                .pr_2()
+                .py_1()
+                .rounded(tokens::radius)
+                .bg(move || tokens::row_fill(in_force()));
             if let Some(glyph) = glyph {
                 row = row.child(view().text_color(tone).child(icon(glyph)));
             }
