@@ -191,7 +191,9 @@ fn path_control(label: &'static str, path: PathBuf) -> impl IntoElement {
                 .on_press(move || {
                     let path = reveal.clone();
                     spawn(async move {
-                        let _ = reveal_path(path).await;
+                        if let Err(error) = reveal_path(path).await {
+                            log::warn!("the file manager did not open: {error}");
+                        }
                     });
                 }),
         )
