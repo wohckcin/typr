@@ -373,16 +373,24 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                             let answer =
                                                 pick_paths(OpenDialog::files().multiple(false))
                                                     .await;
-                                            let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
-                                            let Some(path) =
-                                                paths.and_then(|paths| paths.into_iter().next())
-                                            else {
-                                                return;
+                                            let path = match first_picked(answer) {
+                                                Ok(Some(path)) => path,
+                                                Ok(None) => return,
+                                                Err(why) => {
+                                                    attach_error.set(Some(why.into()));
+                                                    return;
+                                                }
                                             };
-                                            if let Ok(name) = attach_image(&path, root.as_path()) {
-                                                cx.emit(EditorEvent::StartDiagram(DiagramStart {
-                                                    name,
-                                                }));
+                                            match attach_image(&path, root.as_path()) {
+                                                Ok(name) => {
+                                                    attach_error.set(None);
+                                                    cx.emit(EditorEvent::StartDiagram(
+                                                        DiagramStart { name },
+                                                    ));
+                                                }
+                                                Err(error) => attach_error.set(Some(
+                                                    crate::logging::describe(&error).into(),
+                                                )),
                                             }
                                         });
                                     })
@@ -399,11 +407,13 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                     spawn(async move {
                                         let answer =
                                             pick_paths(OpenDialog::files().multiple(true)).await;
-                                        let paths: Option<Vec<PathBuf>> = answer.ok().flatten();
-                                        let Some(path) =
-                                            paths.and_then(|paths| paths.into_iter().next())
-                                        else {
-                                            return;
+                                        let path = match first_picked(answer) {
+                                            Ok(Some(path)) => path,
+                                            Ok(None) => return,
+                                            Err(why) => {
+                                                attach_error.set(Some(why.into()));
+                                                return;
+                                            }
                                         };
                                         match attach_image(&path, root.as_path()) {
                                             Ok(name) => {
@@ -506,4 +516,31 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
             }
         }))
         .into_element()
+}
+
+/// The first picture a dialog returned. A cancelled dialog is no error; a failed one says why.
+fn first_picked<E: std::fmt::Display>(
+    answer: Result<Option<Vec<PathBuf>>, E>,
+) -> Result<Option<PathBuf>, String> {
+    match answer {
+        Ok(paths) => Ok(paths.and_then(|paths| paths.into_iter().next())),
+        Err(error) => Err(format!("The file picker failed: {error}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::first_picked;
+
+    #[test]
+    fn a_cancelled_dialog_is_not_an_error() {
+        assert_eq!(first_picked::<String>(Ok(None)), Ok(None));
+        assert_eq!(first_picked::<String>(Ok(Some(vec![]))), Ok(None));
+    }
+
+    #[test]
+    fn a_failed_dialog_says_why() {
+        let err = first_picked(Err("portal unavailable")).unwrap_err();
+        assert!(err.contains("portal unavailable"));
+    }
 }
