@@ -404,6 +404,7 @@ pub const CURRENT_VERSION: i64 = MIGRATIONS.len() as i64;
 /// touching it.
 pub fn migrate(conn: &mut Connection) -> Result<SchemaFacts, StoreError> {
     let recorded: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    #[expect(clippy::map_err_ignore, reason = "the recorded version is in Corrupt")]
     let version =
         usize::try_from(recorded).map_err(|_| StoreError::Corrupt { version: recorded })?;
     if version > MIGRATIONS.len() {

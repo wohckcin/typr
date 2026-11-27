@@ -1,3 +1,7 @@
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "tests clean up temp dirs and drive the UI best-effort"
+)]
 //! The app opens: the first frame draws, the frame after a change draws too, and a library that
 //! cannot be opened says so instead of panicking.
 

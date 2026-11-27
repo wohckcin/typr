@@ -1,3 +1,7 @@
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "tests clean up temp dirs and drive the UI best-effort"
+)]
 //! The settings screen: a valid cap is accepted, an out-of-range one is refused with its limit and
 //! the old value stays. Persistence is out of scope and is not tested here.
 

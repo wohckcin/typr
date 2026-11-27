@@ -1,3 +1,7 @@
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "tests clean up temp dirs and drive the UI best-effort"
+)]
 //! The card editor: each side is previewed, and a card with no content cannot be saved. Saving
 //! reports the text the user wrote.
 

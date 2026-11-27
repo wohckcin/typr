@@ -146,6 +146,7 @@ pub fn import(
             });
         }
         let markdown = columns.get(row, 4);
+        #[expect(clippy::map_err_ignore, reason = "the cell is quoted in the reason")]
         let sides =
             columns
                 .get(row, 1)

@@ -83,6 +83,10 @@ fn write_attachment(root: &Path, name: &str, bytes: &[u8]) -> std::io::Result<St
         {
             Ok(mut file) => {
                 if let Err(error) = file.write_all(bytes) {
+                    #[expect(
+                        clippy::let_underscore_must_use,
+                        reason = "best-effort cleanup of a partial file; the export error is what the caller needs"
+                    )]
                     let _ = std::fs::remove_file(root.join(&candidate));
                     return Err(error);
                 }

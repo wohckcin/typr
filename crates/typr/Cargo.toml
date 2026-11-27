@@ -23,3 +23,6 @@ nsh-platform-linux.workspace = true
 nsh-engine.workspace = true
 nsh-testing.workspace = true
 tempfile = "3.27.0"
+
+[lints]
+workspace = true

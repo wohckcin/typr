@@ -127,6 +127,10 @@ impl Handle {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let sender = lock(&self.tx);
         let tx = sender.as_ref().ok_or(StoreError::Closed)?;
+        #[expect(
+            clippy::map_err_ignore,
+            reason = "a SendError only means the worker is gone, which is Closed"
+        )]
         tx.send(Message { id, command })
             .map_err(|_| StoreError::Closed)?;
         Ok(id)
