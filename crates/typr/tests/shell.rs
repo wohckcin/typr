@@ -917,7 +917,31 @@ fn review_buttons_are_disabled_when_their_queue_is_empty() -> Result<(), String>
         app.screen().shows("gato"),
         "a disabled review left the library"
     );
-    assert!(!app.screen().shows("role:button[Show answer]"));
+    assert!(!app.screen().enabled("role:button[Review new 0]")?);
+    assert_eq!(app.screen().count("role:button[Show answer]")?, 0);
+    Ok(())
+}
+
+#[test]
+fn a_spent_new_card_cap_counts_no_new_reviews() -> Result<(), String> {
+    use typr_core::store::{Command, SettingKey, SettingValue};
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    // One new card, and a cap that admits none of it today.
+    let root = library_on_disk("spent-cap");
+    typr_core::store::Db::open(&root.join("typr.sqlite3"))
+        .unwrap()
+        .apply(
+            &Command::SetSetting {
+                key: SettingKey::NewPerDay,
+                value: SettingValue::Number(0),
+            },
+            0,
+        )
+        .unwrap();
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("role:button[Review new 0]")?;
+    assert!(!app.screen().enabled("role:button[Review new 0]")?);
     Ok(())
 }
 
