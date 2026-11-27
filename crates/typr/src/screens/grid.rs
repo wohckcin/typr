@@ -101,11 +101,9 @@ pub fn grid(
     let open = on_open.clone();
     view().flex_1().child(dynamic(move || {
         if tiles.with(Vec::is_empty) {
-            let mut page = view().p_4().child(
-                text(empty())
-                    .text_sm()
-                    .text_color(tokens::muted_foreground),
-            );
+            let mut page = view()
+                .p_4()
+                .child(text(empty()).text_sm().text_color(tokens::muted_foreground));
             if offer_new() {
                 page = page.child(button_new(empty_new.clone()));
             }

@@ -159,7 +159,9 @@ pub fn shell_over(
     };
     // Memos, so a snapshot that leaves a count alone does not rebuild its button.
     let queued_in = move |key: &'static str| {
-        computed(move || snapshot_signal.with(|s| cards_in(s, Some(key), SystemClock.now_ms()).len()))
+        computed(move || {
+            snapshot_signal.with(|s| cards_in(s, Some(key), SystemClock.now_ms()).len())
+        })
     };
     let (due_n, new_n) = (queued_in("inbox:due"), queued_in("inbox:new"));
     let library_view = {
@@ -169,18 +171,19 @@ pub fn shell_over(
         move || {
             let editor_new = editor_new.clone();
             let editor_open = editor_open.clone();
-            let review = |label: &'static str, count: Memo<usize>, queue: typr_core::screen::Queue| {
-                let study = study_ctl.clone();
-                dynamic(move || {
-                    let study = study.clone();
-                    let n = count.get();
-                    crate::ui::button::button()
-                        .label(format!("{label} {n}"))
-                        .disabled(n == 0)
-                        .on_press(move || study.start(queue))
-                        .into_element()
-                })
-            };
+            let review =
+                |label: &'static str, count: Memo<usize>, queue: typr_core::screen::Queue| {
+                    let study = study_ctl.clone();
+                    dynamic(move || {
+                        let study = study.clone();
+                        let n = count.get();
+                        crate::ui::button::button()
+                            .label(format!("{label} {n}"))
+                            .disabled(n == 0)
+                            .on_press(move || study.start(queue))
+                            .into_element()
+                    })
+                };
             let key = move || state.selected_key();
             view()
                 .flex_1()
@@ -193,7 +196,11 @@ pub fn shell_over(
                         .child(review("Review due", due_n, typr_core::screen::Queue::Due))
                         .child(review("Review new", new_n, typr_core::screen::Queue::New)),
                 )
-                .child(field_reachable(search_placeholder.clone(), query, &search_handle))
+                .child(field_reachable(
+                    search_placeholder.clone(),
+                    query,
+                    &search_handle,
+                ))
                 .child(grid(
                     tiles,
                     selection,
