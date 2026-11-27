@@ -7,3 +7,4 @@ rust = { version = "1.100.0", components = "rustfmt,clippy,rust-analyzer" }
 
 [env]
 CLAUDE_CODE_EXPERIMENTAL_CODE_MODE = "1"
+GH_TOKEN = "{{ exec(command='gh auth token --user wohckcin') }}"
