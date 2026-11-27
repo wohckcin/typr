@@ -63,7 +63,7 @@ fn choosing_a_deck_shows_only_its_cards() -> Result<(), String> {
 fn search_narrows_the_grid_to_matching_cards() -> Result<(), String> {
     let mut app = start();
     app.wait_for("hola")?;
-    app.type_text("text:Search cards", "cells")?;
+    app.type_text("text:/^Search cards/", "cells")?;
     app.wait_for_gone("hola", std::time::Duration::from_secs(2))?;
     assert!(app.screen().shows("cells"));
     Ok(())

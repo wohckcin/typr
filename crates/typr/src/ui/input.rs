@@ -67,7 +67,7 @@ pub fn Field(props: FieldProps, cx: Scope<FieldEvent>) -> impl IntoElement {
 
 /// A text field bound to `value` that a handle can focus, so a chord can put the caret in it.
 pub fn field_reachable(
-    placeholder: &'static str,
+    placeholder: String,
     value: Signal<String>,
     handle: &ElementRef,
 ) -> impl IntoElement {
@@ -75,7 +75,7 @@ pub fn field_reachable(
         input()
             .value(move || value.get())
             .on_change(move |text: &str| value.set(text.to_owned()))
-            .placeholder(placeholder)
+            .placeholder(move || placeholder.clone())
             .element_ref(handle),
         Size::Md,
     )

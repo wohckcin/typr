@@ -53,8 +53,11 @@ fn an_imported_archive_shows_in_the_sidebar_without_a_restart() -> Result<(), St
     app.on_pick_paths(vec![
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/mochi-import.mochi"),
     ])?;
-    app.wait_for("Import")?;
-    app.press("Import")?;
+    // Import lives in Settings.
+    app.wait_for("Settings")?;
+    app.press("Settings")?;
+    app.wait_for("role:button[Import]")?;
+    app.press("role:button[Import]")?;
     app.wait_for("Imported 1")?;
     Ok(())
 }

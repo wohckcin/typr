@@ -11,7 +11,6 @@ use nsh_core::prelude::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PropEnum)]
 pub enum Icon {
     Search,
-    Trend,
     Inbox,
     CircleCheck,
     CircleDashed,
@@ -25,9 +24,8 @@ pub enum Icon {
 
 impl Icon {
     /// Every glyph, so a check can draw them all.
-    pub const ALL: [Icon; 11] = [
+    pub const ALL: [Icon; 10] = [
         Icon::Search,
-        Icon::Trend,
         Icon::Inbox,
         Icon::CircleCheck,
         Icon::CircleDashed,
@@ -42,9 +40,6 @@ impl Icon {
     fn shapes(self) -> &'static str {
         match self {
             Icon::Search => r#"<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>"#,
-            Icon::Trend => {
-                r#"<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>"#
-            }
             Icon::Inbox => {
                 r#"<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>"#
             }

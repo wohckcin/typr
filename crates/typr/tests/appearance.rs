@@ -118,7 +118,6 @@ fn SidebarScreen() -> impl IntoElement {
         Sidebar::new(
             vec![Item::new("inbox", "Inbox", Group::Navigation)],
             true,
-            "search",
         ),
         |_| {},
     )
@@ -228,7 +227,7 @@ check!(
     appearance_library,
     "library",
     LibraryScreen,
-    "text:Search",
+    "text:Inbox",
     Token::Foreground
 );
 check!(

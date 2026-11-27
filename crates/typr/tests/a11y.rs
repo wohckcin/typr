@@ -113,12 +113,9 @@ fn the_library_names_every_control_and_survives_the_keyboard() -> Result<(), Str
     let mut app = Headless::start(EngineConfig::new(Root::of::<LibraryScreen>())).unwrap();
     app.wait_for("role:treeitem[Spanish]")?;
     app.wait_for("role:button[Settings]")?;
-    // The dashboard reads as unavailable in words, and each row's name is its label alone: the glyph
-    // before it has no name of its own.
-    app.wait_for("role:treeitem[Dashboard (coming soon)]")?;
+    // Each row's name is its label alone: the glyph before it has no name of its own.
     app.wait_for("role:treeitem[Inbox]")?;
     app.wait_for("role:button[Trash]")?;
-    app.wait_for("role:button[Import]")?;
     keyboard_pass(&mut app, "Spanish")
 }
 
@@ -206,7 +203,7 @@ fn a_larger_text_size_reaches_every_screen_without_losing_a_control() -> Result<
         "the sidebar's text grew with the setting: {normal:?} then {larger:?}"
     );
     // Every control is still reachable at that size.
-    for control in ["Import", "Settings", "Trash"] {
+    for control in ["Settings", "Trash"] {
         app.wait_for(&format!("role:button[{control}]"))?;
     }
     // A deck is a row of the tree, not a button.

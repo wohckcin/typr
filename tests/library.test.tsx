@@ -8,7 +8,7 @@ test("a library that cannot open says so and still shows the app", async () => {
   const app = await open("..");
   await app.waitFor("text:/^Library closed/");
   // The rows are the app's navigation whatever the library's state.
-  for (const label of ["Search", "Navigation", "All cards", "Utilities", "Settings", "Diagnostics"]) {
+  for (const label of ["Inbox", "Due today", "New cards", "Settings", "Trash"]) {
     expect(app.texts()).toContain(label);
   }
 });

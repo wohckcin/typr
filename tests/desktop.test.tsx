@@ -7,21 +7,19 @@ import { expect, open, test } from "nsh/test";
 
 test("the app opens with its navigation", async () => {
   const app = await open("..");
-  for (const label of ["Search", "Inbox", "Due today", "New cards", "Settings", "Trash"]) {
+  for (const label of ["Inbox", "Due today", "New cards", "Settings", "Trash"]) {
     expect(app.texts()).toContain(label);
   }
-  // The library's state is said either way: a headless run has no data folder, a real one has, and a
-  // closed library names the folder it could not use.
-  const stated = app.texts().filter((text) => text === "Library open" || text.startsWith("Library closed"));
-  expect(stated.length).toBe(1);
+  // Only a closed library is stated (a headless run has no data folder); an open one says nothing.
+  expect(app.texts()).not.toContain("Library open");
 });
 
 test("the search field is on the library screen and the chord reaches it", async () => {
   const app = await open("..");
   // `text:` matches an input's placeholder, which is the field's only name.
-  await app.waitFor("text:Search cards");
+  await app.waitFor("text:/^Search cards/");
   await app.keyboard.press("/");
-  await app.type("text:Search cards", "ga");
+  await app.type("text:/^Search cards/", "ga");
   // The field's contents cannot be read back on the host, so the test proves the field is reachable
   // and the chord and keystrokes leave the screen standing, not what it then holds.
   expect(app.texts()).toContain("Inbox");
