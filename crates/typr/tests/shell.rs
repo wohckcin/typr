@@ -959,18 +959,31 @@ fn an_empty_due_filter_offers_no_new_card_button() -> Result<(), String> {
     Ok(())
 }
 
-#[test]
-fn a_refused_command_does_not_stop_the_library() -> Result<(), String> {
-    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
-    let root = library_on_disk("refused");
+/// Names a second top-level deck "Spanish" and waits for the sidebar to explain the refusal.
+/// The caller holds the `ENV` turn.
+fn name_a_duplicate_deck(name: &str) -> Result<Headless, String> {
+    let root = library_on_disk(name);
     unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
     let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
     app.wait_for("New Deck")?;
     app.press("New Deck")?;
     app.type_text("text:Deck name", "Spanish")?;
     app.press_key("enter")?;
-    // The refusal arrives from the worker thread; give it time to land before looking.
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    app.wait_for(r#"a deck under that parent called "Spanish" already exists"#)?;
+    Ok(app)
+}
+
+#[test]
+fn a_duplicate_deck_name_is_explained_in_the_sidebar() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    name_a_duplicate_deck("duplicate")?;
+    Ok(())
+}
+
+#[test]
+fn a_refused_command_does_not_stop_the_library() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let mut app = name_a_duplicate_deck("refused")?;
     app.wait_for("Settings")?;
     app.press("Settings")?;
     app.set_viewport(Size {

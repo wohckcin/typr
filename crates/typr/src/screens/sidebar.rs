@@ -92,6 +92,7 @@ pub struct Sidebar {
     collapsed: Signal<Vec<SharedString>>,
     library_open: Signal<bool>,
     notice: Signal<Option<SharedString>>,
+    refusal: Signal<Option<SharedString>>,
     naming: Signal<bool>,
 }
 
@@ -111,6 +112,7 @@ impl Sidebar {
             collapsed: signal(Vec::new()),
             library_open: signal(library_open),
             notice: signal(None),
+            refusal: signal(None),
             naming: signal(false),
         }
     }
@@ -118,6 +120,11 @@ impl Sidebar {
     /// States why the library could not be opened, beside "Library closed".
     pub fn note(&self, why: impl Into<SharedString>) {
         self.notice.set(Some(why.into()));
+    }
+
+    /// States why a command the person gave was refused, until they choose another row.
+    pub fn refuse(&self, why: impl Into<SharedString>) {
+        self.refusal.set(Some(why.into()));
     }
 
     /// Replaces the rows with a fresh snapshot. The row in force and the folds the user made stay.
@@ -128,6 +135,7 @@ impl Sidebar {
     /// Makes `key` the row in force.
     pub fn select(&self, key: &SharedString) {
         self.selected.set(Some(key.clone()));
+        self.refusal.set(None);
     }
 
     /// Turns the `New Deck` row into a name field.
@@ -356,6 +364,10 @@ fn groups_view(state: Sidebar, pick: impl Fn(&SharedString) + Clone + 'static) -
                         .child(new_deck_row(state, pick.clone()));
                 }
                 Group::Utilities => {
+                    if let Some(why) = state.refusal.get() {
+                        section =
+                            section.child(text(why).text_sm().text_color(tokens::destructive));
+                    }
                     for item in rows {
                         section = section.child(row_view(state, item, pick.clone()));
                     }

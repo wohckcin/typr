@@ -63,13 +63,21 @@ impl EditorController {
         self.leave_after_save.set(false);
         let draft_done = Rc::clone(&self.draft);
         let screen = self.screen;
+        let save_error = self.save_error;
         let sent = self.bridge.submit(
             Command::Draft { card: id },
             false,
             Some(Box::new(move |result| {
                 let loaded = match result {
                     Ok(Outcome::Draft(text)) => text,
-                    _ => None,
+                    Ok(_) => None,
+                    Err(error) => {
+                        // The saved card is intact, so the editor opens without the draft and says so.
+                        let why = crate::logging::describe(&error);
+                        log::warn!("the draft was refused: {why}");
+                        save_error.set(Some(why.into()));
+                        None
+                    }
                 };
                 *draft_done.borrow_mut() = loaded;
                 screen.set(Screen::Editor(id));
@@ -100,14 +108,16 @@ impl EditorController {
                 markdown: String::new(),
             },
             true,
-            Some(Box::new(move |result| {
-                if let Ok(Outcome::Card(id)) = result {
+            Some(Box::new(move |result| match result {
+                Ok(Outcome::Card(id)) => {
                     *draft.borrow_mut() = None;
                     save_error.set(None);
                     save_in_flight.set(false);
                     leave_after_save.set(false);
                     screen.set(Screen::Editor(id));
                 }
+                Ok(_) => {}
+                Err(error) => sidebar.refuse(crate::logging::describe(&error)),
             })),
         );
     }
