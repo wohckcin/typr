@@ -591,9 +591,14 @@ fn verify_counts(
 }
 
 fn picture(zip: &mut ZipArchive<File>, entry: &str, archive: &Path) -> Result<Vec<u8>, StoreError> {
-    let mut file = zip.by_name(entry).map_err(|_| StoreError::Archive {
+    let mut file = zip.by_name(entry).map_err(|error| StoreError::Archive {
         path: archive.to_path_buf(),
-        reason: format!("the archive holds no picture {entry:?}"),
+        reason: match error {
+            zip::result::ZipError::FileNotFound => {
+                format!("the archive holds no picture {entry:?}")
+            }
+            error => format!("picture {entry:?} could not be read: {error}"),
+        },
     })?;
     read_entry(&mut file, &format!("picture {entry:?}"), archive)
 }

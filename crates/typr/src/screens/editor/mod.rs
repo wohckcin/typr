@@ -41,7 +41,7 @@ pub use fields::{TemplateField, field_table, template_preview};
 ///
 /// A copy that cannot be made is refused rather than reported: a card keeps its previous picture
 /// and the caller shows why.
-pub fn attach_image(source: &Path, root: &Path) -> std::io::Result<String> {
+pub fn attach_image(source: &Path, root: &Path) -> Result<String, typr_core::store::StoreError> {
     typr_core::transfer::attach(root, source)
 }
 
@@ -425,9 +425,8 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                                 }
                                                 attach_error.set(None);
                                             }
-                                            Err(error) => {
-                                                attach_error.set(Some(error.to_string().into()))
-                                            }
+                                            Err(error) => attach_error
+                                                .set(Some(crate::logging::describe(&error).into())),
                                         }
                                     });
                                 }),
