@@ -958,3 +958,33 @@ fn an_empty_due_filter_offers_no_new_card_button() -> Result<(), String> {
     assert_eq!(app.screen().count("role:button[New card]")?, 0);
     Ok(())
 }
+
+#[test]
+fn a_refused_command_does_not_stop_the_library() -> Result<(), String> {
+    let _turn = ENV.lock().unwrap_or_else(|poison| poison.into_inner());
+    let root = library_on_disk("refused");
+    unsafe { std::env::set_var("TYPR_DATA_DIR", &root) };
+    let mut app = Headless::start(EngineConfig::new(Root::of::<typr::shell::App>())).unwrap();
+    app.wait_for("New Deck")?;
+    app.press("New Deck")?;
+    app.type_text("text:Deck name", "Spanish")?;
+    app.press_key("enter")?;
+    // The refusal arrives from the worker thread; give it time to land before looking.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    app.wait_for("Settings")?;
+    app.press("Settings")?;
+    app.set_viewport(Size {
+        width: px(1000.0),
+        height: px(1600.0),
+    })?;
+    app.wait_for("role:button[Open diagnostics]")?;
+    app.press("role:button[Open diagnostics]")?;
+    app.wait_for("Slow commands")?;
+    let stopped = app
+        .screen()
+        .texts()
+        .iter()
+        .any(|t| t.starts_with("The library work stopped"));
+    assert!(!stopped, "a duplicate name is a refusal, not a stoppage");
+    Ok(())
+}
