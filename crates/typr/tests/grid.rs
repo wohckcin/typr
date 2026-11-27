@@ -113,6 +113,15 @@ fn the_column_count_follows_the_window_width_and_never_drops_to_none() {
 }
 
 #[test]
+fn columns_count_a_twelve_point_gap() {
+    use typr::ui::tokens::{GRID_GAP, TILE_MIN_WIDTH, grid_columns};
+    let two = 32.0 + 2.0 * TILE_MIN_WIDTH + GRID_GAP;
+    assert_eq!(GRID_GAP, 12.0);
+    assert_eq!(grid_columns(two), 2);
+    assert_eq!(grid_columns(two - 1.0), 1);
+}
+
+#[test]
 fn a_new_card_is_new_and_a_studied_card_states_its_interval() {
     use typr::screens::grid::{Schedule, schedule_of};
     let day = 86_400_000;

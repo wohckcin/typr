@@ -131,19 +131,29 @@ pub fn row_fill(selected: bool) -> AdaptiveColor {
 
 /// The height a card tile is estimated at before it is measured: the list's scroll bar uses it.
 pub fn tile_estimate() -> Points {
-    px(96.0)
+    px(106.0)
 }
 
 /// The narrowest a card tile may be, in points: a line of tiles wraps before a tile gets narrower.
 pub const TILE_MIN_WIDTH: f32 = 240.0;
 
+/// The space between card tiles, across and down: under a tile's own padding, so tiles read as
+/// separate cards without the grid looking sparse.
+pub const GRID_GAP: f32 = 12.0;
+
+/// [`GRID_GAP`] as a length.
+pub fn grid_gap() -> Points {
+    px(GRID_GAP)
+}
+
 /// How many tiles fit across a window `width` points wide, one gap apart, inside the page's padding.
 /// Never fewer than one: a narrow window shows one tile per line rather than none.
 pub fn grid_columns(width: f32) -> u32 {
-    let gap = 8.0;
     let padding = 32.0;
     let usable = (width - padding).max(0.0);
-    let columns = ((usable + gap) / (TILE_MIN_WIDTH + gap)).floor().max(1.0);
+    let columns = ((usable + GRID_GAP) / (TILE_MIN_WIDTH + GRID_GAP))
+        .floor()
+        .max(1.0);
     // A window wider than four billion tiles is not worth a cast lint: saturate at the maximum.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let whole = columns.min(u32::MAX as f32) as u32;

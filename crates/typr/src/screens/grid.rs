@@ -21,7 +21,7 @@ fn content_width() -> f32 {
 
 fn tile_width() -> f32 {
     let columns = tokens::grid_columns(content_width()) as f32;
-    content_width() / columns
+    (content_width() - (columns - 1.0) * tokens::GRID_GAP) / columns
 }
 
 /// One card's tile: what it shows, read from the snapshot.
@@ -117,6 +117,8 @@ pub fn grid(
             move |at| tile_cell(tiles, at, chosen, open.clone()),
         )
         .columns(move || tokens::grid_columns(content_width()))
+        .row_gap(tokens::grid_gap())
+        .column_gap(tokens::grid_gap())
         .keys(move || tiles.with(|t| t.iter().map(|t| t.id).collect::<Vec<_>>()))
         .estimated_item_size(tokens::tile_estimate())
         .flex_1()
@@ -191,7 +193,7 @@ fn tile_cell(
                 .border_1()
                 .border_color(ring)
                 .child(
-                    surface::surface().child(
+                    surface::surface().p_3().child(
                         view()
                             .gap_2()
                             .child(prose().source(preview))
