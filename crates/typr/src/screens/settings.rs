@@ -36,8 +36,6 @@ pub struct Values {
     pub cap: Signal<u32>,
     /// The appearance in force. The caller replaces this with its own signal to store and apply it.
     pub theme: Signal<Theme>,
-    /// What was typed in "Find a setting".
-    pub query: Signal<String>,
     /// The refusal shown under the cap, if the last edit was refused.
     pub refusal: Signal<Option<SharedString>>,
 }
@@ -49,7 +47,6 @@ impl Values {
             cap_text: signal(cap.to_string()),
             cap: signal(cap),
             theme: signal(Theme::default()),
-            query: signal(String::new()),
             refusal: signal(None),
         }
     }
@@ -110,44 +107,18 @@ impl LibraryInfo {
     }
 }
 
-/// Whether a row labelled `label` shows for `query`: every row for an empty query, otherwise the
-/// rows whose label contains the text, ignoring case.
-pub fn row_matches(label: &str, query: &str) -> bool {
-    let query = query.trim().to_lowercase();
-    query.is_empty() || label.to_lowercase().contains(&query)
+/// A byte count as a reader takes it in: bytes, whole kilobytes, or megabytes to one place.
+pub fn human_size(bytes: u64) -> String {
+    match bytes {
+        0..1024 => format!("{bytes} bytes"),
+        1024..1_048_576 => format!("{} KB", bytes / 1024),
+        _ => format!("{:.1} MB", bytes as f64 / 1_048_576.0),
+    }
 }
 
-/// The header: where the screen is, and a field that narrows the rows by name.
-fn header(values: Values) -> impl IntoElement {
-    view()
-        .flex_row()
-        .flex_wrap()
-        .items_center()
-        .justify_between()
-        .gap_3()
-        .child(
-            view()
-                .flex_row()
-                .gap_2()
-                .child(
-                    text("Settings")
-                        .text_sm()
-                        .text_color(tokens::muted_foreground),
-                )
-                .child(text("/").text_sm().text_color(tokens::muted_foreground))
-                .child(text("General").text_sm().text_color(tokens::foreground)),
-        )
-        .child(
-            view().flex_1().child(
-                field()
-                    .size(Size::Sm)
-                    .placeholder("Find a setting")
-                    .value(move || SharedString::from(values.query.get()))
-                    .on_change(move |ev: &crate::ui::input::FieldInput| {
-                        values.query.set(ev.text.clone())
-                    }),
-            ),
-        )
+/// The screen's title.
+fn header() -> impl IntoElement {
+    text("Settings").text_sm().text_color(tokens::foreground)
 }
 
 /// The control of the new-card row: a field that takes the room there is, and Apply.
@@ -161,7 +132,7 @@ fn cap_control(values: Values, accept: impl Fn() + 'static) -> impl IntoElement 
                 .items_center()
                 .gap_2()
                 .child(
-                    view().flex_1().child(
+                    view().w_20().child(
                         field()
                             .size(Size::Sm)
                             .placeholder("20")
@@ -174,6 +145,7 @@ fn cap_control(values: Values, accept: impl Fn() + 'static) -> impl IntoElement 
                 .child(
                     button()
                         .variant(Variant::Default)
+                        .size(Size::Sm)
                         .label("Apply")
                         .disabled(|| false)
                         .on_press(accept),
@@ -194,14 +166,21 @@ fn path_control(label: &'static str, path: PathBuf) -> impl IntoElement {
     let shown = path.display().to_string();
     let reveal = path.clone();
     // The path is in full, never elided: a path cut to nothing in a narrow window is not a path. It
-    // keeps its natural width and the button wraps under it when the two do not fit.
+    // wraps inside the row, and the button wraps under it when the two do not fit.
     view()
+        .w_full()
         .flex_row()
         .flex_wrap()
         .items_center()
         .justify_end()
         .gap_2()
-        .child(text(shown).text_sm().text_color(tokens::muted_foreground))
+        .child(
+            text(shown)
+                .text_sm()
+                .text_color(tokens::muted_foreground)
+                .flex_1()
+                .min_w_0(),
+        )
         .child(
             button()
                 .variant(Variant::Ghost)
@@ -273,7 +252,7 @@ pub fn settings(
                 .flex_row()
                 .gap_2()
                 .child(badge().label(format!("Schema {schema}")))
-                .child(badge().label(format!("{bytes} bytes")))
+                .child(badge().label(human_size(bytes)))
                 .into_element()
         }),
     ));
@@ -313,29 +292,12 @@ pub fn settings(
                 .into_element()
         }),
     ));
-    let labels: Vec<&'static str> = list.iter().map(|(label, _)| *label).collect();
     let mut card = rows();
     for (label, build) in list {
-        card = card.child(when(
-            move || row_matches(label, &values.query.get()),
-            move || setting_row(label, build()),
-        ));
+        card = card.child(setting_row(label, build()));
     }
-    view()
+    // Wrapped paths make the rows taller than a short window, so the screen scrolls.
+    scroll()
         .flex_1()
-        .gap_4()
-        .p_4()
-        .child(header(values))
-        .child(card)
-        .child(when(
-            move || {
-                let query = values.query.get();
-                labels.iter().all(|label| !row_matches(label, &query))
-            },
-            || {
-                text("No setting matches")
-                    .text_sm()
-                    .text_color(tokens::muted_foreground)
-            },
-        ))
+        .child(view().gap_4().p_4().child(header()).child(card))
 }
