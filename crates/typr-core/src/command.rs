@@ -615,7 +615,8 @@ mod tests {
     #[test]
     fn every_domain_names_what_it_routes() {
         for (command, domain) in samples() {
-            assert_eq!(command.domain(), domain, "{}", command.name());
+            assert!(!command.name().is_empty());
+            assert_eq!(command.domain(), domain, "{command:?}");
         }
     }
 }
