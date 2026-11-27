@@ -10,6 +10,7 @@ use typr_core::screen::Queue;
 use typr_core::session::{Entry, Session};
 use typr_core::store::{Command, Grade, Id, Outcome, Snapshot};
 
+use crate::screens::sidebar::Sidebar;
 use crate::screens::study::{entries_for, study_async};
 
 use super::screen::Screen;
@@ -35,6 +36,7 @@ pub(super) struct StudyController {
     screen: Signal<Screen>,
     version: Signal<u32>,
     refused: Signal<bool>,
+    sidebar: Sidebar,
 }
 
 impl StudyController {
@@ -42,6 +44,7 @@ impl StudyController {
         bridge: StoreBridge,
         snapshot_signal: Signal<Snapshot>,
         screen: Signal<Screen>,
+        sidebar: Sidebar,
     ) -> Self {
         let version = signal(0_u32);
         let refused = signal(false);
@@ -60,6 +63,7 @@ impl StudyController {
             screen,
             version,
             refused,
+            sidebar,
         }
     }
 
@@ -86,6 +90,7 @@ impl StudyController {
         let screen = self.screen;
         let version = self.version;
         let refused = self.refused;
+        let sidebar = self.sidebar;
         self.bridge.submit(
             command,
             false,
@@ -100,10 +105,11 @@ impl StudyController {
                     }
                     Ok(_) => Vec::new(),
                     Err(error) => {
-                        log::error!(
-                            "the queue was refused: {}",
-                            crate::logging::describe(&error)
-                        );
+                        let why = crate::logging::describe(&error);
+                        log::error!("the queue was refused: {why}");
+                        // The study screen is not open yet, so the sidebar is where the person looks.
+                        refused.set(true);
+                        sidebar.refuse(format!("The study queue could not be loaded: {why}"));
                         Vec::new()
                     }
                 };

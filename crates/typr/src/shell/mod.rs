@@ -104,7 +104,7 @@ pub fn shell_over(
         screen,
         library.attachments.clone(),
     );
-    let study_ctl = StudyController::new(bridge.clone(), snapshot_signal, screen);
+    let study_ctl = StudyController::new(bridge.clone(), snapshot_signal, screen, state);
 
     let tiles = computed(move || {
         let snapshot = snapshot_signal.get();
@@ -405,11 +405,13 @@ fn sidebar_picker(
                     name: name.to_owned(),
                 },
                 true,
-                Some(Box::new(move |result| {
-                    if let Ok(Outcome::Deck(id)) = result {
+                Some(Box::new(move |result| match result {
+                    Ok(Outcome::Deck(id)) => {
                         state.select(&format!("deck:{id}").into());
                         screen.set(Screen::Library);
                     }
+                    Ok(_) => {}
+                    Err(error) => state.refuse(crate::logging::describe(&error)),
                 })),
             );
         } else {
