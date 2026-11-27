@@ -115,10 +115,7 @@ macro_rules! check {
 fn SidebarScreen() -> impl IntoElement {
     typr::ui::tokens::install();
     sidebar(
-        Sidebar::new(
-            vec![Item::new("inbox", "Inbox", Group::Navigation)],
-            true,
-        ),
+        Sidebar::new(vec![Item::new("inbox", "Inbox", Group::Navigation)], true),
         |_| {},
     )
 }

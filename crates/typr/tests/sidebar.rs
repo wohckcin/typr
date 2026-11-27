@@ -172,7 +172,11 @@ fn only_a_closed_library_draws_the_footer() -> Result<(), String> {
     let mut open = Headless::start(EngineConfig::new(Root::of::<OpenProbe>())).unwrap();
     open.wait_for("Settings")?;
     assert!(!open.screen().shows("Library open"));
-    assert_eq!(open.screen().count("id:library-dot")?, 0, "an open library draws a dot");
+    assert_eq!(
+        open.screen().count("id:library-dot")?,
+        0,
+        "an open library draws a dot"
+    );
     let mut closed = start();
     closed.wait_for("Library closed")?;
     assert!(dot_colour(&closed).is_some(), "the closed dot has no fill");
@@ -319,6 +323,10 @@ fn the_selected_tree_row_wears_the_row_fill_and_its_sibling_does_not() -> Result
     };
     let chosen = fill(&app, "biology")?;
     assert!(chosen.is_some(), "the selected tree row has no fill");
-    assert_ne!(chosen, fill(&app, "verbs")?, "the unselected row wears the same fill");
+    assert_ne!(
+        chosen,
+        fill(&app, "verbs")?,
+        "the unselected row wears the same fill"
+    );
     Ok(())
 }

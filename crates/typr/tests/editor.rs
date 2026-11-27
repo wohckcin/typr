@@ -50,8 +50,39 @@ fn a_card_with_no_content_cannot_be_saved() -> Result<(), String> {
 fn pressing_save_reports_the_text() -> Result<(), String> {
     let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
     app.wait_for("role:button[Save]")?;
+    // A clean card has nothing to save, so the edit comes first.
+    app.type_text("label:Card source", "!")?;
+    app.wait_for("Unsaved")?;
     app.press("role:button[Save]")?;
-    app.wait_for("text:/saved=Question/")?;
+    app.wait_for("text:/saved=!Question/")?;
+    Ok(())
+}
+
+#[test]
+fn a_clean_card_cannot_be_saved_again() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
+    app.wait_for("Saved")?;
+    assert!(!app.screen().enabled("role:button[Save]")?);
+    let _ = app.press("role:button[Save]");
+    app.settle();
+    assert!(
+        app.screen().shows("saved=nothing saved"),
+        "a clean editor emitted Save"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_header_puts_back_first() -> Result<(), String> {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<Probe>())).unwrap();
+    app.wait_for("Back")?;
+    let texts: Vec<String> = app.screen().texts().iter().map(|t| t.to_string()).collect();
+    let at = |l: &str| texts.iter().position(|t| t == l).unwrap_or(usize::MAX);
+    assert!(
+        at("Back") < at("Saved") && at("Saved") < at("Save"),
+        "{texts:?}"
+    );
+    assert!(app.screen().shows("Preview"));
     Ok(())
 }
 

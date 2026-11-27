@@ -285,9 +285,10 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
         .child(
             view()
                 .flex_row()
+                .flex_wrap()
+                .justify_between()
                 .items_center()
                 .gap_2()
-                .child(state_badge)
                 .child({
                     // The way back, reachable without a key: it asks what the key asks.
                     let asking_again = asking;
@@ -304,16 +305,39 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                         })
                         .into_element()
                 })
-                .child(dynamic(move || {
-                    let count = prompt_count(&draft.get());
-                    let label = match count {
-                        0 => "note".to_owned(),
-                        1 => "1 prompt".to_owned(),
-                        n => format!("{n} prompts"),
-                    };
-                    badge().label(label).into_element()
-                })),
+                // A narrow window wraps the state and Save under Back rather than clipping them.
+                .child(
+                    view()
+                        .flex_row()
+                        .items_center()
+                        .gap_2()
+                        .child(dynamic(move || {
+                            let count = prompt_count(&draft.get());
+                            let label = match count {
+                                0 => "note".to_owned(),
+                                1 => "1 prompt".to_owned(),
+                                n => format!("{n} prompts"),
+                            };
+                            badge().label(label).into_element()
+                        }))
+                        .child(state_badge)
+                        .child(
+                            button()
+                                .variant(Variant::Primary)
+                                .label("Save")
+                                .disabled(move || !dirty() || draft.with(|d| !has_content(d)))
+                                .on_press(emit_save),
+                        ),
+                ),
         )
+        // A refused save is told beside the button that made it.
+        .child(dynamic(move || match save_error.get() {
+            Some(reason) => text(reason)
+                .text_xs()
+                .text_color(tokens::destructive)
+                .into_element(),
+            None => view().into_element(),
+        }))
         .child(
             view()
                 .flex_row()
@@ -332,13 +356,6 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                             },
                             Some(&source_handle),
                         ))
-                        .child(
-                            button()
-                                .variant(Variant::Primary)
-                                .label("Save")
-                                .disabled(move || draft.with(|d| !has_content(d)))
-                                .on_press(emit_save),
-                        )
                         .child(dynamic({
                             let drawn_root = root.clone();
                             move || {
@@ -415,13 +432,6 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                                     });
                                 }),
                         )
-                        .child(dynamic(move || match save_error.get() {
-                            Some(reason) => text(reason)
-                                .text_xs()
-                                .text_color(tokens::destructive)
-                                .into_element(),
-                            None => view().into_element(),
-                        }))
                         .child(dynamic(move || match attach_error.get() {
                             Some(reason) => text(reason)
                                 .text_xs()
@@ -434,6 +444,11 @@ pub fn Editor(props: EditorProps, cx: Scope<EditorEvent>) -> impl IntoElement {
                     view()
                         .flex_1()
                         .gap_3()
+                        .child(
+                            text("Preview")
+                                .text_xs()
+                                .text_color(tokens::muted_foreground),
+                        )
                         .child(dynamic(move || {
                             let root = preview_root.clone();
                             let sides_of: Vec<String> = match &preview_template {

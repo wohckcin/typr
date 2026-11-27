@@ -913,7 +913,10 @@ fn review_buttons_are_disabled_when_their_queue_is_empty() -> Result<(), String>
     app.wait_for("role:button[Review new 0]")?;
     let _ = app.press("role:button[Review new 0]");
     std::thread::sleep(std::time::Duration::from_millis(300));
-    assert!(app.screen().shows("gato"), "a disabled review left the library");
+    assert!(
+        app.screen().shows("gato"),
+        "a disabled review left the library"
+    );
     assert!(!app.screen().shows("role:button[Show answer]"));
     Ok(())
 }

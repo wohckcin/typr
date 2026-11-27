@@ -24,9 +24,14 @@ fn Probe() -> impl IntoElement {
     typr::ui::tokens::install();
     let data = signal(tiles(200));
     let memo = computed(move || data.get());
-    view()
-        .flex_1()
-        .child(grid(memo, signal(None), || "This deck has no cards yet", || true, || {}, |_| {}))
+    view().flex_1().child(grid(
+        memo,
+        signal(None),
+        || "This deck has no cards yet",
+        || true,
+        || {},
+        |_| {},
+    ))
 }
 
 #[component]
@@ -34,9 +39,14 @@ fn Empty() -> impl IntoElement {
     typr::ui::tokens::install();
     let data = signal(Vec::<Tile>::new());
     let memo = computed(move || data.get());
-    view()
-        .flex_1()
-        .child(grid(memo, signal(None), || "This deck has no cards yet", || true, || {}, |_| {}))
+    view().flex_1().child(grid(
+        memo,
+        signal(None),
+        || "This deck has no cards yet",
+        || true,
+        || {},
+        |_| {},
+    ))
 }
 
 #[test]
@@ -65,9 +75,14 @@ fn SoonDue() -> impl IntoElement {
     soon[0].schedule = Schedule::Interval(0);
     soon[1].schedule = Schedule::Interval(1);
     let memo = computed(move || soon.clone());
-    view()
-        .flex_1()
-        .child(grid(memo, signal(None), || "This deck has no cards yet", || true, || {}, |_| {}))
+    view().flex_1().child(grid(
+        memo,
+        signal(None),
+        || "This deck has no cards yet",
+        || true,
+        || {},
+        |_| {},
+    ))
 }
 
 #[test]
