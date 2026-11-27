@@ -131,7 +131,9 @@ pub fn install(logs: &Path, level: LevelFilter) -> std::io::Result<PathBuf> {
     *WRITER
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(writer);
-    let _ = log::set_boxed_logger(Box::new(sink));
+    if let Err(error) = log::set_boxed_logger(Box::new(sink)) {
+        log::warn!("a logger was already installed, so typr's log file stays empty: {error}");
+    }
     log::set_max_level(level);
     let _ = SENDER.set(tx);
     Ok(logs.join(FILE_NAME))
