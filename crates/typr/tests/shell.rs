@@ -758,7 +758,7 @@ fn the_trash_row_lists_a_trashed_card_and_restore_brings_it_back() -> Result<(),
     app.press("Trash")?;
     app.wait_for("gato")?;
     app.press("role:button[Restore]")?;
-    app.wait_for("The trash is empty")?;
+    app.wait_for("Trash is empty")?;
     app.press_key("escape")?;
     app.wait_for("role:button[gato]")?;
     Ok(())

@@ -92,7 +92,8 @@ fn confirming_empties_the_trash_and_says_so() -> Result<(), String> {
     app.press("Empty trash")?;
     app.press("role:button[Destroy]")?;
     app.wait_for("text:/emptied;/")?;
-    app.wait_for("The trash is empty")?;
+    app.wait_for("Trash is empty")?;
+    app.wait_for("Deleted cards stay here until you empty the trash")?;
     assert!(!app.screen().shows("Empty trash"));
     Ok(())
 }
