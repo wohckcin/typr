@@ -1,5 +1,6 @@
 //! Storage target trait and attachment writer shared across transfer formats.
 
+use std::io::Write;
 use std::path::Path;
 
 use crate::command::{Command, Outcome};
@@ -26,19 +27,26 @@ pub trait TransferTarget {
 ///
 /// The file keeps its name; a name already in use gets `-2`, `-3` before the extension, so a
 /// second import of the same picture never overwrites the copy a card already points at.
-pub fn attach(root: &Path, source: &Path) -> std::io::Result<String> {
+pub fn attach(root: &Path, source: &Path) -> Result<String, StoreError> {
+    let read = |source_error| StoreError::Read {
+        path: source.to_path_buf(),
+        source: source_error,
+    };
     let name = source
         .file_name()
         .ok_or_else(|| {
-            std::io::Error::new(
+            read(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "the picture has no file name",
-            )
+            ))
         })?
         .to_string_lossy()
         .into_owned();
-    let bytes = std::fs::read(source)?;
-    write_attachment(root, &name, &bytes)
+    let bytes = std::fs::read(source).map_err(read)?;
+    write_attachment(root, &name, &bytes).map_err(|error| StoreError::Write {
+        path: root.join(&name),
+        source: error,
+    })
 }
 
 /// [`attach`] for bytes that never existed as a file, which is how a picture inside a `.mochi`
@@ -65,10 +73,60 @@ fn write_attachment(root: &Path, name: &str, bytes: &[u8]) -> std::io::Result<St
     };
     let mut candidate = name.to_string();
     let mut copy = 1;
-    while root.join(&candidate).exists() {
-        copy += 1;
-        candidate = format!("{stem}-{copy}{extension}");
+    loop {
+        // `create_new` makes the check and the create one step, so a racing import cannot take the
+        // same name.
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(root.join(&candidate))
+        {
+            Ok(mut file) => {
+                if let Err(error) = file.write_all(bytes) {
+                    let _ = std::fs::remove_file(root.join(&candidate));
+                    return Err(error);
+                }
+                return Ok(candidate);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                copy += 1;
+                candidate = format!("{stem}-{copy}{extension}");
+            }
+            Err(error) => return Err(error),
+        }
     }
-    std::fs::write(root.join(&candidate), bytes)?;
-    Ok(candidate)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn concurrent_attachments_never_share_a_name() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let root = dir.path().to_path_buf();
+        let names: Vec<String> = std::thread::scope(|s| {
+            let handles: Vec<_> = (0..16u8)
+                .map(|i| {
+                    let root = &root;
+                    s.spawn(move || attach_bytes(root, "a.png", &[i]).expect("an attachment"))
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("a thread"))
+                .collect()
+        });
+        let unique: std::collections::HashSet<_> = names.iter().collect();
+        assert_eq!(unique.len(), 16);
+        for name in &names {
+            assert_eq!(std::fs::read(root.join(name)).expect("a copy").len(), 1);
+        }
+    }
+
+    #[test]
+    fn a_missing_source_is_named_in_the_error() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let error = attach(dir.path(), Path::new("/nope/cat.png")).expect_err("no such file");
+        assert!(error.to_string().contains("/nope/cat.png"), "{error}");
+    }
 }

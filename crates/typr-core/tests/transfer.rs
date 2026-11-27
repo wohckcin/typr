@@ -632,6 +632,46 @@ fn an_imported_image_is_present_after_its_source_is_deleted() {
 }
 
 #[test]
+fn a_damaged_picture_entry_does_not_read_as_a_missing_one() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let decks = serde_json::json!([{"id": 1, "name": "Anatomy", "parent": null}]);
+    let cards = serde_json::json!([{
+        "id": 1, "deck": 1, "text": "", "image": "media/leak.png", "caption": "c",
+    }]);
+    let archive = write_mochi_media(
+        dir.path(),
+        "damaged.mochi",
+        &decks,
+        &cards,
+        serde_json::json!({"decks": 1, "cards": 1, "images": 1}),
+        &[("media/leak.png", b"\x89PNG a tiny picture")],
+    );
+    // Break the picture's local header signature: the entry is listed but cannot be opened.
+    let mut bytes = std::fs::read(&archive).expect("the archive");
+    let name = b"media/leak.png";
+    let at = bytes
+        .windows(name.len())
+        .position(|w| w == name)
+        .expect("the entry name");
+    bytes[at - 30..at - 26].copy_from_slice(b"XXXX");
+    std::fs::write(&archive, bytes).expect("the damaged archive");
+
+    let db = open(&dir.path().join("typr.sqlite3"));
+    let error = db
+        .apply(
+            &Command::ImportArchive {
+                archive,
+                attachments: dir.path().join("attachments"),
+            },
+            NOW,
+        )
+        .expect_err("the damaged picture is refused");
+    let text = error.to_string();
+    assert!(!text.contains("holds no picture"), "{text}");
+    assert!(text.contains("could not be read"), "{text}");
+}
+
+#[test]
 fn imported_masks_keep_their_group_and_position() {
     let dir = tempfile::tempdir().expect("a temporary folder");
     let decks = serde_json::json!([{"id": 1, "name": "Anatomy", "parent": null}]);
