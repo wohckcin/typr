@@ -180,10 +180,14 @@ pub enum CardKind {
 }
 
 impl CardKind {
-    pub fn parse(value: &str) -> CardKind {
+    pub fn parse(value: &str) -> Result<CardKind, crate::error::StoreError> {
         match value {
-            "diagram" => CardKind::Diagram,
-            _ => CardKind::Text,
+            "text" => Ok(CardKind::Text),
+            "diagram" => Ok(CardKind::Diagram),
+            _ => Err(crate::error::StoreError::Text {
+                column: "kind",
+                value: value.to_owned(),
+            }),
         }
     }
 

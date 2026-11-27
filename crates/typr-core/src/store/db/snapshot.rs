@@ -64,11 +64,11 @@ impl Db {
              GROUP BY c.id
              ORDER BY c.updated_at DESC, c.id",
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(CardSummary {
+        let rows = stmt.query_and_then([], |row| {
+            Ok::<_, StoreError>(CardSummary {
                 id: row.get(0)?,
                 deck: row.get(1)?,
-                kind: CardKind::parse(&row.get::<_, String>(12)?),
+                kind: CardKind::parse(&row.get::<_, String>(12)?)?,
                 image: row.get(13)?,
                 caption: row.get(14)?,
                 masks: Vec::new(),
@@ -98,7 +98,7 @@ impl Db {
                 backlinks: Vec::new(),
             })
         })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        rows.collect::<Result<Vec<_>, _>>()
     }
 
     /// One join answers both directions: what each card refers to, and who refers to it.
@@ -220,22 +220,22 @@ impl Db {
             "SELECT id, name, deck, query, tags, mode, pinned_only, sort_key, sort_dir
              FROM view ORDER BY name COLLATE NOCASE, id",
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(SavedView {
+        let rows = stmt.query_and_then([], |row| {
+            Ok::<_, StoreError>(SavedView {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 spec: ViewSpec {
                     deck: row.get(2)?,
                     query: row.get(3)?,
                     tags: decode_tags(&row.get::<_, String>(4)?),
-                    mode: mode_parse(&row.get::<_, String>(5)?),
+                    mode: mode_parse(&row.get::<_, String>(5)?)?,
                     pinned_only: row.get::<_, i64>(6)? != 0,
                     sort: Sort::parse(&row.get::<_, String>(7)?).unwrap_or_default(),
                     dir: SortDir::parse(&row.get::<_, String>(8)?).unwrap_or_default(),
                 },
             })
         })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        rows.collect::<Result<Vec<_>, _>>()
     }
 
     pub fn settings(&self) -> Result<Settings, StoreError> {

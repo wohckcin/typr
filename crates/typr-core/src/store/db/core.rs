@@ -135,11 +135,15 @@ pub(super) fn mode_text(mode: CardMode) -> &'static str {
     }
 }
 
-pub(super) fn mode_parse(text: &str) -> CardMode {
+pub(super) fn mode_parse(text: &str) -> Result<CardMode, StoreError> {
     match text {
-        "archived" => CardMode::Archived,
-        "trash" => CardMode::Trash,
-        _ => CardMode::Active,
+        "active" => Ok(CardMode::Active),
+        "archived" => Ok(CardMode::Archived),
+        "trash" => Ok(CardMode::Trash),
+        _ => Err(StoreError::Text {
+            column: "mode",
+            value: text.to_owned(),
+        }),
     }
 }
 
@@ -161,5 +165,28 @@ pub(super) fn check_mask(card: Id, rect: MaskRect) -> Result<(), StoreError> {
         Ok(())
     } else {
         Err(StoreError::MaskOutsideImage { card })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::CardKind;
+
+    #[test]
+    fn an_unknown_mode_is_refused() {
+        assert!(matches!(
+            mode_parse("frozen"),
+            Err(StoreError::Text { column: "mode", .. })
+        ));
+        assert_eq!(mode_parse("trash").unwrap(), CardMode::Trash);
+    }
+
+    #[test]
+    fn an_unknown_kind_is_refused() {
+        assert!(matches!(
+            CardKind::parse("video"),
+            Err(StoreError::Text { column: "kind", .. })
+        ));
     }
 }
