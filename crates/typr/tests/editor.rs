@@ -78,6 +78,7 @@ fn the_header_puts_back_first() -> Result<(), String> {
     app.wait_for("Back")?;
     let texts: Vec<String> = app.screen().texts().iter().map(|t| t.to_string()).collect();
     let at = |l: &str| texts.iter().position(|t| t == l).unwrap_or(usize::MAX);
+    assert!(at("Save") != usize::MAX, "{texts:?}");
     assert!(
         at("Back") < at("Saved") && at("Saved") < at("Save"),
         "{texts:?}"

@@ -163,7 +163,17 @@ pub fn shell_over(
             snapshot_signal.with(|s| cards_in(s, Some(key), SystemClock.now_ms()).len())
         })
     };
-    let (due_n, new_n) = (queued_in("inbox:due"), queued_in("inbox:new"));
+    let due_n = queued_in("inbox:due");
+    // The new queue admits no more cards than the daily cap.
+    // shortcut: cards already learned today are not subtracted (the snapshot has no such count),
+    // so a spent cap above zero still enables the button; move a learned-today count into Snapshot.
+    let new_n = computed(move || {
+        snapshot_signal.with(|s| {
+            cards_in(s, Some("inbox:new"), SystemClock.now_ms())
+                .len()
+                .min(s.settings.new_per_day as usize)
+        })
+    });
     let library_view = {
         let editor_new = editor_ctl.clone();
         let editor_open = editor_ctl.clone();
@@ -268,7 +278,10 @@ pub fn shell_over(
                     diagnostics(stopped, slow.get(), results, import.clone(), export.clone())
                         .into_element()
                 }
-                Screen::Editor(id) => editor_ctl.render(id, library_view.clone()),
+                Screen::Editor(id) => {
+                    let library_view = library_view.clone();
+                    editor_ctl.render(id, move || untracked(&library_view))
+                }
                 // Untracked: a read while building the library must not rebuild it, which would
                 // drop its buttons before they first render and panic on a disposed prop.
                 Screen::Library => untracked(&library_view),
