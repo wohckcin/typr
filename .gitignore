@@ -2,6 +2,9 @@
 /vendor/rune-kit/target
 .nsh/
 
+# Machine-local mise settings, such as credentials
+mise.local.toml
+
 # A local `nsh test --junit` report
 /test-results.xml
 
