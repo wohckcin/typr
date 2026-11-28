@@ -162,7 +162,7 @@ impl Db {
         self.conn.execute_batch(
             "CREATE TRIGGER IF NOT EXISTS slow_review AFTER INSERT ON review_log BEGIN
                  SELECT count(*) FROM (WITH RECURSIVE c(x) AS
-                     (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 5000000) SELECT x FROM c);
+                     (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 1000000) SELECT x FROM c);
              END;",
         )?;
         Ok(())
