@@ -63,9 +63,11 @@ jobs:
           # with a build it never made.
           shared-key: linux-checks
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          # The hash covers every rustc on the runner, so a new runner image with another stable
-          # preinstalled orphans the cache. The pin in rust-toolchain.toml is in the lockfile hash.
+          # The environment hash covers every rustc on the runner, so a new runner image with another
+          # stable preinstalled would orphan the cache. Turning it off also drops the lockfile hash,
+          # leaving a constant key that an exact hit never re-saves: the inputs go in `key` instead.
           add-rust-environment-hash-key: false
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'mise.toml') }}
 
       - name: Format
         run: cargo fmt --all --check
@@ -124,6 +126,7 @@ jobs:
           shared-key: linux-app
           save-if: ${{ github.ref == 'refs/heads/main' }}
           add-rust-environment-hash-key: false
+          key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'mise.toml') }}
 
       # `desktop.test.tsx` opens the app and reads its screens; headless it needs no display. The
       # file is named on purpose: `nsh test` with no argument also runs the crate's Rust tests,
